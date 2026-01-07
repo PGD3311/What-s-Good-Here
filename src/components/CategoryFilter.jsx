@@ -10,6 +10,7 @@ const CATEGORIES = [
   { id: 'chowder', label: 'Chowder', emoji: '🥣' },
   { id: 'apps', label: 'Apps', emoji: '🍴' },
   { id: 'fried chicken', label: 'Fried Chicken', emoji: '🍗' },
+  { id: 'entree', label: 'Entrees', emoji: '🍖' },
 ]
 
 export function CategoryFilter({ selectedCategory, onSelectCategory }) {
