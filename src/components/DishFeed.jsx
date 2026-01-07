@@ -1,6 +1,6 @@
 import { DishCard } from './DishCard'
 
-export function DishFeed({ dishes, loading, error, onVote, onLoginRequired }) {
+export function DishFeed({ dishes, loading, error, onVote, onLoginRequired, selectedRestaurant }) {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-4">
@@ -70,8 +70,18 @@ export function DishFeed({ dishes, loading, error, onVote, onLoginRequired }) {
       {/* Results count */}
       <div className="mb-6">
         <p className="text-sm font-medium text-neutral-600">
-          Found <span className="text-neutral-900 font-bold">{dishes.length}</span>{' '}
-          {dishes.length === 1 ? 'dish' : 'dishes'}
+          {selectedRestaurant ? (
+            <>
+              <span className="text-neutral-900 font-bold">{dishes.length}</span>{' '}
+              {dishes.length === 1 ? 'dish' : 'dishes'} at{' '}
+              <span className="text-neutral-900 font-bold">{selectedRestaurant.name}</span>
+            </>
+          ) : (
+            <>
+              Found <span className="text-neutral-900 font-bold">{dishes.length}</span>{' '}
+              {dishes.length === 1 ? 'dish' : 'dishes'}
+            </>
+          )}
         </p>
       </div>
 

@@ -5,16 +5,19 @@ import { LocationPicker } from '../components/LocationPicker'
 import { CategoryFilter } from '../components/CategoryFilter'
 import { DishFeed } from '../components/DishFeed'
 import { LoginModal } from '../components/Auth/LoginModal'
+import { RestaurantSearch } from '../components/RestaurantSearch'
 
 export function Home() {
   const { location, radius, setRadius, loading: locationLoading, error: locationError } = useLocation()
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [selectedRestaurant, setSelectedRestaurant] = useState(null)
   const [loginModalOpen, setLoginModalOpen] = useState(false)
 
   const { dishes, loading: dishesLoading, error: dishesError, refetch } = useDishes(
     location,
     radius,
-    selectedCategory
+    selectedCategory,
+    selectedRestaurant?.id
   )
 
   const handleVote = () => {
@@ -66,6 +69,13 @@ export function Home() {
         error={locationError}
       />
 
+      {/* Restaurant Search */}
+      <RestaurantSearch
+        selectedRestaurant={selectedRestaurant}
+        onSelectRestaurant={setSelectedRestaurant}
+        onClearRestaurant={() => setSelectedRestaurant(null)}
+      />
+
       {/* Category Filter */}
       <CategoryFilter
         selectedCategory={selectedCategory}
@@ -80,6 +90,7 @@ export function Home() {
           error={dishesError}
           onVote={handleVote}
           onLoginRequired={handleLoginRequired}
+          selectedRestaurant={selectedRestaurant}
         />
       </main>
 
