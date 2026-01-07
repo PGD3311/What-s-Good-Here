@@ -2,6 +2,7 @@ const CATEGORIES = [
   { id: null, label: 'All Dishes', emoji: '🍽️' },
   { id: 'burger', label: 'Burgers', emoji: '🍔' },
   { id: 'pizza', label: 'Pizza', emoji: '🍕' },
+  { id: 'sushi', label: 'Sushi', emoji: '🍣' },
   { id: 'taco', label: 'Tacos', emoji: '🌮' },
   { id: 'wings', label: 'Wings', emoji: '🍗' },
   { id: 'lobster roll', label: 'Lobster Rolls', emoji: '🦞' },
