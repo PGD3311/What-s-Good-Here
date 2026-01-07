@@ -5,9 +5,9 @@ const CATEGORIES = [
   { id: 'sushi', label: 'Sushi', emoji: '🍣' },
   { id: 'burrito', label: 'Burritos', emoji: '🌯' },
   { id: 'sandwich', label: 'Sandwiches', emoji: '🥪' },
-  { id: 'salad', label: 'Salads', emoji: '🥗' },
-  { id: 'pasta', label: 'Pasta', emoji: '🍝' },
   { id: 'taco', label: 'Tacos', emoji: '🌮' },
+  { id: 'wings', label: 'Wings', emoji: '🍗' },
+  { id: 'lobster roll', label: 'Lobster Rolls', emoji: '🦞' },
 ]
 
 export function CategoryFilter({ selectedCategory, onSelectCategory }) {
