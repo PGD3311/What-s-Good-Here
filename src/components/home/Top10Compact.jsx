@@ -36,6 +36,14 @@ export function Top10Compact({
 
   return (
     <section>
+      {/* Micro-headline */}
+      <p
+        className="font-bold mb-1"
+        style={{ color: 'var(--color-accent-gold)', fontSize: '13px' }}
+      >
+        {town ? `The best dishes in ${town} right now` : 'The best dishes on the Vineyard right now'}
+      </p>
+
       {/* Header */}
       {showToggle ? (
         <div role="tablist" aria-label="Top 10 list filter" className="flex gap-2 mb-4">
