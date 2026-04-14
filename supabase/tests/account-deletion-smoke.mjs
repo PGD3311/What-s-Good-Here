@@ -118,6 +118,39 @@ async function run() {
     if (!data?.length) { fail('expected follow notification on follower'); return }
     ok(`notification on follower with follower_id=${data[0].data?.follower_id}`)
   }
+  // Seed two photos + a dish_photos row so we exercise both the Storage purge and
+  // the dish_photos cascade. Two (not one) gives the purge loop something non-trivial
+  // to iterate. If the dish-photos bucket isn't configured in this environment, skip
+  // the Storage part with a warning — the dish_photos cascade can still be tested.
+  let seededPhotos = false
+  {
+    // 1x1 transparent PNG — smallest valid image payload
+    const pngBytes = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYGD4DwABBAEAfbLI3wAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    const { error: probeErr } = await admin.storage.from('dish-photos')
+      .upload(`${testUserId}/smoke-a.png`, pngBytes, { contentType: 'image/png', upsert: true })
+
+    if (probeErr?.message?.includes('Bucket not found') || probeErr?.message?.includes('bucket')) {
+      console.log(`  \x1b[33m⚠\x1b[0m dish-photos bucket not configured — skipping Storage purge coverage`)
+    } else if (probeErr) {
+      fail(`upload a: ${probeErr.message}`); return
+    } else {
+      const { error: upErr } = await admin.storage.from('dish-photos')
+        .upload(`${testUserId}/smoke-b.png`, pngBytes, { contentType: 'image/png', upsert: true })
+      if (upErr) { fail(`upload b: ${upErr.message}`); return }
+      seededPhotos = true
+      ok('uploaded 2 photos to dish-photos/<user_id>/')
+    }
+
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/dish-photos/${testUserId}/smoke-a.png`
+    const { error: rowErr } = await admin.from('dish_photos').insert({
+      dish_id: testDishId, user_id: testUserId, photo_url: publicUrl,
+    })
+    if (rowErr) { fail(`insert dish_photos row: ${rowErr.message}`); return }
+    ok('dish_photos row inserted')
+  }
   {
     const { error } = await admin.from('restaurant_invites').insert({
       restaurant_id: testRestaurantId, created_by: testUserId,
@@ -205,10 +238,23 @@ async function run() {
       : fail(`${surviving.length} follow notifications with deleted follower_id remain`)
   }
   {
+    // Only assert the Storage purge if we actually seeded photos. Without seeding,
+    // `list()` returns [] on a non-existent bucket too — the check would be vacuous.
     const { data, error } = await admin.storage.from('dish-photos').list(testUserId)
-    if (error) fail(`storage list: ${error.message}`)
+    if (!seededPhotos) {
+      console.log(`  \x1b[33m⚠\x1b[0m storage purge not asserted (bucket not configured)`)
+    } else if (error) fail(`storage list: ${error.message}`)
     else if (!data?.length) ok('storage bucket empty for user')
     else fail(`${data.length} storage objects remain`)
+  }
+  {
+    // dish_photos row cascades on auth.users delete, but verifying explicitly catches
+    // regressions where the user row survives but the cascade is misconfigured.
+    const { count, error } = await admin.from('dish_photos')
+      .select('*', { count: 'exact', head: true }).eq('user_id', testUserId)
+    if (error) fail(`dish_photos count: ${error.message}`)
+    else if (count === 0) ok('dish_photos rows cascaded')
+    else fail(`${count} dish_photos rows remain`)
   }
 
   h1('6. Cleanup')
