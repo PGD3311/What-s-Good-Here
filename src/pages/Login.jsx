@@ -89,6 +89,10 @@ export function Login() {
     }
   }
 
+  // Pre-wired for activation: gets referenced when the compliant Apple
+  // button JSX is dropped in. See the Sign in with Apple comment block in
+  // the options-mode section below for activation steps.
+  // eslint-disable-next-line no-unused-vars
   const handleAppleSignIn = async () => {
     try {
       setLoading(true)
@@ -362,26 +366,25 @@ export function Login() {
             {/* Options Mode */}
             {mode === 'options' && (
               <div className="w-full max-w-sm space-y-4">
-                {/* Sign in with Apple — gated behind feature flag until
-                    Supabase Apple provider is configured. Placed ABOVE Google
-                    per Apple HIG (must be at least as prominent as other
-                    third-party sign-in options).
-                    TODO before enabling: verify button against Apple's current
-                    official button spec (logo proportions, padding, label). */}
-                {FEATURES.APPLE_SIGNIN_ENABLED && (
-                  <button
-                    onClick={handleAppleSignIn}
-                    disabled={loading}
-                    className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-semibold active:scale-[0.98] transition-all disabled:opacity-50"
-                    style={{ background: '#000000', color: '#FFFFFF' }}
-                    aria-label="Sign in with Apple"
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true">
-                      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                    </svg>
-                    Sign in with Apple
-                  </button>
-                )}
+                {/* Sign in with Apple — handler is wired (handleAppleSignIn
+                    above) and the flag gates the render slot, but the button
+                    JSX itself is intentionally absent. Apple HIG requires the
+                    button to use Apple's official asset (specific logo
+                    proportions, padding, corner radius). Hand-authored SVG
+                    is a known App Store rejection risk — the iOS Capacitor
+                    build will render this same React code in WKWebView, so a
+                    non-compliant button would fail review.
+
+                    Activation steps (after Supabase Apple provider config):
+                      1. Drop in Apple's official SIWA button asset:
+                         https://developer.apple.com/design/human-interface-guidelines/sign-in-with-apple/overview/buttons/
+                         OR install `react-apple-signin-auth` (use only its
+                         button styling — auth flow stays on Supabase).
+                      2. Replace the `null` below with the compliant button,
+                         wired to handleAppleSignIn, placed ABOVE Google per
+                         equal-prominence.
+                      3. Set VITE_FEATURES_APPLE_SIGNIN=true in deploy env. */}
+                {FEATURES.APPLE_SIGNIN_ENABLED && null}
 
                 {/* Google Sign In */}
                 <button

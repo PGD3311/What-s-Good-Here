@@ -52,11 +52,12 @@ export function WelcomeModal() {
   useEffect(() => {
     if (user && !loading && profile) {
       // Open for net-new users, and also for anyone whose display_name is
-      // still null — covers Apple users who declined name share on first
+      // still missing — covers Apple users who declined name share on first
       // sign-in, Google users whose provider didn't supply a name, and any
       // past user who got into a weird data state. display_name is required
       // to vote, so we can't let onboarded-but-nameless users slip through.
-      if (!profile.has_onboarded || !profile.display_name) {
+      // Use trim() to match the hasName semantics elsewhere in the component.
+      if (!profile.has_onboarded || !profile.display_name?.trim()) {
         setIsOpen(true)
         capture('onboarding_started')
       }
