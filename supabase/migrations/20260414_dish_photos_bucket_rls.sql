@@ -6,6 +6,17 @@
 -- "new row violates row-level security policy" error when called from an
 -- authenticated user (not service_role). Public reads also need an explicit
 -- policy even on a public bucket.
+--
+-- SECURITY NOTE: A prior `dish_photos_insert_own` policy existed that only
+-- checked `owner = auth.uid()`. Supabase Storage sets `owner` to the current
+-- user automatically, so that check was equivalent to "any authenticated user
+-- can upload anywhere in this bucket" — it let user A write into user B's
+-- folder. OR-combined with the path-prefix check below, it nullified isolation.
+-- Verified via attacker test (2026-04-14): cross-user upload succeeded with
+-- that policy present and failed after dropping it.
+
+-- Drop the too-permissive prior policy so OR-combination can't bypass isolation
+DROP POLICY IF EXISTS "dish_photos_insert_own" ON storage.objects;
 
 -- 1. Anyone can READ (public bucket — photos are displayed to logged-out users)
 DROP POLICY IF EXISTS "dish_photos_public_read" ON storage.objects;
