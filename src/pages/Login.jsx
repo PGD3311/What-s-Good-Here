@@ -71,7 +71,14 @@ export function Login() {
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
-      await authApi.signInWithGoogle()
+      const fromLocation = location.state?.from
+      const redirectUrl = fromLocation
+        ? new URL(
+            fromLocation.pathname + (fromLocation.search || '') + (fromLocation.hash || ''),
+            window.location.origin
+          ).toString()
+        : null
+      await authApi.signInWithGoogle(redirectUrl)
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
       setLoading(false)
