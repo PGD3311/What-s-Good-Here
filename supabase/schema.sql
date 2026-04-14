@@ -3143,3 +3143,29 @@ SELECT cron.schedule(
     )
   $$
 );
+
+-- =============================================
+-- Section 22: Account Deletion (Apple Guideline 5.1.1(v))
+-- =============================================
+-- Used by the delete-account Edge Function. See supabase/migrations/20260413_delete_auth_user.sql
+-- for the full rationale — this is a workaround for auth.admin.deleteUser returning 500
+-- on users with certain FK dependencies (notably rows in the `follows` table) while
+-- raw DELETE FROM auth.users cascades cleanly.
+
+CREATE OR REPLACE FUNCTION public.delete_auth_user(p_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM auth.users WHERE id = p_user_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_auth_user(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_auth_user(uuid) TO service_role;
+
+COMMENT ON FUNCTION public.delete_auth_user(uuid) IS
+'Account deletion helper: deletes the auth.users row. Only callable by service_role from the delete-account Edge Function, which authenticates the caller''s JWT first.';
+

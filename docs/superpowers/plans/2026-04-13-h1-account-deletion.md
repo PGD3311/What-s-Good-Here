@@ -416,6 +416,14 @@ Already-deleted users are gone one-way — rollback only protects future users.
 
 ## Revision log
 
+**2026-04-13 v3 (after live smoke test against Denis's Supabase):**
+- CRITICAL DISCOVERY: `auth.admin.deleteUser()` returns 500 "Database error deleting user" on users with certain FK dependencies (specifically a row in `follows`), while raw `DELETE FROM auth.users` cascades cleanly. Worked around with a SECURITY DEFINER `public.delete_auth_user(uuid)` function (service_role only) that the Edge Function calls via `.rpc()`. Migration at `supabase/migrations/20260413_delete_auth_user.sql`.
+- CRITICAL DISCOVERY: `dish_suggestions.reviewed_by` references `auth.users` with NO ACTION on delete, blocking user deletion for anyone who's ever reviewed a submission. Added to the Edge Function's null pass. Table is on the live DB but not yet in `schema.sql`.
+- IMPORTANT: Edge Function now deployed with `verify_jwt = false` (via `supabase/config.toml`) — some valid user JWTs were being rejected at the Supabase gateway with 401 "Invalid JWT" before the function could run. The function does its own JWT verification internally via the anon client, so bypassing the gateway is safe.
+- IMPORTANT: Follow notification cleanup now aborts on error (was log-and-continue) — leaving them keeps the deleted user's PII (`follower_id`, `follower_name`) visible on other users' notification feeds.
+- Added `supabase/tests/account-deletion-smoke.mjs` — reusable end-to-end smoke test for future schema changes that might introduce new FKs to `auth.users`.
+- Codex suggestions shipped: paginated storage purge (1000/page), post-auth-delete re-purge closes concurrent-upload race, authApi.deleteAccount requires explicit `data.success === true`, modal uses `trim().toUpperCase()`.
+
 **2026-04-13 v2 (after Codex pressure-test):**
 - CRITICAL: Changed restaurant_invites/curator_invites strategy from null → delete (NOT NULL constraint; also used_by nulling reactivates consumed tokens)
 - CRITICAL: Corrected copy re: "aggregate voting data stays" — votes actually cascade; rankings get recalculated

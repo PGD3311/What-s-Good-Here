@@ -70,27 +70,33 @@ serve(async (req) => {
     // Service-role client bypasses RLS for destructive operations
     const admin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 2. Null nullable created_by references so rows survive the cascade
-    const nullTables = [
-      'restaurants',
-      'dishes',
-      'admins',
-      'specials',
-      'restaurant_managers',
-      'events',
-    ] as const
+    // 2. Null nullable FKs that reference auth.users so rows survive the cascade.
+    //    `column` defaults to 'created_by' — specify when it's something else.
+    const nullOps: Array<{ table: string; column: string }> = [
+      { table: 'restaurants', column: 'created_by' },
+      { table: 'dishes', column: 'created_by' },
+      { table: 'admins', column: 'created_by' },
+      { table: 'specials', column: 'created_by' },
+      { table: 'restaurant_managers', column: 'created_by' },
+      { table: 'events', column: 'created_by' },
+      // dish_suggestions.reviewed_by → auth.users (NO ACTION). Without nulling,
+      // auth.admin.deleteUser fails with "Database error deleting user" if this
+      // admin has ever reviewed a submission. Table is on the live DB but not
+      // yet in supabase/schema.sql — discovered during 2026-04-13 smoke test.
+      { table: 'dish_suggestions', column: 'reviewed_by' },
+    ]
 
-    for (const table of nullTables) {
+    for (const { table, column } of nullOps) {
       const { data, error } = await admin
         .from(table)
-        .update({ created_by: null })
-        .eq('created_by', userId)
+        .update({ [column]: null })
+        .eq(column, userId)
         .select('id')
       if (error) {
-        console.error(`delete-account: failed to null created_by on ${table}:`, error)
-        return json({ error: `Failed to detach ${table}: ${error.message}` }, 500)
+        console.error(`delete-account: failed to null ${table}.${column}:`, error)
+        return json({ error: `Failed to detach ${table}.${column}: ${error.message}` }, 500)
       }
-      console.log(`delete-account: nulled created_by on ${data?.length ?? 0} ${table} rows`)
+      console.log(`delete-account: nulled ${data?.length ?? 0} ${table}.${column} rows`)
     }
 
     // 3. Delete invite rows
@@ -182,9 +188,16 @@ serve(async (req) => {
     //    profiles, votes, favorites, dish_photos, follows (both directions),
     //    notifications received, user_rating_stats, bias_events, user_badges,
     //    restaurant_managers, rate_limits, jitter_profiles, jitter_samples, local_lists
-    const { error: deleteError } = await admin.auth.admin.deleteUser(userId)
+    //
+    //    We call the SECURITY DEFINER `public.delete_auth_user` SQL function instead of
+    //    `supabase.auth.admin.deleteUser()`. The admin API was returning a 500
+    //    "Database error deleting user" for users with certain FK dependencies (e.g.
+    //    rows in the `follows` table), while raw `DELETE FROM auth.users` works fine.
+    //    The SQL function is service-role-only and simply runs the DELETE that the
+    //    admin API's underlying code would have run, avoiding the broken wrapper.
+    const { error: deleteError } = await admin.rpc('delete_auth_user', { p_user_id: userId })
     if (deleteError) {
-      console.error('delete-account: auth.admin.deleteUser failed:', deleteError)
+      console.error('delete-account: delete_auth_user RPC failed:', deleteError)
       return json({ error: `Account deletion failed: ${deleteError.message}` }, 500)
     }
 

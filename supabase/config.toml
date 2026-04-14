@@ -1,0 +1,9 @@
+# Supabase project config. Only non-default settings go here.
+# See: https://supabase.com/docs/guides/local-development/cli/config
+
+# delete-account performs its own JWT verification inside the function (via the anon
+# client's auth.getUser()). Disable the gateway's JWT check so the function runs even
+# when the gateway rejects the token. Without this, some valid user JWTs were being
+# rejected at the gateway with 401 "Invalid JWT" before the function could run.
+[functions.delete-account]
+verify_jwt = false
