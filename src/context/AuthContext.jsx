@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { capture, identify, reset } from '../lib/analytics'
 import { clearPendingVoteStorage, clearCache, removeStorageItem, removeSessionItem, STORAGE_KEYS } from '../lib/storage'
@@ -11,6 +12,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const prevUserRef = useRef(null)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     // Restore session from localStorage (instant, works offline)
@@ -76,8 +78,10 @@ export function AuthProvider({ children }) {
     removeSessionItem(STORAGE_KEYS.EMAIL_CACHE)
     removeStorageItem(STORAGE_KEYS.EMAIL_CACHE)
     await supabase.auth.signOut()
+    // Clear React Query cache so the next user on this browser doesn't inherit stale data
+    queryClient.clear()
     setUser(null)
-  }, [])
+  }, [queryClient])
 
   // Memoize context value to prevent unnecessary re-renders of consumers
   const value = useMemo(() => ({

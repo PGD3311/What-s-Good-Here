@@ -15,6 +15,7 @@ import { CameraIcon } from '../components/CameraIcon'
 import {
   HeroIdentityCard,
   JournalFeed,
+  DeleteAccountSection,
 } from '../components/profile'
 import { jitterApi } from '../api/jitterApi'
 
@@ -275,6 +276,9 @@ export function Profile() {
             ratings={ratedDishes}
             loading={votesLoading}
           />
+
+          {/* Account deletion — Apple Guideline 5.1.1(v) requires this to be in-app */}
+          <DeleteAccountSection />
 
           {/* Dish Modal for rating unrated dishes */}
           {selectedDish && (

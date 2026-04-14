@@ -27,12 +27,23 @@ export function Privacy() {
       {/* Content */}
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="rounded-2xl p-6 space-y-6" style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-divider)' }}>
-          <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>Last updated: January 2025</p>
+          <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>Last updated: April 2026</p>
 
           <section>
             <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>
               Overview
             </h2>
+            <p className="leading-relaxed mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+              What's Good Here is operated by Daniel Walsh. Contact:{' '}
+              <a
+                href="mailto:hello@whatsgoodhere.app"
+                className="font-medium"
+                style={{ color: 'var(--color-primary)' }}
+              >
+                hello@whatsgoodhere.app
+              </a>
+              . Mailing address: [physical address TBD].
+            </p>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here ("we", "our", or "the app") is a community-driven food discovery platform
               for Martha's Vineyard. This Privacy Policy explains how we collect, use, and protect your
@@ -120,9 +131,9 @@ export function Privacy() {
               Data Retention
             </h2>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-              We retain your account information and votes as long as your account is active.
-              You can delete your account by contacting us, which will remove your personal
-              information. Aggregated voting data (like dish rankings) may be retained.
+              You can delete your account anytime from your Profile page. Deletion is
+              permanent and removes your votes, reviews, photos, favorites, and profile.
+              Dish rankings that included your votes will be recalculated without them.
             </p>
           </section>
 
@@ -132,8 +143,8 @@ export function Privacy() {
             </h2>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               You can access, update, or delete your profile information at any time through
-              the app. For data deletion requests or questions about your data, contact us
-              at the email below.
+              the app — including a full account deletion from your Profile page. For
+              questions about your data, contact us at the email below.
             </p>
           </section>
 

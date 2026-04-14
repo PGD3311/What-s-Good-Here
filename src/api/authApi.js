@@ -288,6 +288,46 @@ export const authApi = {
   },
 
   /**
+   * Permanently delete the current user's account and all their data.
+   * Calls the `delete-account` Edge Function (service-role), which:
+   *   - nulls created_by on restaurants/dishes/specials/events/admins/restaurant_managers
+   *   - deletes restaurant_invites + curator_invites rows created or consumed by the user
+   *   - deletes follow notifications this user generated
+   *   - purges dish-photos storage for this user
+   *   - calls auth.admin.deleteUser (cascades votes, profile, favorites, follows, etc.)
+   *
+   * On success the caller must signOut() and navigate the user off authenticated routes —
+   * their JWT is now pointing at a deleted user.
+   * @returns {Promise<{ success: true }>}
+   */
+  async deleteAccount() {
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-account', {
+        method: 'POST',
+      })
+
+      if (error) {
+        throw createClassifiedError(error)
+      }
+
+      // Edge Function may return 200 with an error body (functions.invoke doesn't always
+      // treat non-2xx as an error — match placesApi pattern). Also require explicit success
+      // flag: fall-through responses (e.g., empty 200) must not be treated as deletion.
+      if (data?.error) {
+        throw new Error(data.error)
+      }
+      if (!data || data.success !== true) {
+        throw new Error('Account deletion did not complete. Please try again.')
+      }
+
+      return data
+    } catch (error) {
+      logger.error('Error deleting account:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
    * Get current user's vote for a dish
    * @param {string} dishId - Dish ID
    * @param {string} userId - User ID
