@@ -75,6 +75,51 @@ export const authApi = {
   },
 
   /**
+   * Sign in with Apple OAuth (web flow).
+   *
+   * Apple rule 4.8: any app with third-party social login must offer Sign in
+   * with Apple as an equivalent option. The button that calls this is gated
+   * on FEATURES.APPLE_SIGNIN_ENABLED and stays hidden in production until the
+   * Supabase Apple provider is configured.
+   *
+   * Web flow uses signInWithOAuth → full-page redirect to Apple → Supabase
+   * validates the ID token on the callback. Native (Capacitor) flow using
+   * signInWithIdToken is deferred — see the H2 plan.
+   *
+   * Note: Apple's identity token does NOT include the user's name (unlike
+   * Google), so display_name will be null on first sign-in via web. The
+   * WelcomeModal handles that case by opening when display_name is missing.
+   *
+   * @param {string|null} redirectUrl - Optional custom redirect URL (must be same-origin)
+   * @returns {Promise<Object>} Auth response
+   */
+  async signInWithApple(redirectUrl = null) {
+    try {
+      const rateLimit = checkRateLimit('auth', RATE_LIMITS.auth)
+      if (!rateLimit.allowed) {
+        throw new Error(rateLimit.message)
+      }
+
+      capture('login_started', { method: 'apple' })
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: getSafeRedirectUrl(redirectUrl),
+        },
+      })
+      if (error) {
+        capture('login_failed', { method: 'apple', error: error.message })
+        throw createClassifiedError(error)
+      }
+      return { success: true }
+    } catch (error) {
+      logger.error('Error signing in with Apple:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
    * Sign in with magic link via email
    * @param {string} email - User email
    * @param {string|null} redirectUrl - Optional custom redirect URL (must be same-origin)

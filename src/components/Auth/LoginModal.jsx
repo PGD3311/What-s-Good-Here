@@ -3,6 +3,7 @@ import { authApi } from '../../api/authApi'
 import { getPendingVoteFromStorage } from '../../lib/storage'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { logger } from '../../utils/logger'
+import { FEATURES } from '../../constants/features'
 
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
 
@@ -54,15 +55,29 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
 
   if (!isOpen) return null
 
+  const buildOAuthRedirect = () => {
+    const redirectUrl = new URL(window.location.href)
+    const pending = getPendingVoteFromStorage()
+    if (pending?.dishId) {
+      redirectUrl.searchParams.set('votingDish', pending.dishId)
+    }
+    return redirectUrl.toString()
+  }
+
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
-      const redirectUrl = new URL(window.location.href)
-      const pending = getPendingVoteFromStorage()
-      if (pending?.dishId) {
-        redirectUrl.searchParams.set('votingDish', pending.dishId)
-      }
-      await authApi.signInWithGoogle(redirectUrl.toString())
+      await authApi.signInWithGoogle(buildOAuthRedirect())
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message })
+      setLoading(false)
+    }
+  }
+
+  const handleAppleSignIn = async () => {
+    try {
+      setLoading(true)
+      await authApi.signInWithApple(buildOAuthRedirect())
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
       setLoading(false)
@@ -224,6 +239,27 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
           {/* Options Mode - Show all login options */}
           {mode === 'options' && (
             <div className="space-y-4">
+              {/* Sign in with Apple — gated behind feature flag until
+                  Supabase Apple provider is configured. Placed ABOVE Google
+                  per Apple HIG (must be at least as prominent as other
+                  third-party sign-in options).
+                  TODO before enabling: verify button against Apple's current
+                  official button spec (logo proportions, padding, label). */}
+              {FEATURES.APPLE_SIGNIN_ENABLED && (
+                <button
+                  onClick={handleAppleSignIn}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-semibold active:scale-[0.98] transition-all disabled:opacity-50"
+                  style={{ background: '#000000', color: '#FFFFFF' }}
+                  aria-label="Sign in with Apple"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true">
+                    <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                  </svg>
+                  Sign in with Apple
+                </button>
+              )}
+
               {/* Google Sign In */}
               <button
                 onClick={handleGoogleSignIn}
