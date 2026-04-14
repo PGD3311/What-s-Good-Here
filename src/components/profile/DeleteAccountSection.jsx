@@ -100,7 +100,11 @@ function DeleteAccountModal({ onClose }) {
       onClick={handleClose}
       role="presentation"
     >
-      <div className="absolute inset-0 bg-neutral-900/60 backdrop-blur-sm" aria-hidden="true" />
+      <div
+        className="absolute inset-0 backdrop-blur-sm"
+        style={{ background: 'rgba(0, 0, 0, 0.6)' }}
+        aria-hidden="true"
+      />
       <div
         ref={modalRef}
         role="dialog"

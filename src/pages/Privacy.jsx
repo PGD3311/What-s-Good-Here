@@ -42,7 +42,7 @@ export function Privacy() {
               >
                 hello@whatsgoodhere.app
               </a>
-              . Mailing address: [physical address TBD].
+              .
             </p>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here ("we", "our", or "the app") is a community-driven food discovery platform

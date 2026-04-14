@@ -71,8 +71,9 @@ serve(async (req) => {
     const admin = createClient(supabaseUrl, supabaseServiceKey)
 
     // 2. Null nullable FKs that reference auth.users so rows survive the cascade.
-    //    `column` defaults to 'created_by' — specify when it's something else.
-    const nullOps: Array<{ table: string; column: string }> = [
+    //    If `optional: true`, skip the table gracefully when it doesn't exist in this
+    //    environment — lets the function keep working when schema.sql and prod drift.
+    const nullOps: Array<{ table: string; column: string; optional?: boolean }> = [
       { table: 'restaurants', column: 'created_by' },
       { table: 'dishes', column: 'created_by' },
       { table: 'admins', column: 'created_by' },
@@ -82,17 +83,27 @@ serve(async (req) => {
       // dish_suggestions.reviewed_by → auth.users (NO ACTION). Without nulling,
       // auth.admin.deleteUser fails with "Database error deleting user" if this
       // admin has ever reviewed a submission. Table is on the live DB but not
-      // yet in supabase/schema.sql — discovered during 2026-04-13 smoke test.
-      { table: 'dish_suggestions', column: 'reviewed_by' },
+      // yet in supabase/schema.sql — marked optional so rebuilds from schema.sql
+      // don't 500 until the drift is reconciled.
+      { table: 'dish_suggestions', column: 'reviewed_by', optional: true },
     ]
 
-    for (const { table, column } of nullOps) {
+    for (const { table, column, optional } of nullOps) {
       const { data, error } = await admin
         .from(table)
         .update({ [column]: null })
         .eq(column, userId)
         .select('id')
       if (error) {
+        // PostgREST returns code 'PGRST205' / '42P01' when the relation doesn't exist.
+        // For optional tables, treat that as "not in this environment" and continue.
+        const isMissingRelation =
+          optional && (error.code === '42P01' || error.code === 'PGRST205' ||
+            /relation .* does not exist/i.test(error.message || ''))
+        if (isMissingRelation) {
+          console.log(`delete-account: ${table} not present in this environment — skipping`)
+          continue
+        }
         console.error(`delete-account: failed to null ${table}.${column}:`, error)
         return json({ error: `Failed to detach ${table}.${column}: ${error.message}` }, 500)
       }
@@ -146,18 +157,24 @@ serve(async (req) => {
     //    Path convention: dish-photos/<user_id>/<dish_id>.<ext> (flat, see dishPhotosApi.js:66)
     //    ABORT on failure — orphan public photos would defeat the privacy intent.
     //    Paginate list() — default limit is 100, so a user with 100+ photos would otherwise leak.
+    //    IMPORTANT: do NOT advance `offset` between iterations. We're deleting objects
+    //    between list calls, so the remaining objects shift toward offset 0. Always read
+    //    from offset 0 and stop when the listing is empty. A safety cap prevents an
+    //    infinite loop if remove() ever silently no-ops.
     async function purgeUserPhotos(): Promise<{ removed: number; error?: string }> {
       const PAGE = 1000
-      let offset = 0
+      const MAX_ITERATIONS = 1000 // safety cap: up to 1M photos per user
       let totalRemoved = 0
-      while (true) {
+      for (let i = 0; i < MAX_ITERATIONS; i++) {
         const { data: objects, error: listError } = await admin.storage
           .from('dish-photos')
-          .list(userId, { limit: PAGE, offset })
+          .list(userId, { limit: PAGE, offset: 0 })
         if (listError) {
           return { removed: totalRemoved, error: `Storage list failed: ${listError.message}` }
         }
-        if (!objects || objects.length === 0) break
+        if (!objects || objects.length === 0) {
+          return { removed: totalRemoved }
+        }
 
         const paths = objects.map((o) => `${userId}/${o.name}`)
         const { error: removeError } = await admin.storage
@@ -167,12 +184,11 @@ serve(async (req) => {
           return { removed: totalRemoved, error: `Storage remove failed: ${removeError.message}` }
         }
         totalRemoved += paths.length
-
-        // If we got a full page, there may be more. Otherwise we're done.
-        if (objects.length < PAGE) break
-        offset += PAGE
       }
-      return { removed: totalRemoved }
+      return {
+        removed: totalRemoved,
+        error: `Storage purge exceeded ${MAX_ITERATIONS} pages — aborting`,
+      }
     }
 
     {

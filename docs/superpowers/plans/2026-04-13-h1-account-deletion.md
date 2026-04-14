@@ -416,6 +416,13 @@ Already-deleted users are gone one-way — rollback only protects future users.
 
 ## Revision log
 
+**2026-04-13 v4 (after Codex final review of v3 fixes):**
+- CRITICAL FIX: `purgeUserPhotos()` pagination was advancing `offset` while deleting underneath. At PAGE=1000 with 3500 files, pages would be skipped and files orphaned. Rewrote to always read from offset 0 and stop when the listing is empty (with a 1000-iteration safety cap).
+- IMPORTANT FIX: `dish_suggestions` null op is now marked `optional: true`. If the table doesn't exist in an environment (e.g., rebuilt from schema.sql which doesn't yet include it), the function skips it instead of 500'ing. Schema drift between prod and schema.sql is a pre-existing issue — this fix keeps account deletion working regardless.
+- IMPORTANT FIX: Dropped `[physical address TBD]` placeholder from Privacy.jsx — shipping a visible TODO in public legal copy is worse than not showing a mailing address at all. Email contact stays. Dan adds the P.O. Box in a follow-up one-line PR.
+- SUGGESTION FIX: Modal backdrop uses inline style instead of `bg-neutral-900/60` (CLAUDE.md 1.3: no Tailwind color classes).
+- ACCEPTED LIMITATION: Storage RLS only checks `auth.uid() = owner`, not whether the user exists in auth.users. A stale JWT (up to 1h expiry) could upload to Storage after deletion completes, creating orphans after step 7's re-purge. Mitigating this requires a custom RLS policy keyed on a "user_is_deleted" flag — schema change beyond this PR's scope. Risk is low (user is actively clicking delete, not uploading). Any orphan that does occur has no corresponding `dish_photos` DB row (FK violation on insert) so it's invisible to the app and can be cleaned up manually.
+
 **2026-04-13 v3 (after live smoke test against Denis's Supabase):**
 - CRITICAL DISCOVERY: `auth.admin.deleteUser()` returns 500 "Database error deleting user" on users with certain FK dependencies (specifically a row in `follows`), while raw `DELETE FROM auth.users` cascades cleanly. Worked around with a SECURITY DEFINER `public.delete_auth_user(uuid)` function (service_role only) that the Edge Function calls via `.rpc()`. Migration at `supabase/migrations/20260413_delete_auth_user.sql`.
 - CRITICAL DISCOVERY: `dish_suggestions.reviewed_by` references `auth.users` with NO ACTION on delete, blocking user deletion for anyone who's ever reviewed a submission. Added to the Edge Function's null pass. Table is on the live DB but not yet in `schema.sql`.
