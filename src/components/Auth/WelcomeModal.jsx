@@ -61,10 +61,13 @@ export function WelcomeModal() {
   const displayName = name.trim() || profile?.display_name || ''
 
   const completeOnboarding = async (nameSet) => {
+    // Snapshot the name at submit time so a late-typed character can't desync
+    // what gets persisted from what the celebration screen shows.
+    const submittedName = name.trim()
     setSaving(true)
     setSaveError(null)
     const updates = { has_onboarded: true }
-    if (name.trim()) updates.display_name = name.trim()
+    if (submittedName) updates.display_name = submittedName
     const { error } = await updateProfile(updates)
     setSaving(false)
 
@@ -323,7 +326,8 @@ export function WelcomeModal() {
                 placeholder="Your name"
                 autoFocus
                 maxLength={50}
-                className="w-full px-4 py-4 border-2 rounded-xl text-lg text-center focus:outline-none transition-colors"
+                disabled={saving}
+                className="w-full px-4 py-4 border-2 rounded-xl text-lg text-center focus:outline-none transition-colors disabled:opacity-60"
                 style={{
                   background: 'var(--color-bg)',
                   borderColor: saveError ? 'var(--color-danger)' : 'var(--color-divider)',
