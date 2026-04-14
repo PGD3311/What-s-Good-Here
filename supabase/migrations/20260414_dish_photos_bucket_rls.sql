@@ -35,10 +35,22 @@ CREATE POLICY "dish_photos_upload_own" ON storage.objects
 
 -- 3. Authenticated users can UPDATE their own objects
 --    (required because uploadPhoto uses upsert: true)
+--
+--    WITH CHECK mirrors USING as defense-in-depth: USING gates which row can be
+--    updated (OLD row path matches), WITH CHECK gates what the new row looks like
+--    (NEW row path also matches). Without WITH CHECK, an authenticated user could
+--    theoretically UPDATE their own row and rename `name` to land in another
+--    user's folder. Supabase SDK's `move`/`copy` actually route through INSERT
+--    so are already blocked, but adding WITH CHECK closes the direct-UPDATE
+--    vector too.
 DROP POLICY IF EXISTS "dish_photos_update_own" ON storage.objects;
 CREATE POLICY "dish_photos_update_own" ON storage.objects
   FOR UPDATE TO authenticated
   USING (
+    bucket_id = 'dish-photos'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
     bucket_id = 'dish-photos'
     AND (storage.foldername(name))[1] = auth.uid()::text
   );
