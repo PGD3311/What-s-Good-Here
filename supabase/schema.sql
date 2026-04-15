@@ -3255,6 +3255,7 @@ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
     );
 $$;
 
+REVOKE EXECUTE ON FUNCTION is_blocked_pair(UUID, UUID) FROM public;
 GRANT EXECUTE ON FUNCTION is_blocked_pair(UUID, UUID) TO anon, authenticated;
 
 
@@ -3275,8 +3276,11 @@ CREATE POLICY "user_blocks_select_own" ON user_blocks
   FOR SELECT USING ((select auth.uid()) = blocker_id);
 
 
--- 14d. Existing-table RLS tightening (replaces earlier definitions)
+-- 14d. Existing-table RLS tightening (replaces earlier definitions).
+-- Drop both the old name AND the new name to stay rerunnable after a
+-- partial deploy.
 DROP POLICY IF EXISTS "follows_select_public" ON follows;
+DROP POLICY IF EXISTS "follows_select_not_blocked" ON follows;
 CREATE POLICY "follows_select_not_blocked" ON follows
   FOR SELECT USING (
     (select auth.uid()) IS NULL
@@ -3287,6 +3291,7 @@ CREATE POLICY "follows_select_not_blocked" ON follows
   );
 
 DROP POLICY IF EXISTS "follows_insert_own" ON follows;
+DROP POLICY IF EXISTS "follows_insert_own_not_blocked" ON follows;
 CREATE POLICY "follows_insert_own_not_blocked" ON follows
   FOR INSERT WITH CHECK (
     (select auth.uid()) = follower_id
@@ -3294,6 +3299,7 @@ CREATE POLICY "follows_insert_own_not_blocked" ON follows
   );
 
 DROP POLICY IF EXISTS "Public read access" ON dish_photos;
+DROP POLICY IF EXISTS "dish_photos_select_not_blocked" ON dish_photos;
 CREATE POLICY "dish_photos_select_not_blocked" ON dish_photos
   FOR SELECT USING (
     (select auth.uid()) IS NULL

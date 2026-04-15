@@ -92,6 +92,7 @@ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public AS $$
     );
 $$;
 
+REVOKE EXECUTE ON FUNCTION is_blocked_pair(UUID, UUID) FROM public;
 GRANT EXECUTE ON FUNCTION is_blocked_pair(UUID, UUID) TO anon, authenticated;
 
 
@@ -126,6 +127,7 @@ CREATE POLICY "user_blocks_select_own" ON user_blocks
 
 -- follows: SELECT hides rows where either participant is blocked by viewer
 DROP POLICY IF EXISTS "follows_select_public" ON follows;
+DROP POLICY IF EXISTS "follows_select_not_blocked" ON follows;
 CREATE POLICY "follows_select_not_blocked" ON follows
   FOR SELECT USING (
     (select auth.uid()) IS NULL
@@ -137,6 +139,7 @@ CREATE POLICY "follows_select_not_blocked" ON follows
 
 -- follows: INSERT rejects if a block exists either direction
 DROP POLICY IF EXISTS "follows_insert_own" ON follows;
+DROP POLICY IF EXISTS "follows_insert_own_not_blocked" ON follows;
 CREATE POLICY "follows_insert_own_not_blocked" ON follows
   FOR INSERT WITH CHECK (
     (select auth.uid()) = follower_id
@@ -145,6 +148,7 @@ CREATE POLICY "follows_insert_own_not_blocked" ON follows
 
 -- dish_photos: SELECT excludes rows authored by blocked users
 DROP POLICY IF EXISTS "Public read access" ON dish_photos;
+DROP POLICY IF EXISTS "dish_photos_select_not_blocked" ON dish_photos;
 CREATE POLICY "dish_photos_select_not_blocked" ON dish_photos
   FOR SELECT USING (
     (select auth.uid()) IS NULL
