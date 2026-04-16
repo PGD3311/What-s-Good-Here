@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
   cuisine TEXT,
   town TEXT,
   region TEXT NOT NULL DEFAULT 'mv',
-  created_by UUID REFERENCES auth.users(id),
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   google_place_id TEXT,
   website_url TEXT,
   facebook_url TEXT,
@@ -58,11 +58,11 @@ CREATE TABLE IF NOT EXISTS dishes (
   photo_url TEXT,
   parent_dish_id UUID REFERENCES dishes(id) ON DELETE SET NULL,
   display_order INT DEFAULT 0,
-  created_by UUID REFERENCES auth.users(id),
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   tags TEXT[] DEFAULT '{}',
   cuisine TEXT,
   avg_rating DECIMAL(3, 1),
-  total_votes INT DEFAULT 0,
+  total_votes BIGINT DEFAULT 0,
   weighted_vote_count NUMERIC DEFAULT 0,
   consensus_rating NUMERIC(3, 1),
   consensus_ready BOOLEAN DEFAULT FALSE,
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS admins (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  created_by UUID REFERENCES auth.users(id)
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
 -- 1g. dish_photos
@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS specials (
   is_promoted BOOLEAN DEFAULT false,
   source TEXT DEFAULT 'manual' CHECK (source IN ('manual', 'auto_scrape')),
   expires_at TIMESTAMPTZ,
-  created_by UUID REFERENCES auth.users(id)
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
 -- 1p. restaurant_managers
@@ -248,7 +248,7 @@ CREATE TABLE IF NOT EXISTS restaurant_managers (
   role TEXT NOT NULL DEFAULT 'manager',
   invited_at TIMESTAMPTZ DEFAULT NOW(),
   accepted_at TIMESTAMPTZ,
-  created_by UUID REFERENCES auth.users(id),
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   UNIQUE(user_id, restaurant_id)
 );
 
@@ -257,10 +257,10 @@ CREATE TABLE IF NOT EXISTS restaurant_invites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   token TEXT UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(24), 'hex'),
   restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
-  created_by UUID NOT NULL REFERENCES auth.users(id),
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days',
-  used_by UUID REFERENCES auth.users(id),
+  used_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   used_at TIMESTAMPTZ
 );
 
@@ -268,9 +268,9 @@ CREATE TABLE IF NOT EXISTS restaurant_invites (
 CREATE TABLE IF NOT EXISTS curator_invites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
-  created_by UUID REFERENCES auth.users(id),
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '30 days'),
-  used_by UUID REFERENCES auth.users(id),
+  used_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   used_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -319,7 +319,7 @@ CREATE TABLE IF NOT EXISTS events (
   is_promoted BOOLEAN DEFAULT false,
   source TEXT DEFAULT 'manual' CHECK (source IN ('manual', 'auto_scrape')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  created_by UUID REFERENCES auth.users(id)
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
 -- 1v. category_median_prices (view)
@@ -382,6 +382,12 @@ CREATE INDEX IF NOT EXISTS idx_votes_review_text ON votes(dish_id) WHERE review_
 CREATE INDEX IF NOT EXISTS idx_votes_unscored ON votes(dish_id) WHERE scored_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_votes_user_dish ON votes(user_id, dish_id);
 CREATE INDEX IF NOT EXISTS idx_votes_user_position ON votes(user_id, vote_position);
+-- Audit 2026-04-16: covers get_ranked_dishes weighted aggregations (dish + source + rating).
+CREATE INDEX IF NOT EXISTS idx_votes_dish_source_rating ON votes(dish_id, source, rating_10) WHERE rating_10 IS NOT NULL;
+-- Audit 2026-04-16: covers get_friends_votes_for_dish / _for_restaurant hot path.
+CREATE INDEX IF NOT EXISTS idx_votes_user_dish_created ON votes(user_id, dish_id, created_at DESC);
+-- Audit 2026-04-16: filters weighted votes by source with recency.
+CREATE INDEX IF NOT EXISTS idx_votes_source_created ON votes(source, created_at DESC);
 
 -- profiles
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_display_name_unique ON profiles(LOWER(display_name)) WHERE display_name IS NOT NULL;
@@ -390,6 +396,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS profiles_display_name_unique ON profiles(LOWER
 CREATE INDEX IF NOT EXISTS idx_dish_photos_dish ON dish_photos(dish_id);
 CREATE INDEX IF NOT EXISTS idx_dish_photos_user ON dish_photos(user_id);
 CREATE INDEX IF NOT EXISTS idx_dish_photos_status ON dish_photos(dish_id, status, quality_score DESC);
+-- Audit 2026-04-16: partial index for the hot path (best_photos CTE); excludes
+-- hidden/rejected so the index is roughly half the size of the one above.
+CREATE INDEX IF NOT EXISTS idx_dish_photos_featured_community
+  ON dish_photos(dish_id, quality_score DESC)
+  WHERE status IN ('featured', 'community');
 
 -- follows
 CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
@@ -439,6 +450,8 @@ CREATE INDEX IF NOT EXISTS idx_rate_limits_cleanup ON rate_limits(created_at);
 CREATE INDEX IF NOT EXISTS idx_events_restaurant ON events(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_events_active_upcoming ON events(event_date, is_promoted DESC) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type) WHERE is_active = true;
+-- Audit 2026-04-16: FK index on events.created_by.
+CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 
 -- jitter_samples (keep only last 30 samples per user, rolling window)
 CREATE INDEX IF NOT EXISTS idx_jitter_samples_user ON jitter_samples (user_id, collected_at DESC);
@@ -840,7 +853,11 @@ BEGIN
     GROUP BY votes.dish_id
   ),
   best_photos AS (
-    -- H3: exclude photos authored by users the viewer has blocked
+    -- H3: exclude photos authored by users the viewer has blocked.
+    -- Anon short-circuit skips the user_blocks probe entirely for the
+    -- unauthenticated majority. The pair of EXISTS clauses (instead of one
+    -- with OR) lets the planner use user_blocks_blocker_id_blocked_id_key as
+    -- two index seeks rather than a bitmap OR.
     SELECT DISTINCT ON (dp.dish_id)
       dp.dish_id,
       dp.photo_url
@@ -849,7 +866,15 @@ BEGIN
     INNER JOIN filtered_restaurants fr2 ON d2.restaurant_id = fr2.id
     WHERE dp.status IN ('featured', 'community')
       AND d2.parent_dish_id IS NULL
-      AND NOT is_blocked_pair((select auth.uid()), dp.user_id)
+      AND (
+        (select auth.uid()) IS NULL
+        OR (
+          NOT EXISTS (SELECT 1 FROM user_blocks ub
+                      WHERE ub.blocker_id = (select auth.uid()) AND ub.blocked_id = dp.user_id)
+          AND NOT EXISTS (SELECT 1 FROM user_blocks ub
+                          WHERE ub.blocker_id = dp.user_id AND ub.blocked_id = (select auth.uid()))
+        )
+      )
     ORDER BY dp.dish_id,
       CASE dp.source_type WHEN 'restaurant' THEN 0 ELSE 1 END,
       CASE dp.status WHEN 'featured' THEN 0 ELSE 1 END,
@@ -2573,7 +2598,7 @@ RETURNS TABLE (
   restaurant_name TEXT,
   restaurant_id UUID,
   avg_rating NUMERIC,
-  total_votes INT,
+  total_votes BIGINT,
   category TEXT,
   note TEXT,
   restaurant_lat FLOAT,
@@ -2716,7 +2741,7 @@ RETURNS TABLE (
   restaurant_name TEXT,
   restaurant_id UUID,
   avg_rating NUMERIC,
-  total_votes INT,
+  total_votes BIGINT,
   category TEXT,
   note TEXT
 )
@@ -3890,6 +3915,12 @@ CREATE INDEX IF NOT EXISTS reports_by_target_user_idx
 CREATE INDEX IF NOT EXISTS reports_by_reporter_idx
   ON reports (reporter_id, created_at DESC);
 
+-- Audit 2026-04-16: covers admin filtering by (user, status) without scanning
+-- reports_by_target_user_idx and discarding non-matching statuses.
+CREATE INDEX IF NOT EXISTS reports_target_status_idx
+  ON reports (reported_user_id, status, created_at DESC)
+  WHERE reported_user_id IS NOT NULL;
+
 
 CREATE TABLE IF NOT EXISTS user_blocks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3951,9 +3982,12 @@ DROP POLICY IF EXISTS "follows_select_not_blocked" ON follows;
 CREATE POLICY "follows_select_not_blocked" ON follows
   FOR SELECT USING (
     (select auth.uid()) IS NULL
-    OR (
-      NOT is_blocked_pair((select auth.uid()), follower_id)
-      AND NOT is_blocked_pair((select auth.uid()), followed_id)
+    OR NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_id = (select auth.uid())
+             AND (ub.blocked_id = follower_id OR ub.blocked_id = followed_id))
+         OR (ub.blocked_id = (select auth.uid())
+             AND (ub.blocker_id = follower_id OR ub.blocker_id = followed_id))
     )
   );
 
@@ -4226,9 +4260,15 @@ REVOKE EXECUTE ON FUNCTION get_my_reports() FROM public, anon;
 GRANT EXECUTE ON FUNCTION get_my_reports() TO authenticated;
 
 
+-- Audit 2026-04-16 phase 2: keyset pagination. Caller passes back the last row's
+-- (target_user_open_report_count, created_at, report_id) to get the next page.
+-- First page: omit all cursor args. No client callers existed when this ran.
+DROP FUNCTION IF EXISTS get_open_reports(INT, INT);
 CREATE OR REPLACE FUNCTION get_open_reports(
   p_limit INT DEFAULT 50,
-  p_offset INT DEFAULT 0
+  p_cursor_open_count BIGINT DEFAULT NULL,
+  p_cursor_created_at TIMESTAMPTZ DEFAULT NULL,
+  p_cursor_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
   report_id UUID, reporter_id UUID, reporter_name TEXT,
@@ -4241,25 +4281,45 @@ BEGIN
   IF NOT is_admin() THEN RAISE EXCEPTION 'Admin access required'; END IF;
 
   p_limit := LEAST(GREATEST(p_limit, 1), 200);
-  p_offset := GREATEST(p_offset, 0);
+
+  -- Cursor guard: require all three parts OR none. Partial cursors would make
+  -- the tuple comparison return NULL and silently produce empty pages.
+  IF NOT (
+    (p_cursor_open_count IS NULL AND p_cursor_created_at IS NULL AND p_cursor_id IS NULL)
+    OR
+    (p_cursor_open_count IS NOT NULL AND p_cursor_created_at IS NOT NULL AND p_cursor_id IS NOT NULL)
+  ) THEN
+    RAISE EXCEPTION 'Partial cursor: pass all three of p_cursor_open_count, p_cursor_created_at, p_cursor_id (or none).';
+  END IF;
 
   RETURN QUERY
+  WITH open_counts AS (
+    SELECT reported_user_id, COUNT(*)::BIGINT AS open_count
+    FROM reports
+    WHERE status = 'open' AND reported_user_id IS NOT NULL
+    GROUP BY reported_user_id
+  )
   SELECT r.id, r.reporter_id, rp.display_name,
     r.reported_type, r.reported_id, r.reported_user_id, up.display_name,
     r.reason, r.details, r.target_snapshot, r.created_at,
-    COALESCE((SELECT COUNT(*) FROM reports r2
-      WHERE r2.reported_user_id = r.reported_user_id AND r2.status = 'open'), 0)
+    COALESCE(oc.open_count, 0)
   FROM reports r
   LEFT JOIN profiles rp ON rp.id = r.reporter_id
   LEFT JOIN profiles up ON up.id = r.reported_user_id
+  LEFT JOIN open_counts oc ON oc.reported_user_id = r.reported_user_id
   WHERE r.status = 'open'
-  ORDER BY target_user_open_report_count DESC, r.created_at DESC
-  LIMIT p_limit OFFSET p_offset;
+    AND (
+      p_cursor_open_count IS NULL
+      OR (COALESCE(oc.open_count, 0), r.created_at, r.id)
+         < (p_cursor_open_count, p_cursor_created_at, p_cursor_id)
+    )
+  ORDER BY COALESCE(oc.open_count, 0) DESC, r.created_at DESC, r.id DESC
+  LIMIT p_limit;
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION get_open_reports(INT, INT) FROM public, anon;
-GRANT EXECUTE ON FUNCTION get_open_reports(INT, INT) TO authenticated;
+REVOKE EXECUTE ON FUNCTION get_open_reports(INT, BIGINT, TIMESTAMPTZ, UUID) FROM public, anon;
+GRANT EXECUTE ON FUNCTION get_open_reports(INT, BIGINT, TIMESTAMPTZ, UUID) TO authenticated;
 
 
 -- 14h. Modified existing RPCs — full final definitions in the migration file.
@@ -4506,7 +4566,7 @@ RETURNS TABLE (
   list_id UUID, title TEXT, description TEXT, user_id UUID,
   display_name TEXT, "position" INT, dish_id UUID, dish_name TEXT,
   restaurant_name TEXT, restaurant_id UUID, avg_rating NUMERIC,
-  total_votes INT, category TEXT, note TEXT,
+  total_votes BIGINT, category TEXT, note TEXT,
   restaurant_lat FLOAT, restaurant_lng FLOAT
 )
 LANGUAGE SQL STABLE AS $$
