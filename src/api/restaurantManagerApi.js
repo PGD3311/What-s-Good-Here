@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { checkDishCreateRateLimit } from '../lib/rateLimiter'
 import { validateUserContent } from '../lib/reviewBlocklist'
-import { createClassifiedError } from '../utils/errorHandler'
+import { createClassifiedError, ErrorTypes } from '../utils/errorHandler'
 import { logger } from '../utils/logger'
 
 async function checkDishCreateRateLimitOnce() {
@@ -264,7 +264,7 @@ export const restaurantManagerApi = {
     try {
       const { data, error } = await supabase
         .from('dishes')
-        .select('id, name, category, price, photo_url')
+        .select('id, name, category, price, photo_url, total_votes')
         .eq('restaurant_id', restaurantId)
         .order('category')
         .order('name')
@@ -667,14 +667,24 @@ export const restaurantManagerApi = {
    */
   async deleteDish(dishId) {
     try {
-      const { error } = await supabase
+      // { count: 'exact' } makes the server return affected row count so we
+      // can distinguish "deleted" from "RLS silently blocked" (0 rows).
+      const { error, count } = await supabase
         .from('dishes')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('id', dishId)
 
       if (error) {
         logger.error('Error deleting dish:', error)
         throw createClassifiedError(error)
+      }
+      if (count === 0) {
+        // RLS rejected: manager-scoped delete requires total_votes = 0
+        const err = new Error(
+          "This dish has community ratings and can't be removed. Contact support if it needs to be taken down."
+        )
+        err.type = ErrorTypes.UNAUTHORIZED
+        throw err
       }
     } catch (error) {
       logger.error('Error in deleteDish:', error)

@@ -481,7 +481,7 @@ ALTER TABLE restaurant_managers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE restaurant_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 
--- restaurants: public read, admin write (+ manager policies below)
+-- restaurants: public read, admin + manager write (column-level protection via trigger)
 CREATE POLICY "Public read access" ON restaurants FOR SELECT USING (true);
 CREATE POLICY "Authenticated users can insert restaurants" ON restaurants FOR INSERT WITH CHECK (
   (SELECT auth.uid()) IS NOT NULL
@@ -489,10 +489,12 @@ CREATE POLICY "Authenticated users can insert restaurants" ON restaurants FOR IN
   AND (is_admin()
     OR (SELECT count(*) FROM restaurants WHERE created_by = (SELECT auth.uid()) AND created_at > now() - interval '1 hour') < 5)
 );
-CREATE POLICY "Admins can update restaurants" ON restaurants FOR UPDATE USING (is_admin());
+CREATE POLICY "Admin or manager update restaurants" ON restaurants FOR UPDATE
+  USING (is_admin() OR is_restaurant_manager(id))
+  WITH CHECK (is_admin() OR is_restaurant_manager(id));
 CREATE POLICY "Admins can delete restaurants" ON restaurants FOR DELETE USING (is_admin());
 
--- dishes: public read, admin + manager write
+-- dishes: public read, admin + manager write (column-level protection via trigger)
 CREATE POLICY "Public read access" ON dishes FOR SELECT USING (true);
 CREATE POLICY "Authenticated users can insert dishes" ON dishes FOR INSERT WITH CHECK (
   (SELECT auth.uid()) IS NOT NULL
@@ -500,8 +502,17 @@ CREATE POLICY "Authenticated users can insert dishes" ON dishes FOR INSERT WITH 
   AND (is_admin() OR auth.role() = 'service_role'
     OR (SELECT count(*) FROM dishes WHERE created_by = (SELECT auth.uid()) AND created_at > now() - interval '1 hour') < 20)
 );
-CREATE POLICY "Admin or manager update dishes" ON dishes FOR UPDATE USING (is_admin() OR is_restaurant_manager(restaurant_id));
-CREATE POLICY "Admins can delete dishes" ON dishes FOR DELETE USING (is_admin());
+CREATE POLICY "Admin or manager update dishes" ON dishes FOR UPDATE
+  USING (is_admin() OR is_restaurant_manager(restaurant_id))
+  WITH CHECK (is_admin() OR is_restaurant_manager(restaurant_id));
+-- Managers can only delete dishes that have never been voted on (scraper
+-- errors, ghost items). Once a dish has any user votes, the rating record
+-- belongs to the crowd. Admins can always delete (legal takedowns, duplicates).
+CREATE POLICY "Admin or manager delete dishes" ON dishes FOR DELETE
+  USING (
+    is_admin()
+    OR (is_restaurant_manager(restaurant_id) AND total_votes = 0)
+  );
 
 -- votes: restricted read, users manage own (optimized auth.uid())
 CREATE POLICY "Own users, admins, and service role can read votes" ON votes FOR SELECT USING (
@@ -568,7 +579,9 @@ CREATE POLICY "System can insert badges" ON user_badges FOR INSERT WITH CHECK (a
 -- specials: conditional read, admin + manager write
 CREATE POLICY "Read specials" ON specials FOR SELECT USING (is_active = true OR is_admin() OR is_restaurant_manager(restaurant_id));
 CREATE POLICY "Admin or manager insert specials" ON specials FOR INSERT WITH CHECK (is_admin() OR is_restaurant_manager(restaurant_id));
-CREATE POLICY "Admin or manager update specials" ON specials FOR UPDATE USING (is_admin() OR is_restaurant_manager(restaurant_id));
+CREATE POLICY "Admin or manager update specials" ON specials FOR UPDATE
+  USING (is_admin() OR is_restaurant_manager(restaurant_id))
+  WITH CHECK (is_admin() OR is_restaurant_manager(restaurant_id));
 CREATE POLICY "Admin or manager delete specials" ON specials FOR DELETE USING (is_admin() OR is_restaurant_manager(restaurant_id));
 
 -- restaurant_managers: admins + own rows
@@ -590,7 +603,9 @@ CREATE POLICY "Users can view own rate limits" ON rate_limits FOR SELECT USING (
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Read active events" ON events FOR SELECT USING (is_active = true OR is_admin() OR is_restaurant_manager(restaurant_id));
 CREATE POLICY "Admin or manager insert events" ON events FOR INSERT WITH CHECK (is_admin() OR is_restaurant_manager(restaurant_id));
-CREATE POLICY "Admin or manager update events" ON events FOR UPDATE USING (is_admin() OR is_restaurant_manager(restaurant_id));
+CREATE POLICY "Admin or manager update events" ON events FOR UPDATE
+  USING (is_admin() OR is_restaurant_manager(restaurant_id))
+  WITH CHECK (is_admin() OR is_restaurant_manager(restaurant_id));
 CREATE POLICY "Admin or manager delete events" ON events FOR DELETE USING (is_admin() OR is_restaurant_manager(restaurant_id));
 
 -- jitter_profiles + jitter_samples: users can read own profile, insert own samples, service role manages all
@@ -854,10 +869,8 @@ BEGIN
   ),
   best_photos AS (
     -- H3: exclude photos authored by users the viewer has blocked.
-    -- Anon short-circuit skips the user_blocks probe entirely for the
-    -- unauthenticated majority. The pair of EXISTS clauses (instead of one
-    -- with OR) lets the planner use user_blocks_blocker_id_blocked_id_key as
-    -- two index seeks rather than a bitmap OR.
+    -- Inline NOT EXISTS so Postgres hash-joins user_blocks once instead of
+    -- invoking is_blocked_pair() per dish_photo row.
     SELECT DISTINCT ON (dp.dish_id)
       dp.dish_id,
       dp.photo_url
@@ -866,14 +879,10 @@ BEGIN
     INNER JOIN filtered_restaurants fr2 ON d2.restaurant_id = fr2.id
     WHERE dp.status IN ('featured', 'community')
       AND d2.parent_dish_id IS NULL
-      AND (
-        (select auth.uid()) IS NULL
-        OR (
-          NOT EXISTS (SELECT 1 FROM user_blocks ub
-                      WHERE ub.blocker_id = (select auth.uid()) AND ub.blocked_id = dp.user_id)
-          AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                          WHERE ub.blocker_id = dp.user_id AND ub.blocked_id = (select auth.uid()))
-        )
+      AND NOT EXISTS (
+        SELECT 1 FROM user_blocks ub
+        WHERE (ub.blocker_id = (select auth.uid()) AND ub.blocked_id = dp.user_id)
+           OR (ub.blocker_id = dp.user_id AND ub.blocked_id = (select auth.uid()))
       )
     ORDER BY dp.dish_id,
       CASE dp.source_type WHEN 'restaurant' THEN 0 ELSE 1 END,
@@ -2074,6 +2083,156 @@ DROP TRIGGER IF EXISTS trigger_compute_value_score ON dishes;
 CREATE TRIGGER trigger_compute_value_score
   BEFORE INSERT OR UPDATE OF avg_rating, total_votes, price, category ON dishes
   FOR EACH ROW EXECUTE FUNCTION compute_value_score();
+
+-- 13g. Column-level field protection on tables managers can write to.
+-- Non-admin writes (managers + regular users) cannot modify computed/identity
+-- fields. System contexts (service_role, postgres, supabase_admin) and
+-- SECURITY DEFINER triggers bypass via current_user check. Trigger names
+-- sort before 'trigger_compute_value_score' so they fire first.
+
+CREATE OR REPLACE FUNCTION protect_dish_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_user IN ('postgres', 'service_role', 'supabase_admin') THEN
+    RETURN NEW;
+  END IF;
+  IF is_admin() THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.id := uuid_generate_v4();
+    NEW.created_at := NOW();
+    NEW.avg_rating := NULL;
+    NEW.total_votes := 0;
+    NEW.weighted_vote_count := 0;
+    NEW.consensus_rating := NULL;
+    NEW.consensus_ready := FALSE;
+    NEW.consensus_votes := 0;
+    NEW.consensus_calculated_at := NULL;
+    NEW.value_score := NULL;
+    NEW.value_percentile := NULL;
+    NEW.category_median_price := NULL;
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.id := OLD.id;
+    NEW.restaurant_id := OLD.restaurant_id;
+    NEW.created_by := OLD.created_by;
+    NEW.created_at := OLD.created_at;
+    NEW.avg_rating := OLD.avg_rating;
+    NEW.total_votes := OLD.total_votes;
+    NEW.weighted_vote_count := OLD.weighted_vote_count;
+    NEW.consensus_rating := OLD.consensus_rating;
+    NEW.consensus_ready := OLD.consensus_ready;
+    NEW.consensus_votes := OLD.consensus_votes;
+    NEW.consensus_calculated_at := OLD.consensus_calculated_at;
+    NEW.value_score := OLD.value_score;
+    NEW.value_percentile := OLD.value_percentile;
+    NEW.category_median_price := OLD.category_median_price;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS dishes_protect_fields ON dishes;
+CREATE TRIGGER dishes_protect_fields
+BEFORE INSERT OR UPDATE ON dishes
+FOR EACH ROW EXECUTE FUNCTION protect_dish_fields();
+
+CREATE OR REPLACE FUNCTION protect_special_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_user IN ('postgres', 'service_role', 'supabase_admin') THEN
+    RETURN NEW;
+  END IF;
+  IF is_admin() THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.id := gen_random_uuid();
+    NEW.created_at := NOW();
+    NEW.created_by := (SELECT auth.uid());
+    NEW.is_promoted := FALSE;
+    NEW.source := 'manual';
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.id := OLD.id;
+    NEW.restaurant_id := OLD.restaurant_id;
+    NEW.created_by := OLD.created_by;
+    NEW.created_at := OLD.created_at;
+    NEW.is_promoted := OLD.is_promoted;
+    NEW.source := OLD.source;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS specials_protect_fields ON specials;
+CREATE TRIGGER specials_protect_fields
+BEFORE INSERT OR UPDATE ON specials
+FOR EACH ROW EXECUTE FUNCTION protect_special_fields();
+
+CREATE OR REPLACE FUNCTION protect_event_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_user IN ('postgres', 'service_role', 'supabase_admin') THEN
+    RETURN NEW;
+  END IF;
+  IF is_admin() THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.id := gen_random_uuid();
+    NEW.created_at := NOW();
+    NEW.created_by := (SELECT auth.uid());
+    NEW.is_promoted := FALSE;
+    NEW.source := 'manual';
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.id := OLD.id;
+    NEW.restaurant_id := OLD.restaurant_id;
+    NEW.created_by := OLD.created_by;
+    NEW.created_at := OLD.created_at;
+    NEW.is_promoted := OLD.is_promoted;
+    NEW.source := OLD.source;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS events_protect_fields ON events;
+CREATE TRIGGER events_protect_fields
+BEFORE INSERT OR UPDATE ON events
+FOR EACH ROW EXECUTE FUNCTION protect_event_fields();
+
+CREATE OR REPLACE FUNCTION protect_restaurant_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_user IN ('postgres', 'service_role', 'supabase_admin') THEN
+    RETURN NEW;
+  END IF;
+  IF is_admin() THEN
+    RETURN NEW;
+  END IF;
+  -- Managers can only change contact/social/menu/order fields. Identity + geo frozen.
+  -- menu_last_checked + menu_content_hash are menu-refresh bookkeeping — frozen
+  -- so managers can't force or skip auto-scrapes.
+  NEW.id := OLD.id;
+  NEW.name := OLD.name;
+  NEW.address := OLD.address;
+  NEW.lat := OLD.lat;
+  NEW.lng := OLD.lng;
+  NEW.region := OLD.region;
+  NEW.town := OLD.town;
+  NEW.google_place_id := OLD.google_place_id;
+  NEW.created_by := OLD.created_by;
+  NEW.created_at := OLD.created_at;
+  NEW.menu_last_checked := OLD.menu_last_checked;
+  NEW.menu_content_hash := OLD.menu_content_hash;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS restaurants_protect_fields ON restaurants;
+CREATE TRIGGER restaurants_protect_fields
+BEFORE UPDATE ON restaurants
+FOR EACH ROW EXECUTE FUNCTION protect_restaurant_fields();
 
 -- 13h. Batch recalculate value percentiles (called by pg_cron every 2 hours)
 CREATE OR REPLACE FUNCTION recalculate_value_percentiles()
