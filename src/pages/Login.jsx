@@ -4,7 +4,7 @@ import { authApi } from '../api/authApi'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { CameraIcon } from '../components/CameraIcon'
-import { WghLogo } from '../components/WghLogo'
+import { SmileyPin } from '../components/SmileyPin'
 import { FEATURES } from '../constants/features'
 
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
@@ -218,7 +218,7 @@ export function Login() {
             {/* Logo + Brand */}
             <div className="flex flex-col items-center mb-8">
               <div style={{ marginBottom: '-14px', position: 'relative', zIndex: 2 }}>
-                <WghLogo size={56} />
+                <SmileyPin size={56} />
               </div>
               <h1
                 style={{
@@ -332,7 +332,7 @@ export function Login() {
           <div className="flex-1 flex flex-col items-center justify-center px-6 pb-12">
             {/* Logo */}
             <div className="flex justify-center mb-6">
-              <WghLogo size={48} />
+              <SmileyPin size={48} />
             </div>
 
             {/* Heading */}

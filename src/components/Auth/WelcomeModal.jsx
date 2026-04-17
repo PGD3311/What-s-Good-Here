@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../hooks/useProfile'
-import { WghLogo } from '../WghLogo'
+import { SmileyPin } from '../SmileyPin'
 import { capture } from '../../lib/analytics'
 import { getUserMessage } from '../../utils/errorHandler'
 
@@ -138,7 +138,7 @@ export function WelcomeModal() {
         <div className="relative z-10 text-center px-8">
           {/* Logo — matches splash page layout */}
           <div className="flex justify-center" style={{ marginBottom: '-18px', position: 'relative', zIndex: 2 }}>
-            <WghLogo size={72} />
+            <SmileyPin size={72} />
           </div>
 
           {/* Brand name */}
@@ -238,7 +238,7 @@ export function WelcomeModal() {
           {/* Step icon */}
           {currentStep.id === 'welcome' ? (
             <div className="flex justify-center mb-6">
-              <WghLogo size={56} />
+              <SmileyPin size={56} />
             </div>
           ) : (
             <div

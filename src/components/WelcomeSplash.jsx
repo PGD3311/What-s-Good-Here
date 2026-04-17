@@ -1,40 +1,58 @@
-import { useState, useEffect } from 'react'
-import { WghLogo } from './WghLogo'
+import { useState, useEffect, useMemo } from 'react'
+import { SmileyPin } from './SmileyPin'
 
-// Module-level flag - persists across re-renders, resets on app reload
+// Total animation runtime before natural dismiss (ms).
+// Matches CSS timing: pin drop 0.5s + 2.6s, period ghost 5.9s + 0.55s ≈ 6.5s.
+const SPLASH_DURATION_MS = 6500
+const FADE_OUT_MS = 300
+
+// Module-level flag — persists across re-renders within a session so
+// the splash doesn't replay when Layout remounts for any reason.
 let hasShownThisSession = false
 
-export function WelcomeSplash({ onComplete }) {
-  const [phase, setPhase] = useState('pre-entry')
+function makeLine(chars, baseDelay) {
+  const n = chars.length
+  const center = (n - 1) / 2
+  const maxDist = center + 0.001
+  return chars.map((ch, i) => {
+    const side = i - center
+    const t = Math.abs(side) / maxDist
+    // V-shape: outer letters lift highest, center letters lift least. Negative = up.
+    const dy = -(6 + t * 32)
+    // Tilt outward — left CCW, right CW — strongest at edges.
+    const rot = Math.sign(side) * t * 14
+    const style = {
+      '--dy': `${dy}px`,
+      '--rot': `${rot}deg`,
+      '--delay': `${baseDelay}s`,
+    }
+    return (
+      <span key={i} className="wgh-splash__letter" style={style}>
+        {ch}
+      </span>
+    )
+  })
+}
+
+export function WelcomeSplash() {
+  const [phase, setPhase] = useState('visible')
   const [shouldShow, setShouldShow] = useState(() => !hasShownThisSession)
 
   useEffect(() => {
-    // Already shown this session, skip
-    if (hasShownThisSession) {
-      onComplete?.()
-      return
-    }
-
+    if (hasShownThisSession) return
     hasShownThisSession = true
-    const timers = []
 
-    // Animation timeline: fade in (300ms) → hold (1.9s) → fade out (300ms) = 2.5s total
-    timers.push(setTimeout(() => setPhase('visible'), 50))       // Start fade in
-    timers.push(setTimeout(() => setPhase('fade-out'), 2200))    // Start fade out
-    timers.push(setTimeout(() => {
-      setShouldShow(false)
-      onComplete?.()
-    }, 2500))
-
-    return () => timers.forEach(clearTimeout)
-  }, [onComplete])
+    const fadeTimer = setTimeout(() => setPhase('fade-out'), SPLASH_DURATION_MS)
+    const hideTimer = setTimeout(() => setShouldShow(false), SPLASH_DURATION_MS + FADE_OUT_MS)
+    return () => {
+      clearTimeout(fadeTimer)
+      clearTimeout(hideTimer)
+    }
+  }, [])
 
   const handleSkip = () => {
-    if (phase !== 'pre-entry' && phase !== 'fade-out') {
-      hasShownThisSession = true
-      setShouldShow(false)
-      onComplete?.()
-    }
+    setPhase('fade-out')
+    setTimeout(() => setShouldShow(false), FADE_OUT_MS)
   }
 
   const handleKeyDown = (e) => {
@@ -44,49 +62,36 @@ export function WelcomeSplash({ onComplete }) {
     }
   }
 
-  if (!shouldShow) return null
+  const whats = useMemo(() => makeLine(['w', 'h', 'a', 't', '\u2019', 's'], 0.65), [])
+  const good = useMemo(() => makeLine(['g', 'o', 'o', 'd'], 0.85), [])
+  const here = useMemo(() => makeLine(['h', 'e', 'r', 'e'], 1.05), [])
 
-  const isVisible = phase !== 'pre-entry'
-  const isFadingOut = phase === 'fade-out'
+  if (!shouldShow) return null
 
   return (
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center cursor-pointer"
-      style={{
-        background: 'var(--color-primary)',
-        opacity: isFadingOut ? 0 : isVisible ? 1 : 0,
-        transition: isFadingOut ? 'opacity 300ms ease-out' : 'opacity 300ms ease-in',
-        pointerEvents: (isFadingOut || !isVisible) ? 'none' : 'auto',
-      }}
+      className="wgh-splash"
+      style={{ opacity: phase === 'fade-out' ? 0 : 1 }}
       onClick={handleSkip}
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
       aria-label="Welcome splash screen. Press Enter or tap to skip."
     >
-      <div
-        className="flex items-center gap-3"
-        style={{
-          opacity: isVisible ? 1 : 0,
-          transform: isVisible ? 'scale(1)' : 'scale(0.92)',
-          transition: 'opacity 300ms ease-out, transform 300ms ease-out',
-        }}
-      >
-        {/* White on brand coral — intentional, not theme-dependent */}
-        <WghLogo size={52} color="#FFFFFF" />
-        <h1
-          style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontSize: '42px',
-            fontWeight: 700,
-            color: 'var(--color-text-on-primary)',
-            letterSpacing: '0.04em',
-            lineHeight: 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          What's <span style={{ color: '#1A1A1A' }}>Good</span> Here
-        </h1>
+      <SmileyPin size={186} animated />
+      <div className="wgh-splash__wordmark">
+        <div className="wgh-splash__rule" />
+        <div className="wgh-splash__text">
+          <span className="wgh-splash__b1" style={{ display: 'inline-block' }}>
+            <span className="wgh-splash__line">{whats}</span>
+            <span className="wgh-splash__line">{good}</span>
+            <span className="wgh-splash__line">
+              {here}
+              <span className="wgh-splash__period">.</span>
+            </span>
+          </span>
+        </div>
+        <div className="wgh-splash__rule" />
       </div>
     </div>
   )

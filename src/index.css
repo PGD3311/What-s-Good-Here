@@ -218,202 +218,155 @@
     color: var(--color-primary);
   }
 
-  /* WelcomeSplash - Multi-step onboarding for first-time visitors */
-  .welcome-splash {
+  /* ===========================
+     WelcomeSplash — SmileyPin pierce animation
+     Pin drops from above, pierces through stacked Fraunces wordmark,
+     letters form a V, plate + eyes + smile reveal, right eye winks.
+     =========================== */
+
+  .wgh-splash {
     position: fixed;
     inset: 0;
     z-index: 99999;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(145deg, #FFFFFF 0%, #F7F4F1 50%, #F0ECE8 100%);
-    opacity: 1;
-    transition: opacity 0.4s ease-out;
-  }
-
-  .welcome-splash--fading {
-    opacity: 0;
-  }
-
-  .welcome-splash__content {
-    display: flex;
     flex-direction: column;
-    align-items: center;
+    gap: 22px;
+    padding: 40px;
+    box-sizing: border-box;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: opacity 300ms ease-out;
+  }
+
+  .wgh-splash__wordmark {
     text-align: center;
-    padding: 2rem;
-    max-width: 380px;
-    width: 100%;
-  }
-
-  /* Progress dots */
-  .welcome-splash__progress {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 2.5rem;
-  }
-
-  .welcome-splash__dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--color-divider);
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
-
-  .welcome-splash__dot--active {
-    width: 24px;
-    border-radius: 4px;
-    background: var(--color-primary);
-  }
-
-  /* Slide content with animation */
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateX(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  @keyframes slideInReverse {
-    from {
-      opacity: 0;
-      transform: translateX(-20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  .welcome-splash__slide {
     display: flex;
     flex-direction: column;
     align-items: center;
-    animation: slideIn 0.35s ease-out;
+    gap: 10px;
   }
 
-  .welcome-splash__slide--prev {
-    animation: slideInReverse 0.35s ease-out;
+  .wgh-splash__rule {
+    height: 1px;
+    width: 140px;
+    background: var(--color-text-primary);
+    opacity: 0.18;
+    transform: scaleX(0);
+    animation: ruleGrow 0.5s 3.0s cubic-bezier(.3, .8, .3, 1) forwards;
   }
 
-  /* Emoji icon */
-  .welcome-splash__icon {
-    width: 88px;
-    height: 88px;
-    border-radius: 50%;
-    background: linear-gradient(145deg, var(--color-primary), #f77f00);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1.75rem;
-    box-shadow: var(--glow-primary);
-  }
-
-  .welcome-splash__emoji {
-    font-size: 40px;
-  }
-
-  /* Typography */
-  .welcome-splash__headline {
-    font-size: 1.5rem;
-    font-weight: 700;
+  .wgh-splash__text {
+    font-family: 'Fraunces', 'Outfit', serif;
+    font-style: italic;
+    font-weight: 900;
+    font-size: 56px;
+    letter-spacing: -2.8px;
+    line-height: 0.88;
     color: var(--color-text-primary);
-    margin-bottom: 0.5rem;
-    line-height: 1.2;
+    animation: groundShake 0.6s 1.9s linear both;
   }
 
-  .welcome-splash__subhead {
-    font-size: 1.125rem;
-    font-weight: 600;
+  .wgh-splash__b1 { animation: fadeIn 0.3s 0.6s both; }
+  .wgh-splash__line { display: block; }
+
+  .wgh-splash__letter {
+    display: inline-block;
+    transform-origin: center bottom;
+    animation: letterDeflect 1.6s cubic-bezier(.45, .05, .55, .95) var(--delay, 0s) both;
+    will-change: transform;
+  }
+
+  .wgh-splash__period {
+    display: inline-block;
+    transform-origin: center;
     color: var(--color-primary);
-    margin-bottom: 1rem;
+    animation: ghostIn 0.55s 5.9s cubic-bezier(.34, 1.4, .5, 1) both;
   }
 
-  .welcome-splash__description {
-    font-size: 0.9375rem;
-    color: var(--color-text-secondary);
-    line-height: 1.5;
-    margin-bottom: 2.5rem;
-    max-width: 300px;
+  .wgh-splash .pin-drop {
+    animation: pinPierce 2.6s 0.5s cubic-bezier(.5, .05, .35, 1) both;
+  }
+  .wgh-splash .plate-pop {
+    animation: platePop 0.4s 3.05s cubic-bezier(.34, 1.56, .64, 1) both;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .wgh-splash .eye {
+    animation: fadeIn 0.25s 3.2s both, wink 1.6s 4.2s 1 forwards;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .wgh-splash .eye.left {
+    animation: fadeIn 0.25s 3.2s both;
+  }
+  .wgh-splash .smile-draw {
+    stroke-dasharray: 80;
+    stroke-dashoffset: 80;
+    animation: drawSmile 0.45s 3.4s cubic-bezier(.5, .2, .3, 1) forwards;
   }
 
-  /* Navigation buttons */
-  .welcome-splash__nav {
-    display: flex;
-    gap: 12px;
-    width: 100%;
-    max-width: 300px;
+  @keyframes pinPierce {
+    0%   { opacity: 0; transform: translateY(-500px) scale(0.7) rotate(-3deg); }
+    15%  { opacity: 1; }
+    38%  { transform: translateY(140px) scale(1.02) rotate(2deg); }
+    55%  { transform: translateY(230px) scale(1.04, 0.96) rotate(-1deg); }
+    78%  { transform: translateY(-30px) scale(0.98, 1.02) rotate(1deg); }
+    90%  { transform: translateY(6px) scale(1.01, 0.99); }
+    100% { transform: translateY(0) scale(1) rotate(0); }
   }
 
-  .welcome-splash__btn {
-    flex: 1;
-    padding: 14px 24px;
-    border-radius: 12px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: none;
+  /* V-shape letter deflection — outer letters lift highest, rotate outward;
+     center letters barely move. All letters in a line peak together at 55%. */
+  @keyframes letterDeflect {
+    0%   { transform: translateY(0) rotate(0); }
+    20%  { transform: translateY(calc(var(--dy) * 0.22)) rotate(calc(var(--rot) * 0.2)); }
+    40%  { transform: translateY(calc(var(--dy) * 0.72)) rotate(calc(var(--rot) * 0.7)); }
+    55%  { transform: translateY(var(--dy)) rotate(var(--rot)); }
+    70%  { transform: translateY(calc(var(--dy) * 0.72)) rotate(calc(var(--rot) * 0.7)); }
+    85%  { transform: translateY(calc(var(--dy) * 0.22)) rotate(calc(var(--rot) * 0.2)); }
+    100% { transform: translateY(0) rotate(0); }
   }
 
-  .welcome-splash__btn--primary {
-    background: var(--color-primary);
-    color: white;
+  @keyframes groundShake {
+    0%, 100% { transform: translateX(0); }
+    15%      { transform: translateX(-3px); }
+    30%      { transform: translateX(3px); }
+    45%      { transform: translateX(-2px); }
+    60%      { transform: translateX(2px); }
+    75%      { transform: translateX(-1px); }
+    90%      { transform: translateX(1px); }
+  }
+  @keyframes platePop { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes wink {
+    0%, 100% { transform: scaleY(1); }
+    15%, 30% { transform: scaleY(0.08); }
+  }
+  @keyframes drawSmile { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
+  @keyframes ruleGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes ghostIn {
+    0%   { opacity: 0; transform: scale(0.4); filter: blur(4px); }
+    60%  { opacity: 0.85; transform: scale(1.18); filter: blur(0.5px); }
+    100% { opacity: 1; transform: scale(1); filter: blur(0); }
   }
 
-  .welcome-splash__btn--primary:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
-  }
-
-  .welcome-splash__btn--primary:active {
-    transform: scale(0.98);
-  }
-
-  .welcome-splash__btn--secondary {
-    background: var(--color-surface-elevated);
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-divider);
-  }
-
-  .welcome-splash__btn--secondary:hover {
-    background: var(--color-card-hover);
-  }
-
-  .welcome-splash__btn--skip {
-    background: transparent;
-    color: var(--color-text-tertiary);
-  }
-
-  .welcome-splash__btn--skip:hover {
-    color: var(--color-text-secondary);
-  }
-
-  /* Counter */
-  .welcome-splash__counter {
-    margin-top: 1.5rem;
-    font-size: 0.75rem;
-    color: var(--color-text-tertiary);
-  }
-
-  /* Respect reduced motion preference */
+  /* Reduced motion — render the final state without the pierce sequence. */
   @media (prefers-reduced-motion: reduce) {
-    .welcome-splash {
-      transition: none;
-    }
-    .welcome-splash__slide {
+    .wgh-splash .pin-drop,
+    .wgh-splash .plate-pop,
+    .wgh-splash .eye,
+    .wgh-splash .eye.left,
+    .wgh-splash .smile-draw,
+    .wgh-splash__letter,
+    .wgh-splash__rule,
+    .wgh-splash__text,
+    .wgh-splash__b1,
+    .wgh-splash__period {
       animation: none;
     }
-    .welcome-splash__dot {
-      transition: none;
-    }
+    .wgh-splash .smile-draw { stroke-dashoffset: 0; }
+    .wgh-splash__rule { transform: scaleX(1); }
   }
 }
 
