@@ -15,7 +15,17 @@ Mobile-first food discovery app for Martha's Vineyard (expanding to Nantucket + 
 You are the senior project manager and design partner, not an order-taker. Your job is to make this the best dish rating app there ever was. That means: push back when an idea is wrong, propose better alternatives, flag when something will hurt UX or create debt. Agree when you genuinely agree — but never just to be agreeable. Honest disagreement is more valuable than fast compliance.
 
 ## Session Startup
-Always read `SPEC.md` and `TASKS.md` before beginning any work.
+
+Run this checklist before touching anything:
+
+1. **Read `CURRENT_FOCUS.md`** — one paragraph on what we're working on *right now*. Source of truth for this session's scope. If it's stale, ask Dan to update before starting.
+2. **Read `SPEC.md` and `TASKS.md`** — system state and backlog.
+3. **Glance at `LAUNCH-READINESS.md`** — know what's shipped vs. outstanding for Memorial Day.
+4. **Collision check for parallel work.** Multiple Claude sessions (Dan's + Denis's + scheduled agents) can claim the same surface. Before editing:
+   - `git fetch origin main --quiet && git log --oneline HEAD..origin/main` — commits on main since your branch point. If this is non-empty, another session shipped work — rebase or pull before editing.
+   - `git status` — modified or untracked files you didn't create = in-flight work from another session.
+   - Read the **Active handoff** block in `CURRENT_FOCUS.md`. If another session has claimed files/modules you want to touch, STOP and ask Dan what's happening — don't duplicate or overwrite.
+   - If any of these signals fire and you're not sure, ask Dan before editing.
 
 ## Quick Commands
 ```bash
@@ -30,6 +40,9 @@ npm run test:e2e:business # manager persona E2E
 ```
 
 ## Key Docs
+- `CURRENT_FOCUS.md` - What we're working on RIGHT NOW (read at session start)
+- `LAUNCH-READINESS.md` - Memorial Day checklist, any Claude ticks boxes as work ships
+- `SMOKE-TEST.md` - Test accounts + golden-path recipes for verifying UI changes
 - `SPEC.md` - Full system specification (data model, features, RPCs, RLS)
 - `TASKS.md` - Prioritized backlog of high-leverage tasks
 - `NOTES.md` - Design tokens, architecture, file locations, category system
@@ -72,6 +85,7 @@ These rules are absolute. Violating any of them is a bug.
 - **`ROUND()` needs `::NUMERIC` cast on float expressions.** `ROUND(expression::NUMERIC, 2)`.
 - **New RPC functions must be run in Supabase SQL Editor.** Adding to `schema.sql` does NOT deploy. Run the CREATE FUNCTION, then verify with a test call.
 - **Always qualify column references in PL/pgSQL functions.** `RETURNS TABLE` column names become variables inside the function body. Bare `dish_id` is ambiguous if a joined table also has `dish_id`. Always use `tablename.column` (e.g., `votes.dish_id`, not `dish_id`).
+- **Every risky migration must declare a rollback path.** If a migration changes column types, drops/recreates triggers, alters FK strategies, or rewrites policies, include a commented `-- ROLLBACK:` block at the bottom of the file with paste-ready SQL to revert. Pure additive `CREATE INDEX IF NOT EXISTS` and `CREATE OR REPLACE FUNCTION` changes don't need one (rollback is obvious). If no SQL rollback is possible (e.g., the migration triggers a data backfill), say so explicitly: `-- No SQL rollback. Recovery requires restore from the <timestamp> backup.`
 
 ### 1.6 Auth Gates
 - **Voting, favorites, and photo uploads require login.** Check `user` from `useAuth()` first, show `<LoginModal>` if null. Pattern: `Browse.jsx`.
