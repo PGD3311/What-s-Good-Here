@@ -284,7 +284,7 @@
     display: inline-block;
     transform-origin: center;
     color: var(--color-primary);
-    animation: ghostIn 0.55s 5.9s cubic-bezier(.34, 1.4, .5, 1) both;
+    animation: ghostIn 0.55s 4.7s cubic-bezier(.34, 1.4, .5, 1) both;
   }
 
   .wgh-splash .pin-drop {

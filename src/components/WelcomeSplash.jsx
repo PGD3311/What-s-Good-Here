@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { SmileyPin } from './SmileyPin'
 
 // Total animation runtime before natural dismiss (ms).
-// Matches CSS timing: pin drop 0.5s + 2.6s, period ghost 5.9s + 0.55s ≈ 6.5s.
-const SPLASH_DURATION_MS = 6500
+// Matches CSS timing: wink fires at 4.2s, period ghosts in at 4.7s + 0.55s.
+// Hold ~0.6s after the period settles so the final state reads as intentional.
+const SPLASH_DURATION_MS = 5800
 const FADE_OUT_MS = 300
 
 // Module-level flag — persists across re-renders within a session so
