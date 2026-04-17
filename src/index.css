@@ -220,7 +220,7 @@
 
   /* ===========================
      WelcomeSplash — SmileyPin pierce animation
-     Pin drops from above, pierces through stacked Fraunces wordmark,
+     Pin drops from above, pierces through stacked Amatic SC wordmark,
      letters form a V, plate + eyes + smile reveal, right eye winks.
      =========================== */
 
@@ -258,12 +258,11 @@
   }
 
   .wgh-splash__text {
-    font-family: 'Fraunces', 'Outfit', serif;
-    font-style: italic;
-    font-weight: 900;
-    font-size: 56px;
-    letter-spacing: -2.8px;
-    line-height: 0.88;
+    font-family: 'Amatic SC', cursive;
+    font-weight: 700;
+    font-size: 104px;
+    letter-spacing: 0.02em;
+    line-height: 0.82;
     color: var(--color-text-primary);
     animation: groundShake 0.6s 1.9s linear both;
   }
@@ -271,11 +270,14 @@
   .wgh-splash__b1 { animation: fadeIn 0.3s 0.6s both; }
   .wgh-splash__line { display: block; }
 
+  /* Amatic SC tops out at weight 700 — text-stroke fakes heavier weight.
+     Applied per-letter so the period (a separate span) stays a clean coral dot. */
   .wgh-splash__letter {
     display: inline-block;
     transform-origin: center bottom;
     animation: letterDeflect 1.6s cubic-bezier(.45, .05, .55, .95) var(--delay, 0s) both;
     will-change: transform;
+    -webkit-text-stroke: 1px currentColor;
   }
 
   .wgh-splash__period {
