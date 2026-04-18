@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { WghSeal } from '../components/WghSeal'
 
 export function Terms() {
   const navigate = useNavigate()
@@ -26,6 +27,9 @@ export function Terms() {
 
       {/* Content */}
       <div className="max-w-2xl mx-auto px-4 py-8">
+        <div className="flex justify-center mb-6">
+          <WghSeal size={96} />
+        </div>
         <div className="rounded-2xl p-6 space-y-6" style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-divider)' }}>
           <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>Last updated: January 2025</p>
 
