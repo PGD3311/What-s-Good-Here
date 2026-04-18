@@ -46,3 +46,12 @@ playwright-report/
 test-results/
 blob-report/
 .superpowers/
+
+# Auto-generated build artifacts
+public/bundle-stats.html
+
+# Alternate codebase checkout (separate project, not part of this repo)
+whats-good-here-soul/
+
+# Claude Code scheduled tasks
+.claude/scheduled_tasks.lock
