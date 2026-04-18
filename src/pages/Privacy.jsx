@@ -237,7 +237,9 @@ export function Privacy() {
               You can access, update, or delete your profile information at any time through
               the app. If you are a California resident, you have additional rights under the
               CCPA, including the right to request a copy of the personal information we hold
-              about you and the right to request deletion. Email us to make a formal request.
+              about you and the right to request deletion. We also comply with other applicable
+              state privacy laws, including those of your state of residence — email us to make
+              a formal request under any of them.
             </p>
           </section>
 
