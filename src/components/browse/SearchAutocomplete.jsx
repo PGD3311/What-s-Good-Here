@@ -45,11 +45,17 @@ export const SearchAutocomplete = forwardRef(function SearchAutocomplete({
           <span
             className="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0"
             style={{
-              background: suggestion.type === 'dish' ? 'var(--color-primary-muted)' : 'rgba(59, 130, 246, 0.15)',
-              color: suggestion.type === 'dish' ? 'var(--color-primary)' : 'var(--color-blue-light)'
+              background:
+                suggestion.type === 'dish' ? 'var(--color-primary-muted)'
+                : suggestion.type === 'place' ? 'rgba(100, 116, 139, 0.15)'
+                : 'rgba(59, 130, 246, 0.15)',
+              color:
+                suggestion.type === 'dish' ? 'var(--color-primary)'
+                : suggestion.type === 'place' ? 'var(--color-text-tertiary)'
+                : 'var(--color-blue-light)'
             }}
           >
-            {suggestion.type === 'dish' ? 'Dish' : 'Spot'}
+            {suggestion.type === 'dish' ? 'Dish' : suggestion.type === 'place' ? 'Google Maps' : 'Spot'}
           </span>
         </button>
       ))}
