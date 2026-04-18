@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/authApi'
+import { SmileyPin } from '../components/SmileyPin'
 
 export function ResetPassword() {
   const navigate = useNavigate()
@@ -72,11 +73,9 @@ export function ResetPassword() {
       style={{ background: 'var(--color-surface)' }}
     >
       {/* Logo */}
-      <img
-        src="/logo.webp"
-        alt="What's Good Here"
-        className="w-48 h-auto mb-6"
-      />
+      <div className="mb-6">
+        <SmileyPin size={96} />
+      </div>
 
       {/* Heading */}
       <h1 className="text-2xl font-bold text-center mb-2" style={{ color: 'var(--color-text-primary)' }}>
