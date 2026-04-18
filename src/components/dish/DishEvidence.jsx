@@ -4,6 +4,7 @@ import { TrustBadge, TrustSummary, JitterExplainer } from '../jitter'
 import { VariantSelector } from '../VariantPicker'
 import { getRatingColor, formatScore10 } from '../../utils/ranking'
 import { formatRelativeTime } from '../../utils/formatters'
+import { ReportModal } from '../ReportModal'
 
 /**
  * Dish evidence section: friends votes, smart snippet, photos, reviews, variants.
@@ -29,6 +30,7 @@ export function DishEvidence({
   const [lightboxPhoto, setLightboxPhoto] = useState(null)
   const [explainerOpen, setExplainerOpen] = useState(false)
   const [explainerData, setExplainerData] = useState(null)
+  const [reportTarget, setReportTarget] = useState(null)
 
   const displayPhotos = showAllPhotos ? allPhotos : communityPhotos.slice(0, 4)
   const hasMorePhotos = allPhotos.length > 4 && !showAllPhotos
@@ -135,9 +137,26 @@ export function DishEvidence({
               borderLeft: '3px solid var(--color-accent-gold)',
             }}
           >
-            <p className="text-sm italic" style={{ color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-              &ldquo;{smartSnippet.review_text}&rdquo;
-            </p>
+            <div className="flex items-start gap-2">
+              <p className="text-sm italic flex-1" style={{ color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+                &ldquo;{smartSnippet.review_text}&rdquo;
+              </p>
+              {user && smartSnippet.id && smartSnippet.user_id && smartSnippet.user_id !== user.id && (
+                <button
+                  type="button"
+                  onClick={() => setReportTarget({ type: 'review', id: smartSnippet.id })}
+                  className="flex-shrink-0 p-1 rounded-full"
+                  aria-label="Report review"
+                  style={{ color: 'var(--color-text-tertiary)' }}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="5" cy="12" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="19" cy="12" r="2" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <div className="flex items-center justify-between mt-2">
               <span className="text-xs font-medium" style={{ color: 'var(--color-text-tertiary)' }}>
                 — @{smartSnippet.profiles?.display_name || 'Anonymous'}
@@ -161,7 +180,7 @@ export function DishEvidence({
               {displayPhotos.map((photo) => (
                 <button
                   key={photo.id}
-                  onClick={() => setLightboxPhoto(photo.photo_url)}
+                  onClick={() => setLightboxPhoto(photo)}
                   aria-label={'View photo of ' + dish.dish_name}
                   className="aspect-square rounded-lg overflow-hidden active:scale-95 transition-transform"
                   style={{ border: '1.5px solid var(--color-divider)' }}
@@ -221,40 +240,57 @@ export function DishEvidence({
                     className="p-4 rounded-xl flex-shrink-0 snap-start"
                     style={{ width: '280px', background: 'var(--color-card)', border: '1.5px solid var(--color-divider)', borderLeft: '3px solid ' + borderColor }}
                   >
-                    <Link to={'/user/' + review.user_id} className="flex items-center gap-3 mb-2.5 min-w-0">
-                      <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
-                        style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
-                      >
-                        {review.profiles?.display_name?.charAt(0).toUpperCase() || '?'}
-                      </div>
-                      <div className="min-w-0">
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>
-                            @{review.profiles?.display_name || 'Anonymous'}
+                    <div className="flex items-start gap-2 mb-2.5">
+                      <Link to={'/user/' + review.user_id} className="flex items-center gap-3 min-w-0 flex-1">
+                        <div
+                          className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
+                          style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                        >
+                          {review.profiles?.display_name?.charAt(0).toUpperCase() || '?'}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                              @{review.profiles?.display_name || 'Anonymous'}
+                            </span>
+                            <TrustBadge type={review.trust_badge} profileData={review.jitter_profile} />
+                            {review.trust_badge && review.trust_badge !== 'building' && (
+                              <button
+                                onClick={function (e) {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setExplainerData({ warScore: review.war_score, stats: review.jitter_profile })
+                                  setExplainerOpen(true)
+                                }}
+                                className="flex-shrink-0"
+                                style={{ color: 'var(--color-text-tertiary)', fontSize: '11px', lineHeight: 1 }}
+                                aria-label="What is this badge?"
+                              >
+                                ?
+                              </button>
+                            )}
                           </span>
-                          <TrustBadge type={review.trust_badge} profileData={review.jitter_profile} />
-                          {review.trust_badge && review.trust_badge !== 'building' && (
-                            <button
-                              onClick={function (e) {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setExplainerData({ warScore: review.war_score, stats: review.jitter_profile })
-                                setExplainerOpen(true)
-                              }}
-                              className="flex-shrink-0"
-                              style={{ color: 'var(--color-text-tertiary)', fontSize: '11px', lineHeight: 1 }}
-                              aria-label="What is this badge?"
-                            >
-                              ?
-                            </button>
-                          )}
-                        </span>
-                        <span className="text-[11px] block" style={{ color: 'var(--color-text-secondary)' }}>
-                          {formatRelativeTime(review.review_created_at)}{dish.restaurant_town ? ' · ' + dish.restaurant_town : ''}
-                        </span>
-                      </div>
-                    </Link>
+                          <span className="text-[11px] block" style={{ color: 'var(--color-text-secondary)' }}>
+                            {formatRelativeTime(review.review_created_at)}{dish.restaurant_town ? ' · ' + dish.restaurant_town : ''}
+                          </span>
+                        </div>
+                      </Link>
+                      {user && user.id !== review.user_id && (
+                        <button
+                          type="button"
+                          onClick={() => setReportTarget({ type: 'review', id: review.id })}
+                          className="flex-shrink-0 p-1 rounded-full"
+                          aria-label={'Report review by ' + (review.profiles?.display_name || 'user')}
+                          style={{ color: 'var(--color-text-tertiary)' }}
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="5" cy="12" r="2" />
+                            <circle cx="12" cy="12" r="2" />
+                            <circle cx="19" cy="12" r="2" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
 
                     {review.rating_10 ? (
                       <div className="flex items-center gap-2 mb-2.5">
@@ -325,14 +361,34 @@ export function DishEvidence({
           >
             &times;
           </button>
+          {user && lightboxPhoto.id && lightboxPhoto.user_id && lightboxPhoto.user_id !== user.id && (
+            <button
+              className="absolute top-4 left-4 px-3 py-2 rounded-full text-xs font-semibold"
+              style={{ background: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
+              onClick={(e) => {
+                e.stopPropagation()
+                setReportTarget({ type: 'photo', id: lightboxPhoto.id })
+                setLightboxPhoto(null)
+              }}
+              aria-label="Report photo"
+            >
+              Report
+            </button>
+          )}
           <img
-            src={lightboxPhoto}
+            src={lightboxPhoto.photo_url}
             alt={dish.dish_name}
             className="max-w-full max-h-full object-contain"
             onError={() => setLightboxPhoto(null)}
           />
         </div>
       )}
+
+      <ReportModal
+        isOpen={!!reportTarget}
+        onClose={() => setReportTarget(null)}
+        target={reportTarget}
+      />
 
       {/* Jitter Explainer */}
       <JitterExplainer

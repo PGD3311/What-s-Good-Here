@@ -565,7 +565,8 @@ export const votesApi = {
           review_text,
           rating_10,
           review_created_at,
-          dish_id
+          dish_id,
+          user_id
         `)
         .in('dish_id', dishIds)
         .not('review_text', 'is', null)
@@ -588,6 +589,8 @@ export const votesApi = {
 
       return (data || []).map(function (v) {
         return {
+          id: v.id,
+          user_id: v.user_id,
           review_text: v.review_text,
           rating: v.rating_10,
           dish_name: dishMap[v.dish_id] ? dishMap[v.dish_id].name : '',

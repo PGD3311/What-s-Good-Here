@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { capture } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
+import { ReportModal } from '../components/ReportModal'
 import { logger } from '../utils/logger'
 import { shareOrCopy } from '../utils/share'
 import { sanitizeUrl } from '../utils/sanitize'
@@ -92,6 +93,8 @@ export function RestaurantDetail() {
     var avgRating = ratedDishes.reduce(function (sum, d) { return sum + Number(d.avg_rating) }, 0) / ratedDishes.length
     wghFoodScore = avgRating.toFixed(1)
   }
+
+  var [reportTarget, setReportTarget] = useState(null)
 
   // Fetch review snippets for "What People Are Saying"
   var [reviewSnippets, setReviewSnippets] = useState([])
@@ -373,44 +376,64 @@ export function RestaurantDetail() {
           >
             {reviewSnippets.map(function (review, i) {
               var isExpanded = expandedReview === i
+              var canReport = user && review.id && review.user_id && review.user_id !== user.id
               return (
-                <button
-                  key={i}
-                  onClick={function () { setExpandedReview(isExpanded ? null : i) }}
-                  className="flex-shrink-0 text-left transition-all"
-                  style={{
-                    scrollSnapAlign: 'start',
-                    width: isExpanded ? '320px' : '280px',
-                    padding: '10px 14px',
-                    background: 'var(--color-card)',
-                    borderRadius: '12px',
-                    border: isExpanded ? '1.5px solid var(--color-accent-gold)' : '1px solid var(--color-divider)',
-                  }}
-                >
-                  <p style={{
-                    fontSize: '13px',
-                    color: 'var(--color-text-secondary)',
-                    fontStyle: 'italic',
-                    lineHeight: 1.4,
-                    margin: 0,
-                    display: isExpanded ? 'block' : '-webkit-box',
-                    WebkitLineClamp: isExpanded ? undefined : 2,
-                    WebkitBoxOrient: isExpanded ? undefined : 'vertical',
-                    overflow: isExpanded ? 'visible' : 'hidden',
-                  }}>
-                    &ldquo;{review.review_text}&rdquo;
-                  </p>
-                  <p style={{
-                    fontSize: '11px',
-                    color: 'var(--color-text-tertiary)',
-                    marginTop: '4px',
-                  }}>
-                    on <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{review.dish_name}</span>
-                    {review.rating != null && (
-                      <span> · <span style={{ fontWeight: 700, color: 'var(--color-rating)' }}>{review.rating}</span></span>
-                    )}
-                  </p>
-                </button>
+                <div key={i} className="relative flex-shrink-0" style={{ scrollSnapAlign: 'start' }}>
+                  <button
+                    onClick={function () { setExpandedReview(isExpanded ? null : i) }}
+                    className="text-left transition-all"
+                    style={{
+                      width: isExpanded ? '320px' : '280px',
+                      padding: '10px 14px',
+                      paddingRight: canReport ? '36px' : '14px',
+                      background: 'var(--color-card)',
+                      borderRadius: '12px',
+                      border: isExpanded ? '1.5px solid var(--color-accent-gold)' : '1px solid var(--color-divider)',
+                    }}
+                  >
+                    <p style={{
+                      fontSize: '13px',
+                      color: 'var(--color-text-secondary)',
+                      fontStyle: 'italic',
+                      lineHeight: 1.4,
+                      margin: 0,
+                      display: isExpanded ? 'block' : '-webkit-box',
+                      WebkitLineClamp: isExpanded ? undefined : 2,
+                      WebkitBoxOrient: isExpanded ? undefined : 'vertical',
+                      overflow: isExpanded ? 'visible' : 'hidden',
+                    }}>
+                      &ldquo;{review.review_text}&rdquo;
+                    </p>
+                    <p style={{
+                      fontSize: '11px',
+                      color: 'var(--color-text-tertiary)',
+                      marginTop: '4px',
+                    }}>
+                      on <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{review.dish_name}</span>
+                      {review.rating != null && (
+                        <span> · <span style={{ fontWeight: 700, color: 'var(--color-rating)' }}>{review.rating}</span></span>
+                      )}
+                    </p>
+                  </button>
+                  {canReport && (
+                    <button
+                      type="button"
+                      onClick={function (e) {
+                        e.stopPropagation()
+                        setReportTarget({ type: 'review', id: review.id })
+                      }}
+                      className="absolute top-2 right-2 p-1.5 rounded-full"
+                      aria-label="Report review"
+                      style={{ color: 'var(--color-text-tertiary)' }}
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="5" cy="12" r="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <circle cx="19" cy="12" r="2" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -668,6 +691,11 @@ export function RestaurantDetail() {
           )}
         </div>
       </div>
+      <ReportModal
+        isOpen={!!reportTarget}
+        onClose={function () { setReportTarget(null) }}
+        target={reportTarget}
+      />
     </div>
   )
 }

@@ -4,6 +4,8 @@ import { votesApi } from '../api/votesApi'
 import { restaurantsApi } from '../api/restaurantsApi'
 import { logger } from '../utils/logger'
 import { getRatingColor } from '../utils/ranking'
+import { useAuth } from '../context/AuthContext'
+import { ReportModal } from '../components/ReportModal'
 
 var SORT_OPTIONS = [
   { key: 'newest', label: 'Newest' },
@@ -20,6 +22,8 @@ export function RestaurantReviews() {
   var [loading, setLoading] = useState(true)
   var [fetchError, setFetchError] = useState(null)
   var [sortBy, setSortBy] = useState('newest')
+  var [reportTarget, setReportTarget] = useState(null)
+  var { user } = useAuth()
 
   var sortedReviews = useMemo(function () {
     var sorted = reviews.slice()
@@ -188,61 +192,87 @@ export function RestaurantReviews() {
           </div>
         ) : (
           sortedReviews.map(function (review, i) {
+            var canReport = user && review.id && review.user_id && review.user_id !== user.id
             return (
-              <button
-                key={i}
-                onClick={function () { if (review.dish_id) navigate('/dish/' + review.dish_id) }}
-                className="w-full text-left rounded-xl transition-all active:scale-[0.98]"
-                style={{
-                  padding: '14px 16px',
-                  background: 'var(--color-card)',
-                  border: '1px solid var(--color-divider)',
-                }}
-              >
-                {/* Top row: dish name + rating */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <p
-                    className="font-bold truncate"
-                    style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}
-                  >
-                    {review.dish_name}
-                  </p>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {review.rating != null && (
-                      <span
-                        className="font-bold"
-                        style={{ fontSize: '16px', color: getRatingColor(review.rating) }}
-                      >
-                        {review.rating}
-                      </span>
-                    )}
+              <div key={i} className="relative">
+                <button
+                  onClick={function () { if (review.dish_id) navigate('/dish/' + review.dish_id) }}
+                  className="w-full text-left rounded-xl transition-all active:scale-[0.98]"
+                  style={{
+                    padding: '14px 16px',
+                    paddingRight: canReport ? '44px' : '16px',
+                    background: 'var(--color-card)',
+                    border: '1px solid var(--color-divider)',
+                  }}
+                >
+                  {/* Top row: dish name + rating */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p
+                      className="font-bold truncate"
+                      style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}
+                    >
+                      {review.dish_name}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {review.rating != null && (
+                        <span
+                          className="font-bold"
+                          style={{ fontSize: '16px', color: getRatingColor(review.rating) }}
+                        >
+                          {review.rating}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Review text */}
-                <p style={{
-                  fontSize: '14px',
-                  color: 'var(--color-text-secondary)',
-                  fontStyle: 'italic',
-                  lineHeight: 1.5,
-                  margin: 0,
-                }}>
-                  &ldquo;{review.review_text}&rdquo;
-                </p>
+                  {/* Review text */}
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'var(--color-text-secondary)',
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    margin: 0,
+                  }}>
+                    &ldquo;{review.review_text}&rdquo;
+                  </p>
 
-                {/* Date */}
-                <p style={{
-                  fontSize: '11px',
-                  color: 'var(--color-text-tertiary)',
-                  marginTop: '8px',
-                }}>
-                  {formatDate(review.created_at)}
-                </p>
-              </button>
+                  {/* Date */}
+                  <p style={{
+                    fontSize: '11px',
+                    color: 'var(--color-text-tertiary)',
+                    marginTop: '8px',
+                  }}>
+                    {formatDate(review.created_at)}
+                  </p>
+                </button>
+                {canReport && (
+                  <button
+                    type="button"
+                    onClick={function (e) {
+                      e.stopPropagation()
+                      setReportTarget({ type: 'review', id: review.id })
+                    }}
+                    className="absolute top-2 right-2 p-2 rounded-full"
+                    aria-label="Report review"
+                    style={{ color: 'var(--color-text-tertiary)' }}
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="5" cy="12" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="19" cy="12" r="2" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             )
           })
         )}
       </div>}
+      <ReportModal
+        isOpen={!!reportTarget}
+        onClose={function () { setReportTarget(null) }}
+        target={reportTarget}
+      />
     </div>
   )
 }

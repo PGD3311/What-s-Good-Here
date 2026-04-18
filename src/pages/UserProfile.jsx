@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
@@ -18,6 +18,9 @@ import { useLocalListDetail } from '../hooks/useLocalListDetail'
 import { TrustBadge, ProfileJitterCard } from '../components/jitter'
 import { jitterApi } from '../api/jitterApi'
 import { profileApi } from '../api/profileApi'
+import { ReportModal } from '../components/ReportModal'
+import { BlockUserModal } from '../components/BlockUserModal'
+import { useBlockedUsers } from '../hooks/useBlockedUsers'
 
 // Known location display names for URL slugs
 var LOCATION_NAMES = {
@@ -87,12 +90,37 @@ export function UserProfile() {
   const [jitterBadgeType, setJitterBadgeType] = useState(null)
   const [jitterBadgeData, setJitterBadgeData] = useState(null)
   const [activeTab, setActiveTab] = useState('journal')
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [showBlockModal, setShowBlockModal] = useState(false)
   const { playlists: userPlaylists } = useUserPlaylists(userId)
+  const { isBlocked, unblockUser } = useBlockedUsers()
 
   var localList = useLocalListDetail(userId)
+  const actionsMenuRef = useRef(null)
 
   // Check if viewing own profile
   const isOwnProfile = currentUser?.id === userId
+  const viewerHasBlocked = !!currentUser && !isOwnProfile && isBlocked(userId)
+
+  // Close actions menu on outside click or Escape
+  useEffect(() => {
+    if (!showActionsMenu) return
+    const handleClickOutside = (e) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
+        setShowActionsMenu(false)
+      }
+    }
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setShowActionsMenu(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [showActionsMenu])
 
   // Redirect to /profile if viewing own profile
   useEffect(() => {
@@ -424,6 +452,52 @@ export function UserProfile() {
 
   const totalVotes = foodMapStats.totalVotes
 
+  if (viewerHasBlocked) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: 'var(--color-surface)' }}>
+        <div
+          className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold mb-5"
+          style={{ background: 'var(--color-surface-elevated)', color: 'var(--color-text-tertiary)' }}
+        >
+          {profile.display_name?.charAt(0).toUpperCase() || '?'}
+        </div>
+        <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+          You blocked {profile.display_name}
+        </h2>
+        <p className="text-sm leading-relaxed mb-6 max-w-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          You won't see their reviews, photos, or activity. Unblock to restore their profile.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="px-5 py-2.5 rounded-xl font-semibold"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-divider)',
+              color: 'var(--color-text-primary)',
+              fontSize: '14px',
+            }}
+          >
+            Go back
+          </button>
+          <button
+            type="button"
+            onClick={() => unblockUser(userId)}
+            className="px-5 py-2.5 rounded-xl font-semibold"
+            style={{
+              background: 'var(--color-primary)',
+              color: 'var(--color-text-on-primary)',
+              fontSize: '14px',
+            }}
+          >
+            Unblock
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-surface)' }}>
       <h1 className="sr-only">{profile.display_name}'s Profile</h1>
@@ -632,6 +706,50 @@ export function UserProfile() {
           >
             Share
           </button>
+          {currentUser && !isOwnProfile && (
+            <div className="relative" ref={actionsMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowActionsMenu((v) => !v)}
+                aria-label="More actions"
+                aria-expanded={showActionsMenu}
+                aria-haspopup="menu"
+                className="px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                style={{ background: 'var(--color-surface-elevated)', color: 'var(--color-text-primary)' }}
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                </svg>
+              </button>
+              {showActionsMenu && (
+                <div
+                  role="menu"
+                  aria-label={`Actions for ${profile.display_name}`}
+                  className="absolute right-0 mt-2 w-48 rounded-xl shadow-xl border overflow-hidden z-40"
+                  style={{ background: 'var(--color-surface-elevated)', borderColor: 'var(--color-divider)' }}
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => { setShowActionsMenu(false); setShowReportModal(true) }}
+                    className="w-full px-4 py-3 text-left text-sm font-medium transition-colors border-b"
+                    style={{ color: 'var(--color-text-primary)', borderColor: 'var(--color-divider)' }}
+                  >
+                    Report user
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => { setShowActionsMenu(false); setShowBlockModal(true) }}
+                    className="w-full px-4 py-3 text-left text-sm font-medium transition-colors"
+                    style={{ color: 'var(--color-danger)' }}
+                  >
+                    Block user
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
       </div>
@@ -861,7 +979,16 @@ export function UserProfile() {
         />
       )}
 
-      {/* Review Detail Modal — removed, component doesn't exist yet */}
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        target={{ type: 'user', id: userId, label: profile.display_name }}
+      />
+      <BlockUserModal
+        isOpen={showBlockModal}
+        onClose={() => setShowBlockModal(false)}
+        user={{ id: userId, displayName: profile.display_name }}
+      />
     </div>
   )
 }

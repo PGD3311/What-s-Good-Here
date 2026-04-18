@@ -14,6 +14,7 @@ import { HearingIcon } from '../components/HearingIcon'
 import { EarIconTooltip } from '../components/EarIconTooltip'
 import { DishHero, DishEvidence } from '../components/dish'
 import { AddToPlaylistSheet } from '../components/playlists/AddToPlaylistSheet'
+import { ReportModal } from '../components/ReportModal'
 import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../lib/storage'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { sanitizeUrl } from '../utils/sanitize'
@@ -37,6 +38,7 @@ export function Dish() {
 
   const [loginModalOpen, setLoginModalOpen] = useState(false)
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false)
+  const [showReportDish, setShowReportDish] = useState(false)
   const [showRateFlow, setShowRateFlow] = useState(false)
   const [pendingAction, setPendingAction] = useState(null) // 'rate' | null
   const [priorVote, setPriorVote] = useState(null)
@@ -294,6 +296,21 @@ export function Dish() {
           >
             +
           </button>
+          {user && dish && dish.created_by !== user.id && (
+            <button
+              type="button"
+              onClick={() => setShowReportDish(true)}
+              aria-label="Report this dish"
+              className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="5" cy="12" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="19" cy="12" r="2" />
+              </svg>
+            </button>
+          )}
         </div>
       </header>
 
@@ -495,6 +512,11 @@ export function Dish() {
         dishId={dishId}
         dishName={dish?.dish_name}
         restaurantName={dish?.restaurant_name}
+      />
+      <ReportModal
+        isOpen={showReportDish}
+        onClose={() => setShowReportDish(false)}
+        target={{ type: 'dish', id: dishId, label: dish?.dish_name }}
       />
     </div>
   )
