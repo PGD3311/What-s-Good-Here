@@ -18,6 +18,9 @@ export function Playlist() {
   const { follow, unfollow, removeDish } = usePlaylistMutations()
   const [searchSheetOpen, setSearchSheetOpen] = useState(false)
 
+  const items = playlist?.items || []
+  const existingDishIds = useMemo(() => items.map((i) => i.dish_id), [items])
+
   useEffect(() => {
     if (playlist) {
       capture('playlist_detail_viewed', {
@@ -68,10 +71,8 @@ export function Playlist() {
     )
   }
 
-  var items = playlist.items || []
   var covers = (playlist.cover_categories || []).slice(0, 4)
   var coverPhotos = items.slice(0, 4).map(function (item) { return item.photo_url || null })
-  var existingDishIds = useMemo(function () { return items.map(function (i) { return i.dish_id }) }, [items])
 
   var toggleFollow = function () {
     if (!user) { navigate('/login'); return }
