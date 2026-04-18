@@ -5,6 +5,7 @@ import { useDishSearch } from '../hooks/useDishSearch'
 import { useLocationContext } from '../context/LocationContext'
 import { useRestaurantSearch } from '../hooks/useRestaurantSearch'
 import { AddRestaurantModal } from './AddRestaurantModal'
+import { PoweredByGoogle } from './PoweredByGoogle'
 import { getCategoryNeonImage, matchCategories } from '../constants/categories'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { getRatingColor } from '../utils/ranking'
@@ -333,6 +334,11 @@ export function DishSearch({ loading = false, placeholder = "Find What's Good ne
                       </div>
                     </button>
                   ))}
+                  {restaurantExternal.length > 0 && (
+                    <div className="px-4 py-2 border-t" style={{ borderColor: 'var(--color-divider)' }}>
+                      <PoweredByGoogle align="right" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

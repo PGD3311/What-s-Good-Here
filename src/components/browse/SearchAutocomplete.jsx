@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { PoweredByGoogle } from '../PoweredByGoogle'
 
 // Autocomplete dropdown for search suggestions
 export const SearchAutocomplete = forwardRef(function SearchAutocomplete({
@@ -8,6 +9,10 @@ export const SearchAutocomplete = forwardRef(function SearchAutocomplete({
   onSelect,
 }, ref) {
   if (!isOpen || suggestions.length === 0) return null
+
+  // Google Places policy requires attribution whenever Places results are
+  // shown. Suggestions with type 'place' come from Google Places Autocomplete.
+  const showGoogleAttribution = suggestions.some((s) => s.type === 'place')
 
   return (
     <div
@@ -48,6 +53,15 @@ export const SearchAutocomplete = forwardRef(function SearchAutocomplete({
           </span>
         </button>
       ))}
+
+      {showGoogleAttribution && (
+        <div
+          className="px-3 py-2 border-t"
+          style={{ borderColor: 'var(--color-divider)', background: 'var(--color-surface-elevated)' }}
+        >
+          <PoweredByGoogle align="right" />
+        </div>
+      )}
     </div>
   )
 })

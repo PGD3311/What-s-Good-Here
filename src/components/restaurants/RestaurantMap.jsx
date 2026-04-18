@@ -1028,6 +1028,19 @@ export function RestaurantMap({
               <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6BB384', opacity: 0.5, border: '1px dashed #6BB384', display: 'inline-block' }} />
               <span style={{ color: '#555' }}>Google Places</span>
             </div>
+            <div
+              style={{
+                marginTop: '4px',
+                paddingTop: '4px',
+                borderTop: '1px solid rgba(0,0,0,0.08)',
+                fontSize: '10px',
+                color: '#666',
+                letterSpacing: '0.01em',
+              }}
+              aria-label="Powered by Google"
+            >
+              Powered by Google
+            </div>
           </>
         )}
       </div>

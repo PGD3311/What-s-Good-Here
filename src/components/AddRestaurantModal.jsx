@@ -6,6 +6,7 @@ import { useLocationContext } from '../context/LocationContext'
 import { useAuth } from '../context/AuthContext'
 import { restaurantsApi } from '../api/restaurantsApi'
 import { placesApi } from '../api/placesApi'
+import { PoweredByGoogle } from './PoweredByGoogle'
 import { menuImportApi } from '../api'
 import { validateUserContent } from '../lib/reviewBlocklist'
 import { capture } from '../lib/analytics'
@@ -458,6 +459,9 @@ export function AddRestaurantModal({ isOpen, onClose, initialQuery = '' }) {
                         </div>
                       </button>
                     ))}
+                    <div className="px-1 pt-2">
+                      <PoweredByGoogle />
+                    </div>
                   </div>
                 )}
 
@@ -488,6 +492,14 @@ export function AddRestaurantModal({ isOpen, onClose, initialQuery = '' }) {
           {/* Step 2: Confirm Details */}
           {step === STEPS.DETAILS && (
             <div className="p-5 space-y-4">
+              {googlePlaceId && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'var(--color-surface-elevated)' }}>
+                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    Pre-filled from Google Maps
+                  </span>
+                  <PoweredByGoogle />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Name *</label>
                 <input

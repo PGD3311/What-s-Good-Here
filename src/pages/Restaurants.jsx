@@ -10,6 +10,7 @@ import { LocationBanner } from '../components/LocationBanner'
 import { getRatingColor } from '../utils/ranking'
 import { placesApi } from '../api/placesApi'
 import { AddRestaurantModal } from '../components/AddRestaurantModal'
+import { PoweredByGoogle } from '../components/PoweredByGoogle'
 import { logger } from '../utils/logger'
 import { getStorageItem, setStorageItem } from '../lib/storage'
 
@@ -466,6 +467,9 @@ export function Restaurants() {
                   />
                 )
               })}
+            </div>
+            <div className="mt-3">
+              <PoweredByGoogle align="right" />
             </div>
           </div>
         )}

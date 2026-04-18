@@ -322,8 +322,11 @@ export function RestaurantDetail() {
                     }}>
                       {googleRating.rating}
                     </span>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-tertiary)' }}>
-                      Google{googleRating.count ? ' · ' + googleRating.count : ''}
+                    <span
+                      style={{ fontSize: '11px', color: 'var(--color-text-tertiary)' }}
+                      aria-label={`Google Maps rating${googleRating.count ? ` based on ${googleRating.count} reviews` : ''}`}
+                    >
+                      Google Maps{googleRating.count ? ' · ' + googleRating.count : ''}
                     </span>
                   </div>
                 )}
