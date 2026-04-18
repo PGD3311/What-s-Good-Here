@@ -12,3 +12,9 @@ export const MIN_VOTES_FOR_VALUE = 8
 
 // Value percentile threshold for "GREAT VALUE" badge (top 10%)
 export const VALUE_BADGE_THRESHOLD = 90
+
+// iOS bundle identifier. Must match capacitor.config.ts appId, the App ID in
+// Apple Developer portal, and the CFBundleIdentifier in the generated Xcode
+// project. Used by Sign in with Apple (H2) as the native client_id when
+// calling signInWithIdToken on iOS.
+export const IOS_BUNDLE_ID = 'com.whatsgoodhere.app'

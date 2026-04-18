@@ -55,3 +55,17 @@ whats-good-here-soul/
 
 # Claude Code scheduled tasks
 .claude/scheduled_tasks.lock
+
+# Capacitor / iOS build artifacts
+# We commit the Xcode project, Podfile, and Podfile.lock (for reproducible
+# pod installs), but not generated Pods/, build output, user data, or the
+# cap-sync-ed web bundle (cap sync rewrites ios/App/public/ on each run).
+ios/App/Pods/
+ios/App/build/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+ios/DerivedData/
+ios/**/xcuserdata/
+ios/**/.xcode.env.local
+ios/App/public/
