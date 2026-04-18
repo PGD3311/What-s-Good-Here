@@ -4,78 +4,60 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Your login link</title>
+  <!-- Modern clients (Apple Mail, Gmail) render this; Outlook falls back to system fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&display=swap" rel="stylesheet">
 </head>
-<body style="margin: 0; padding: 0; background-color: #0D1B22; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0D1B22; min-height: 100vh;">
+<body style="margin: 0; padding: 0; background-color: #F0ECE8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #F0ECE8;">
     <tr>
       <td align="center" style="padding: 64px 24px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 400px;">
-
-          <!-- Logo -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 440px; background-color: #FFFFFF; border-radius: 16px;">
           <tr>
-            <td align="center" style="padding-bottom: 12px;">
+            <td align="center" style="padding: 48px 32px;">
+
+              <!-- SmileyPin logo (inline SVG — renders in Apple Mail, Gmail, Outlook 365) -->
               <!--[if !mso]><!-->
-              <div style="position: relative; width: 40px; height: 52px; margin: 0 auto;">
-                <svg width="40" height="52" viewBox="0 0 24 31" fill="none" xmlns="http://www.w3.org/2000/svg" style="position: absolute; top: 0; left: 0;">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#C85A54"/>
+              <div style="margin-bottom: 20px; line-height: 0;">
+                <svg width="64" height="64" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" style="display: block; margin: 0 auto;">
+                  <path d="M100 20 C60 20, 30 50, 30 90 C30 130, 100 185, 100 185 C100 185, 170 130, 170 90 C170 50, 140 20, 100 20 Z" fill="#E4440A"/>
+                  <circle cx="100" cy="90" r="48" fill="#F7F4F1"/>
+                  <circle cx="84" cy="80" r="7" fill="#C48A12"/>
+                  <circle cx="116" cy="80" r="7" fill="#C48A12"/>
+                  <circle cx="81.5" cy="77.5" r="2" fill="#F7F4F1" opacity="0.95"/>
+                  <circle cx="113.5" cy="77.5" r="2" fill="#F7F4F1" opacity="0.95"/>
+                  <path d="M78 100 Q 100 124, 122 100" stroke="#E4440A" stroke-width="5.5" fill="none" stroke-linecap="round"/>
                 </svg>
-                <img src="https://whats-good-here.vercel.app/mv-outline.png" alt="" width="24" height="auto" style="position: absolute; top: 6px; left: 8px; width: 24px; height: auto; opacity: 0.9; filter: brightness(0) invert(1);">
               </div>
               <!--<![endif]-->
-            </td>
-          </tr>
 
-          <!-- Brand -->
-          <tr>
-            <td align="center" style="padding-bottom: 6px;">
-              <span style="font-size: 28px; font-weight: 700; color: #C85A54; letter-spacing: -0.02em;">What's Good Here</span>
-            </td>
-          </tr>
+              <!-- Brand wordmark — Amatic SC with system fallback -->
+              <p style="margin: 0 0 32px 0; font-family: 'Amatic SC', 'Georgia', serif; font-size: 40px; font-weight: 700; color: #1A1A1A; letter-spacing: 0.02em; line-height: 1;">
+                What&rsquo;s <span style="color: #E4440A;">Good</span> Here
+              </p>
 
-          <!-- Tagline -->
-          <tr>
-            <td align="center" style="padding-bottom: 48px;">
-              <span style="font-size: 11px; font-weight: 500; color: #B8A99A; letter-spacing: 0.12em; text-transform: uppercase;">the #1 bite near you</span>
-            </td>
-          </tr>
-
-          <!-- Heading -->
-          <tr>
-            <td align="center" style="padding-bottom: 10px;">
-              <p style="margin: 0; font-size: 22px; font-weight: 700; color: #F5F1E8; letter-spacing: -0.01em;">
+              <!-- Heading -->
+              <p style="margin: 0 0 12px 0; font-size: 22px; font-weight: 700; color: #1A1A1A; letter-spacing: -0.01em;">
                 Welcome back.
               </p>
-            </td>
-          </tr>
 
-          <!-- Subtext -->
-          <tr>
-            <td align="center" style="padding-bottom: 32px;">
-              <p style="margin: 0; font-size: 14px; color: #B8A99A; line-height: 1.6;">
-                Tap below to log in and see what's ranking right now.
+              <!-- Subtext -->
+              <p style="margin: 0 0 32px 0; font-size: 15px; color: #555555; line-height: 1.55;">
+                Tap below to log in and see what&rsquo;s ranking right now.
               </p>
-            </td>
-          </tr>
 
-          <!-- CTA Button -->
-          <tr>
-            <td align="center" style="padding-bottom: 48px;">
+              <!-- CTA -->
               <a href="{{ .ConfirmationURL }}"
-                 style="display: inline-block; background-color: #C85A54; color: #F5F1E8; font-size: 15px; font-weight: 600; text-decoration: none; padding: 14px 48px; border-radius: 10px; letter-spacing: -0.01em;">
+                 style="display: inline-block; background-color: #E4440A; color: #FFFFFF; font-size: 15px; font-weight: 600; text-decoration: none; padding: 14px 48px; border-radius: 10px; letter-spacing: -0.01em;">
                 Log In
               </a>
-            </td>
-          </tr>
 
-          <!-- Fine print -->
-          <tr>
-            <td align="center">
-              <p style="margin: 0; font-size: 12px; color: #7D7168; line-height: 1.6;">
-                This link expires in 1 hour.<br>If you didn't request this, you can safely ignore it.
+              <!-- Fine print -->
+              <p style="margin: 40px 0 0 0; font-size: 12px; color: #767676; line-height: 1.55;">
+                This link expires in 1 hour.<br>If you didn&rsquo;t request this, you can safely ignore it.
               </p>
+
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
