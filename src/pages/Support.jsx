@@ -87,9 +87,10 @@ export function Support() {
               <div>
                 <h3 className="font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>I want to report a review, photo, or user.</h3>
                 <p>
-                  Tap the three-dot menu on the item (review card, photo, or user profile) and
-                  choose <strong>Report</strong>. Reports go to our moderation queue and we aim
-                  to review them within 48 hours.
+                  Every review, photo, dish, and user profile has a <strong>Report</strong>
+                  control — a small ellipsis button on review cards, a Report button in the
+                  photo lightbox, the three-dot menu on user profiles. Reports go to our
+                  moderation queue and we aim to review them within 48 hours.
                 </p>
               </div>
               <div>
@@ -109,9 +110,9 @@ export function Support() {
               <div>
                 <h3 className="font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Something's wrong with a dish or restaurant listing.</h3>
                 <p>
-                  Tap the three-dot menu on the dish page and choose <strong>Report</strong>,
-                  or email us at the address above with the link and what's off. We fix data
-                  issues quickly.
+                  Use the <strong>Report</strong> control on the dish page (the small
+                  ellipsis button next to the action bar), or email us at the address above
+                  with the link and what's off. We fix data issues quickly.
                 </p>
               </div>
               <div>
@@ -159,10 +160,13 @@ export function Support() {
             <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>
               Who runs this
             </h2>
-            <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+            <p className="leading-relaxed mb-3" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here is operated by Daniel Walsh from Martha's Vineyard,
-              Massachusetts. Small team, real people. Your emails don't go into a
-              ticketing black hole.
+              Massachusetts. An actual person reads every email — your messages don't
+              go into a ticketing black hole.
+            </p>
+            <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+              Mailing address available on written request via the email above.
             </p>
           </section>
         </div>
