@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { ReportModal } from '../components/ReportModal'
 import { PlaceAttributions } from '../components/PlaceAttributions'
 import { logger } from '../utils/logger'
+import { getUserMessage } from '../utils/errorHandler'
 import { shareOrCopy } from '../utils/share'
 import { sanitizeUrl } from '../utils/sanitize'
 import { restaurantsApi } from '../api/restaurantsApi'
@@ -226,7 +227,7 @@ export function RestaurantDetail() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
         <div className="text-center px-4">
           <p role="alert" className="text-sm mb-4" style={{ color: 'var(--color-danger)' }}>
-            {fetchError?.message || 'Failed to load restaurant'}
+            {getUserMessage(fetchError, 'loading this restaurant')}
           </p>
           <button
             onClick={() => navigate('/restaurants')}
@@ -550,25 +551,40 @@ export function RestaurantDetail() {
             background: 'var(--color-surface-elevated)',
             border: '1px solid var(--color-divider)',
           }}
-          role="group"
+          role="tablist"
           aria-label="Restaurant view"
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+            e.preventDefault()
+            const next = (activeTab || 'top') === 'top' ? 'menu' : 'top'
+            setActiveTab(next)
+            requestAnimationFrame(() => {
+              document.getElementById('restaurant-tab-' + next)?.focus()
+            })
+          }}
         >
           <button
-            role="button"
-            aria-pressed={activeTab === 'top'}
+            role="tab"
+            aria-selected={(activeTab || 'top') === 'top'}
+            aria-controls="restaurant-tab-panel"
+            id="restaurant-tab-top"
+            tabIndex={(activeTab || 'top') === 'top' ? 0 : -1}
             onClick={() => setActiveTab('top')}
             className="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all"
             style={{
-              background: activeTab === 'top' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'top' ? 'white' : 'var(--color-text-secondary)',
+              background: (activeTab || 'top') === 'top' ? 'var(--color-primary)' : 'transparent',
+              color: (activeTab || 'top') === 'top' ? 'white' : 'var(--color-text-secondary)',
               boxShadow: 'none',
             }}
           >
             Top Rated
           </button>
           <button
-            role="button"
-            aria-pressed={activeTab === 'menu'}
+            role="tab"
+            aria-selected={activeTab === 'menu'}
+            aria-controls="restaurant-tab-panel"
+            id="restaurant-tab-menu"
+            tabIndex={activeTab === 'menu' ? 0 : -1}
             onClick={() => setActiveTab('menu')}
             className="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all"
             style={{
@@ -592,6 +608,11 @@ export function RestaurantDetail() {
       )}
 
       {/* Dish Content */}
+      <div
+        role="tabpanel"
+        id="restaurant-tab-panel"
+        aria-labelledby={(activeTab || 'top') === 'top' ? 'restaurant-tab-top' : 'restaurant-tab-menu'}
+      >
       {(activeTab || 'top') === 'top' ? (
         <RestaurantDishes
           dishes={dishes}
@@ -614,6 +635,7 @@ export function RestaurantDetail() {
           menuSectionOrder={restaurant?.menu_section_order || []}
         />
       )}
+      </div>
 
       {/* Happening Here - Specials & Events (hidden until Launch 2.0 — stale scraped data) */}
       {false && (specials.length > 0 || events.length > 0) && (

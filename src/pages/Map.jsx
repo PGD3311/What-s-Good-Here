@@ -341,7 +341,21 @@ export function Map() {
           <div className="fixed inset-0" style={{ zIndex: 1 }}>
             <ErrorBoundary>
               <Suspense fallback={
-                <div className="w-full h-full" style={{ background: 'var(--color-bg)' }} />
+                <div
+                  role="status"
+                  aria-label="Loading map"
+                  className="w-full h-full flex items-center justify-center"
+                  style={{ background: 'var(--color-bg)' }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-full animate-spin"
+                    style={{
+                      border: '3px solid var(--color-divider)',
+                      borderTopColor: 'var(--color-accent-gold)',
+                    }}
+                  />
+                  <span className="sr-only">Loading map</span>
+                </div>
               }>
                 <RestaurantMap
                   mode="dish"
