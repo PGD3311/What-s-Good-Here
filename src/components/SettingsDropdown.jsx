@@ -190,6 +190,20 @@ export function SettingsDropdown() {
             </svg>
           </a>
 
+          {/* Support / Help */}
+          <a
+            role="menuitem"
+            href="/support"
+            onClick={() => setShowDropdown(false)}
+            className="w-full px-4 py-3 flex items-center justify-between transition-colors border-b"
+            style={{ borderColor: 'var(--color-divider)' }}
+          >
+            <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Help &amp; Support</span>
+            <svg className="w-4 h-4" style={{ color: 'var(--color-text-tertiary)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+
           {/* Blocked Users */}
           <button
             role="menuitem"
