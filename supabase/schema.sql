@@ -3291,6 +3291,11 @@ GRANT EXECUTE ON FUNCTION enqueue_menu_import(UUID, TEXT, INT) TO authenticated,
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
 -- pg_cron: process queue every 60 seconds
+-- Auth: passes vault secret 'cron_secret' which menu-refresh's serve() handler
+-- compares against the CRON_SECRET edge-function env var. The Functions gateway
+-- has verify_jwt = false on this function so pg_cron can reach it (the legacy
+-- service_role JWT stopped being accepted ~2026-04-12), so the in-function
+-- shared-secret check is the only auth on this privileged endpoint.
 SELECT cron.schedule(
   'process-menu-import-queue',
   '* * * * *',
@@ -3299,7 +3304,7 @@ SELECT cron.schedule(
     url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url' LIMIT 1) || '/functions/v1/menu-refresh',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1)
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret' LIMIT 1)
     ),
     body := '{"mode": "queue"}'::jsonb
   );
