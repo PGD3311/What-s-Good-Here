@@ -46,7 +46,13 @@ export function BottomNav() {
         borderTop: '2px solid var(--color-divider)',
       }}
     >
-      <div className="flex justify-around items-center h-16 pb-safe">
+      <div
+        className="flex justify-around items-center"
+        style={{
+          height: 'calc(4rem + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
         {tabs.map((tab) => (
           <NavLink
             key={tab.to}
