@@ -8,7 +8,8 @@ export function ModeFAB({ mode, onToggle }) {
       className="flex items-center gap-2 px-4 py-3"
       style={{
         position: 'fixed',
-        bottom: '80px',
+        // 64px nav + 16px gap + home-indicator safe area
+        bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
         right: '16px',
         zIndex: 50,
         borderRadius: '28px',
