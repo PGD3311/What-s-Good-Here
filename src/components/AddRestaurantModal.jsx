@@ -262,12 +262,22 @@ export function AddRestaurantModal({ isOpen, onClose, initialQuery = '' }) {
             setLat(details.lat)
             setLng(details.lng)
           }
-        } catch {
-          // Fall through to GPS
+        } catch (err) {
+          logger.warn('placesApi.getDetails failed for googlePlaceId', { googlePlaceId, err: err?.message || String(err) })
         }
         setSubmitting(false)
+
+        // If a Google Place was selected but we still can't get its coords,
+        // DO NOT silently fall back to the user's GPS — that writes the
+        // user's location onto a restaurant that's somewhere else entirely
+        // (e.g. user on MV adds a Boston restaurant → row gets MV lat/lng).
+        // Surface the error so the user can retry or pick a different match.
+        if (resolvedLat == null || resolvedLng == null) {
+          setError("Couldn't load this restaurant's location from Google. Please search again or pick a different match.")
+          return
+        }
       }
-      // Fall back to device GPS
+      // Pure manual add (no googlePlaceId): GPS is the best signal we have.
       if (resolvedLat == null || resolvedLng == null) {
         if (hasLocation && location) {
           resolvedLat = location.lat
