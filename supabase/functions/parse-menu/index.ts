@@ -1,11 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { corsHeaders } from '../_shared/cors.ts'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://whats-good-here.vercel.app',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 const VALID_CATEGORIES = [
   'pizza', 'burger', 'taco', 'wings', 'sushi', 'breakfast',
@@ -86,14 +82,14 @@ Return ONLY valid JSON (no markdown):
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders(req) })
   }
 
   try {
     if (!ANTHROPIC_API_KEY) {
       return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -102,7 +98,7 @@ serve(async (req) => {
     if (!text || typeof text !== 'string' || text.trim().length < 10) {
       return new Response(JSON.stringify({ error: 'Menu text is too short or missing' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -134,7 +130,7 @@ serve(async (req) => {
       console.error('Claude API error:', response.status, errorText)
       return new Response(JSON.stringify({ error: `AI parsing failed: ${response.status}` }), {
         status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -145,7 +141,7 @@ serve(async (req) => {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return new Response(JSON.stringify({ dishes: [] }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -162,13 +158,13 @@ serve(async (req) => {
       }))
 
     return new Response(JSON.stringify({ dishes: cleanDishes }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     })
   } catch (error) {
     console.error('parse-menu error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

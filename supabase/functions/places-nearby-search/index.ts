@@ -1,17 +1,13 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders } from '../_shared/cors.ts'
 
 const GOOGLE_API_KEY = Deno.env.get('GOOGLE_PLACES_API_KEY')
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://whats-good-here.vercel.app',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders(req) })
   }
 
   try {
@@ -37,7 +33,7 @@ serve(async (req) => {
           if (rateCheck && !rateCheck.allowed) {
             return new Response(JSON.stringify({ error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }), {
               status: 429,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             })
           }
         }
@@ -51,7 +47,7 @@ serve(async (req) => {
     if (!lat || !lng) {
       return new Response(JSON.stringify({ error: 'lat and lng are required', places: [] }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -86,7 +82,7 @@ serve(async (req) => {
       console.error('Google Places Nearby Search error:', errorText)
       return new Response(JSON.stringify({ error: 'Places API error', places: [] }), {
         status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -107,13 +103,13 @@ serve(async (req) => {
     }))
 
     return new Response(JSON.stringify({ places }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     })
   } catch (error) {
     console.error('Edge function error:', error)
     return new Response(JSON.stringify({ error: 'Internal error', places: [] }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })
