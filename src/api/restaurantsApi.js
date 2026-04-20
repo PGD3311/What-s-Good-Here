@@ -298,27 +298,6 @@ export const restaurantsApi = {
     }
   },
 
-  /**
-   * Trigger menu import for a restaurant via menu-refresh Edge Function.
-   * Fire-and-forget — does not throw on failure.
-   */
-  async refreshMenu(restaurantId) {
-    try {
-      const { data, error } = await supabase.functions.invoke('menu-refresh', {
-        body: { restaurant_id: restaurantId },
-      })
-      if (error) {
-        logger.warn('Menu refresh failed (non-blocking):', error)
-        return null
-      }
-      logger.info('Menu refresh triggered:', data)
-      return data
-    } catch (error) {
-      logger.warn('Menu refresh failed (non-blocking):', error)
-      return null
-    }
-  },
-
   async getById(restaurantId) {
     try {
       const { data, error } = await supabase
