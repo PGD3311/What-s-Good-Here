@@ -57,6 +57,18 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    // Log the real error to console BEFORE anything else — if Sentry's
+    // dynamic import fails (e.g. Capacitor file:// scheme issues), we still
+    // want the truth in the native log. Error objects don't stringify well,
+    // so pull the fields explicitly.
+    console.error('[ErrorBoundary caught]', {
+      message: error?.message,
+      name: error?.name,
+      stack: error?.stack,
+      type: error?.type,
+      componentStack: errorInfo?.componentStack,
+    })
+
     // Auto-reload on chunk load errors (fallback if lazyWithRetry misses it)
     const msg = error?.message || ''
     const isChunkError = (
@@ -82,6 +94,8 @@ export class ErrorBoundary extends Component {
             },
           },
         })
+      }).catch(sentryErr => {
+        console.error('[ErrorBoundary] Sentry failed to load:', sentryErr?.message || sentryErr)
       })
     }
   }
