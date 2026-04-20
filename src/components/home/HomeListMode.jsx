@@ -58,7 +58,7 @@ export const HomeListMode = memo(function HomeListMode({
       }}
     >
       {/* Fixed header: brand + search + chips */}
-      <div style={{ flexShrink: 0, background: 'var(--color-bg)', zIndex: 10 }}>
+      <div style={{ flexShrink: 0, background: 'var(--color-bg)', zIndex: 10, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         {/* Brand header */}
         <div className="text-center pt-4 pb-1">
           <h2 style={{
