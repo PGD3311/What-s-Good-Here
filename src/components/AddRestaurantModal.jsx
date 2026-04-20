@@ -11,6 +11,7 @@ import { menuImportApi } from '../api'
 import { validateUserContent } from '../lib/reviewBlocklist'
 import { capture } from '../lib/analytics'
 import { logger } from '../utils/logger'
+import { getUserMessage } from '../utils/errorHandler'
 import { LoginModal } from './Auth/LoginModal'
 
 const STEPS = { SEARCH: 'search', DETAILS: 'details' }
@@ -215,8 +216,11 @@ export function AddRestaurantModal({ isOpen, onClose, initialQuery = '' }) {
       setError("Couldn't load full details for this restaurant from Google. Try picking a different result, or add manually.")
       setSubmitting(false)
     } catch (err) {
-      logger.error('Error creating restaurant from Google Places:', err)
-      setError("Couldn't load this restaurant from Google. Try another result, or add manually.")
+      // Could come from placesApi.getDetails OR restaurantsApi.create — don't
+      // blame Google for either. getUserMessage classifies rate-limit, network,
+      // server, auth, etc. into a truthful message.
+      logger.error('Error adding restaurant from Google Places:', err)
+      setError(getUserMessage(err, 'adding this restaurant'))
       setSubmitting(false)
     }
   }
