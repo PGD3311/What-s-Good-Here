@@ -1,18 +1,13 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { capture } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
 import { useLocationContext } from '../context/LocationContext'
 import { useRestaurants } from '../hooks/useRestaurants'
-import { useNearbyPlaces } from '../hooks/useNearbyPlaces'
 import { RadiusSheet } from '../components/LocationPicker'
 import { LocationBanner } from '../components/LocationBanner'
 import { getRatingColor } from '../utils/ranking'
-import { placesApi } from '../api/placesApi'
 import { AddRestaurantModal } from '../components/AddRestaurantModal'
-import { PoweredByGoogle } from '../components/PoweredByGoogle'
-import { PlaceAttributions } from '../components/PlaceAttributions'
-import { logger } from '../utils/logger'
 import { getStorageItem, setStorageItem } from '../lib/storage'
 
 // Bayesian shrinkage — restaurants with few votes get pulled toward the global mean
@@ -55,28 +50,6 @@ export function Restaurants() {
   var fetchError = restData.error
   var isDistanceFiltered = restData.isDistanceFiltered
 
-  // Existing restaurants to filter out of discovery (by place_id OR name+proximity)
-  var existingForDiscovery = useMemo(function () {
-    return (restaurants || []).map(r => ({
-      id: r.id,
-      name: r.name,
-      lat: r.lat,
-      lng: r.lng,
-      google_place_id: r.google_place_id,
-    }))
-  }, [restaurants])
-
-  // Discover nearby restaurants from Google Places (auth only)
-  var nearbyData = useNearbyPlaces({
-    lat: location?.lat,
-    lng: location?.lng,
-    radius: radius + 5,
-    isAuthenticated: !!user,
-    existingRestaurants: existingForDiscovery,
-  })
-  var nearbyPlaces = nearbyData.places
-  var nearbyLoading = nearbyData.loading
-  var nearbyError = nearbyData.error
 
   // Filter by open/closed tab + search, then sort by chosen mode
   var filteredRestaurants = useMemo(function () {
@@ -441,52 +414,6 @@ export function Restaurants() {
           </div>
         )}
 
-        {/* Discover More Restaurants — Google Places (auth only) */}
-        {user && nearbyPlaces.length > 0 && (
-          <div className="mt-8">
-            <h2
-              className="font-bold mb-3"
-              style={{
-                fontFamily: "'Amatic SC', cursive",
-                color: 'var(--color-text-primary)',
-                fontSize: '28px',
-                fontWeight: 700,
-                letterSpacing: '0.02em',
-              }}
-            >
-              Discover more restaurants
-            </h2>
-            <p className="text-xs mb-3" style={{ color: 'var(--color-text-tertiary)' }}>
-              Found on Google Maps — not yet on WGH
-            </p>
-            <div className="space-y-2">
-              {nearbyPlaces.map(function (place) {
-                return (
-                  <NearbyPlaceCard
-                    key={place.placeId}
-                    place={place}
-                  />
-                )
-              })}
-            </div>
-            <div className="mt-3">
-              <PoweredByGoogle align="right" />
-            </div>
-          </div>
-        )}
-        {user && !nearbyLoading && nearbyPlaces.length === 0 && (
-          <p
-            className="mt-6 text-center text-xs py-3"
-            style={{ color: 'var(--color-text-tertiary)' }}
-          >
-            {nearbyError?.message || 'No additional restaurants found nearby from Google'}
-          </p>
-        )}
-        {user && nearbyLoading && (
-          <div className="mt-8 flex justify-center py-4">
-            <div className="animate-spin w-5 h-5 border-2 rounded-full" style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-accent-gold)' }} />
-          </div>
-        )}
       </div>
 
       {/* Radius Sheet */}
@@ -524,81 +451,3 @@ export function Restaurants() {
   )
 }
 
-// Card for a discovered Google Place
-function NearbyPlaceCard({ place }) {
-  var _details = useState(null)
-  var details = _details[0]
-  var setDetails = _details[1]
-  var fetchedRef = useRef(false)
-
-  var fetchDetails = useCallback(function () {
-    if (fetchedRef.current || !place.placeId) return
-    fetchedRef.current = true
-    placesApi.getDetails(place.placeId)
-      .then(function (d) { setDetails(d) })
-      .catch(function (err) { logger.error('Place details error:', err) })
-  }, [place.placeId])
-
-  useEffect(function () {
-    fetchDetails()
-  }, [fetchDetails])
-
-  return (
-    <div
-      className="rounded-xl p-4"
-      style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-divider)',
-      }}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p
-            className="font-semibold truncate"
-            style={{ color: 'var(--color-text-primary)', fontSize: '14px' }}
-          >
-            {place.name}
-          </p>
-          {place.address && (
-            <p
-              className="text-xs truncate mt-0.5"
-              style={{ color: 'var(--color-text-tertiary)' }}
-            >
-              {place.address}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {(details?.googleMapsUrl || details?.websiteUrl) && (
-        <div className="flex gap-4 mt-2">
-          {details.googleMapsUrl && (
-            <a
-              href={details.googleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-medium"
-              style={{ color: 'var(--color-accent-gold)' }}
-            >
-              Google Maps
-            </a>
-          )}
-          {details.websiteUrl && (
-            <a
-              href={details.websiteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-medium"
-              style={{ color: 'var(--color-accent-gold)' }}
-            >
-              Website
-            </a>
-          )}
-        </div>
-      )}
-      {Array.isArray(details?.attributions) && details.attributions.length > 0 && (
-        <PlaceAttributions attributions={details.attributions} className="mt-2" />
-      )}
-    </div>
-  )
-}

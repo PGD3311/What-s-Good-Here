@@ -5,9 +5,8 @@ import { logger } from '../utils/logger'
 /**
  * Places API - Google Places proxy via Supabase Edge Functions
  *
- * Error strategy: methods log errors for diagnostics.
  * Autocomplete gracefully degrades (returns []) so local search still works.
- * discoverNearby propagates errors so callers can show error states.
+ * getDetails propagates errors so callers can show error states.
  */
 
 export const placesApi = {
@@ -49,74 +48,6 @@ export const placesApi = {
       // Don't throw — graceful degradation, just show local results
       return []
     }
-  },
-
-  /**
-   * Discover nearby restaurants via Google Places Nearby Search
-   * @param {number} lat - User latitude
-   * @param {number} lng - User longitude
-   * @param {number} radiusMeters - Search radius in meters (capped at 25mi server-side)
-   * @returns {Promise<Array>} Array of { placeId, name, address, lat, lng }
-   */
-  async discoverNearby(lat, lng, radiusMeters) {
-    try {
-      // Try nearby search first
-      const response = await supabase.functions.invoke('places-nearby-search', {
-        body: { lat, lng, radiusMeters },
-      })
-
-      if (response.error) {
-        const errMsg = response.error?.message || response.error?.context?.message || String(response.error)
-        logger.error('places-nearby-search edge function error:', errMsg, response.error)
-        logger.warn('places-nearby-search failed:', errMsg)
-        throw createClassifiedError(response.error)
-      }
-
-      // Check for API-level errors in the response body
-      if (response.data?.error) {
-        logger.error('places-nearby-search API error:', response.data.error)
-        logger.warn('places-nearby-search API error:', response.data.error)
-        // Still try to use places if they exist alongside the error
-      }
-
-      const places = response.data?.places || []
-      if (places.length > 0) {
-        return places
-      }
-
-      // Fallback: nearby search returned empty, try autocomplete instead
-      logger.warn('places-nearby-search returned no results, falling back to autocomplete')
-      return await this._discoverViaAutocomplete(lat, lng, radiusMeters)
-    } catch (error) {
-      logger.warn('places-nearby-search failed, falling back to autocomplete:', error?.message || error)
-      try {
-        return await this._discoverViaAutocomplete(lat, lng, radiusMeters)
-      } catch (fallbackError) {
-        logger.error('Places discover fallback also failed:', fallbackError?.message || fallbackError)
-        logger.warn('Both nearby search and autocomplete failed')
-        return []
-      }
-    }
-  },
-
-  /**
-   * Internal fallback: discover restaurants via autocomplete endpoint
-   */
-  async _discoverViaAutocomplete(lat, lng, radiusMeters) {
-    const response = await supabase.functions.invoke('places-autocomplete', {
-      body: { input: 'restaurants', lat, lng, radius: radiusMeters },
-    })
-
-    if (response.error) {
-      throw createClassifiedError(response.error)
-    }
-
-    const predictions = response.data?.predictions || []
-    return predictions.map(p => ({
-      placeId: p.placeId,
-      name: p.name,
-      address: p.address,
-    }))
   },
 
   /**

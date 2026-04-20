@@ -358,7 +358,7 @@ Defined in `src/index.css`. Light theme only ("Appetite"). Use `var(--color-*)` 
 | `specialsApi` | Restaurant specials CRUD |
 | `eventsApi` | `getActiveEvents` |
 | `restaurantManagerApi` | `getMyRestaurant`, `getInviteDetails`, `acceptInvite` |
-| `placesApi` | `autocomplete`, `discoverNearby`, `getDetails` (via Edge Functions) |
+| `placesApi` | `autocomplete`, `getDetails` (via Edge Functions) |
 | `jitterApi` | `getMyProfile`, `getTrustBadgeType`, `attestReview`, `joinWaitlist` |
 
 ### 4.12 Key Supabase RPCs
