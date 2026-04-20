@@ -206,20 +206,18 @@ export function AddRestaurantModal({ isOpen, onClose, initialQuery = '' }) {
         navigate('/restaurants/' + restaurant.id)
         return
       }
-      // Fallback: no lat/lng from Google — show manual form
-      setName(prediction.name)
-      setAddress(prediction.address || '')
-      setGooglePlaceId(prediction.placeId)
+      // Places returned data but not enough to create a trustworthy row
+      // (no coords). Don't fall through to a Confirm Details form — the
+      // user can't fix Google's missing data from there, and submitting
+      // would either error out (post-PR #63) or poison the row with GPS.
+      // Tell them to try a different result.
+      logger.warn('Places returned incomplete data for placeId', { placeId: prediction.placeId, hasDetails: !!details })
+      setError("Couldn't load full details for this restaurant from Google. Try picking a different result, or add manually.")
       setSubmitting(false)
-      setStep(STEPS.DETAILS)
     } catch (err) {
       logger.error('Error creating restaurant from Google Places:', err)
-      // Fallback: show manual form
-      setName(prediction.name)
-      setAddress(prediction.address || '')
-      setGooglePlaceId(prediction.placeId)
+      setError("Couldn't load this restaurant from Google. Try another result, or add manually.")
       setSubmitting(false)
-      setStep(STEPS.DETAILS)
     }
   }
 
