@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { playBiteSound } from '../lib/sounds'
 import { getCategoryNeonImage } from '../constants/categories'
 
-const BURGER_FALLBACK = '/categories/icons/burger.webp'
+const BURGER_FALLBACK = '/categories/icons/burger.png'
 
 export function FoodRatingSlider({ value, onChange, min = 0, max = 10, step = 0.1, category, unrated = false }) {
   const iconSrc = getCategoryNeonImage(category) || BURGER_FALLBACK

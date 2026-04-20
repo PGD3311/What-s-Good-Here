@@ -294,10 +294,10 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
 
   var hour = new Date().getHours()
   var timeCallout = hour < 11
-    ? { category: 'breakfast', icon: '/categories/icons/breakfast.webp', tag: 'good morning', title: 'Breakfast', sub: 'on the island', stat: '#1 searched morning food', cta: 'best breakfasts \u2192' }
+    ? { category: 'breakfast', icon: '/categories/icons/breakfast.png', tag: 'good morning', title: 'Breakfast', sub: 'on the island', stat: '#1 searched morning food', cta: 'best breakfasts \u2192' }
     : hour < 18
-      ? { category: 'lobster roll', icon: '/categories/icons/lobster-roll.webp', tag: '#1 searched on MV', title: 'Lobster Roll', sub: '', stat: '', cta: 'find the best one \u2192' }
-      : { category: 'pizza', icon: '/categories/icons/pizza.webp', tag: 'tonight', title: 'Pizza', sub: '', stat: '', cta: 'find the best pizza \u2192' }
+      ? { category: 'lobster roll', icon: '/categories/icons/lobster-roll.png', tag: '#1 searched on MV', title: 'Lobster Roll', sub: '', stat: '', cta: 'find the best one \u2192' }
+      : { category: 'pizza', icon: '/categories/icons/pizza.png', tag: 'tonight', title: 'Pizza', sub: '', stat: '', cta: 'find the best pizza \u2192' }
 
   return (
     <div
@@ -334,7 +334,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
 
       {/* Board 3: Chowder */}
       <ChalkboardCard
-        icon="/categories/icons/chowder.webp"
+        icon="/categories/icons/chowder.png"
         tag={'the great debate'}
         title="Chowder"
         sub="ranked by the people"
