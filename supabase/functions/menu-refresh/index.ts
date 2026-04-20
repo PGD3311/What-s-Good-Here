@@ -727,6 +727,14 @@ serve(async (req) => {
             if (found) {
               menuUrl = found
               dbUpdates.menu_url = menuUrl
+            } else {
+              // Fallback: many restaurants have their menu as a PDF linked only from
+              // the homepage (e.g. /wp-content/uploads/*.pdf) — paths findMenuUrl's
+              // probe list misses. Using the homepage as menuUrl lets the downstream
+              // extractPdfMenuUrls scan find those links. If no PDFs exist, Sonnet
+              // still gets a shot at extracting from the homepage HTML itself.
+              menuUrl = websiteUrl
+              dbUpdates.menu_url = menuUrl
             }
           }
 

@@ -7,3 +7,12 @@
 # rejected at the gateway with 401 "Invalid JWT" before the function could run.
 [functions.delete-account]
 verify_jwt = false
+
+# menu-refresh is invoked by pg_cron using the legacy service_role JWT from vault.
+# The Supabase Functions gateway stopped accepting that legacy JWT around 2026-04-12,
+# returning 401 for every cron call and silently stalling every menu import since.
+# The function auths to the DB via its own SUPABASE_SERVICE_ROLE_KEY env var, so the
+# gateway check is pure gating — disable it. Request body only accepts {mode},
+# {restaurant_id} (must match an existing row), or {} — no arbitrary URL injection.
+[functions.menu-refresh]
+verify_jwt = false
