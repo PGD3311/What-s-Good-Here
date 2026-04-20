@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
+import { getUserMessage } from '../utils/errorHandler'
 import { restaurantsApi } from '../api/restaurantsApi'
 import { adminApi } from '../api/adminApi'
 import { restaurantManagerApi } from '../api/restaurantManagerApi'
@@ -207,7 +208,7 @@ export function Admin() {
       }
     } catch (error) {
       logger.error('Error saving dish:', error)
-      setMessage({ type: 'error', text: `Failed to save dish: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to save dish: ${getUserMessage(error, 'saving dish')}` })
     } finally {
       setSubmitting(false)
     }
@@ -231,7 +232,7 @@ export function Admin() {
       }
     } catch (error) {
       logger.error('Error deleting dish:', error)
-      setMessage({ type: 'error', text: `Failed to delete: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to delete: ${getUserMessage(error, 'deleting dish')}` })
     }
   }
 
@@ -248,7 +249,7 @@ export function Admin() {
       setMessage({ type: 'success', text: 'Invite link generated!' })
     } catch (error) {
       logger.error('Error generating invite:', error)
-      setMessage({ type: 'error', text: `Failed to generate invite: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to generate invite: ${getUserMessage(error, 'generating invite')}` })
     }
   }
 
@@ -278,7 +279,7 @@ export function Admin() {
       setMessage({ type: 'success', text: 'Manager access revoked' })
     } catch (error) {
       logger.error('Error revoking manager:', error)
-      setMessage({ type: 'error', text: `Failed to revoke: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to revoke: ${getUserMessage(error, 'revoking manager')}` })
     }
   }
 

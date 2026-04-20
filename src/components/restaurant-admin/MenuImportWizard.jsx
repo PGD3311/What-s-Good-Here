@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { ALL_CATEGORIES } from '../../constants/categories'
 import { restaurantManagerApi } from '../../api/restaurantManagerApi'
 import { logger } from '../../utils/logger'
+import { getUserMessage } from '../../utils/errorHandler'
 
 export function MenuImportWizard({ restaurantName, onBulkAdd, onClose }) {
   const [step, setStep] = useState(1)
@@ -53,7 +54,7 @@ export function MenuImportWizard({ restaurantName, onBulkAdd, onClose }) {
       setStep(3)
     } catch (err) {
       logger.error('Menu parse error:', err)
-      setError(`Parse failed: ${err.message}`)
+      setError(`Parse failed: ${getUserMessage(err, 'parsing menu')}`)
       setStep(1)
     }
   }

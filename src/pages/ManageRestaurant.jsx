@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useRestaurantManager } from '../hooks/useRestaurantManager'
 import { restaurantManagerApi } from '../api/restaurantManagerApi'
 import { logger } from '../utils/logger'
+import { getUserMessage } from '../utils/errorHandler'
 import { SpecialsManager, DishesManager, EventsManager, RestaurantInfoEditor } from '../components/restaurant-admin'
 
 export function ManageRestaurant() {
@@ -57,7 +58,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Special added!' })
     } catch (error) {
       logger.error('Error adding special:', error)
-      setMessage({ type: 'error', text: `Failed to add special: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to add special: ${getUserMessage(error, 'adding special')}` })
     }
   }
 
@@ -68,7 +69,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Special updated!' })
     } catch (error) {
       logger.error('Error updating special:', error)
-      setMessage({ type: 'error', text: `Failed to update: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to update: ${getUserMessage(error, 'updating special')}` })
     }
   }
 
@@ -79,7 +80,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Special deactivated' })
     } catch (error) {
       logger.error('Error deactivating special:', error)
-      setMessage({ type: 'error', text: `Failed to deactivate: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to deactivate: ${getUserMessage(error, 'deactivating special')}` })
     }
   }
 
@@ -91,7 +92,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Dish added!' })
     } catch (error) {
       logger.error('Error adding dish:', error)
-      setMessage({ type: 'error', text: `Failed to add dish: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to add dish: ${getUserMessage(error, 'adding dish')}` })
     }
   }
 
@@ -102,7 +103,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Dish updated!' })
     } catch (error) {
       logger.error('Error updating dish:', error)
-      setMessage({ type: 'error', text: `Failed to update: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to update: ${getUserMessage(error, 'updating dish')}` })
     }
   }
 
@@ -114,7 +115,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: `${newDishes.length} dishes added!` })
     } catch (error) {
       logger.error('Error bulk adding dishes:', error)
-      setMessage({ type: 'error', text: `Failed to add dishes: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to add dishes: ${getUserMessage(error, 'adding dishes')}` })
     }
   }
 
@@ -126,7 +127,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Dish removed' })
     } catch (error) {
       logger.error('Error deleting dish:', error)
-      setMessage({ type: 'error', text: `Failed to remove dish: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to remove dish: ${getUserMessage(error, 'removing dish')}` })
     }
   }
 
@@ -137,7 +138,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Restaurant info updated!' })
     } catch (error) {
       logger.error('Error updating restaurant info:', error)
-      setMessage({ type: 'error', text: `Failed to update: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to update: ${getUserMessage(error, 'updating restaurant info')}` })
     }
   }
 
@@ -149,7 +150,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Event added!' })
     } catch (error) {
       logger.error('Error adding event:', error)
-      setMessage({ type: 'error', text: `Failed to add event: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to add event: ${getUserMessage(error, 'adding event')}` })
     }
   }
 
@@ -160,7 +161,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Event updated!' })
     } catch (error) {
       logger.error('Error updating event:', error)
-      setMessage({ type: 'error', text: `Failed to update: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to update: ${getUserMessage(error, 'updating event')}` })
     }
   }
 
@@ -171,7 +172,7 @@ export function ManageRestaurant() {
       setMessage({ type: 'success', text: 'Event deactivated' })
     } catch (error) {
       logger.error('Error deactivating event:', error)
-      setMessage({ type: 'error', text: `Failed to deactivate: ${error.message}` })
+      setMessage({ type: 'error', text: `Failed to deactivate: ${getUserMessage(error, 'deactivating event')}` })
     }
   }
 
