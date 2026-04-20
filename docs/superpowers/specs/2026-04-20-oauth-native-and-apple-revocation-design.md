@@ -29,18 +29,19 @@ This spec closes all four gaps with one coherent architecture.
 
 Three layers, one mental model.
 
-### Layer 1 — Web PWA (one security upgrade, no UX change)
+### Layer 1 — Web PWA (security upgrade + Apple token capture)
 
 - Keep `supabase.auth.signInWithOAuth` for Google and Apple on web.
 - Migrate Supabase client from implicit flow to **PKCE flow** (`flowType: 'pkce'` in `src/lib/supabase.js`). Industry standard in 2026; removes tokens-in-URL-fragment risk.
-- **PKCE is not a one-line change.** `src/pages/Login.jsx` currently reads `window.location.hash` for post-confirmation state (email confirm, password recovery). PKCE changes callback shape from `#access_token=...` to `?code=...`, requiring rework of the entry handler to call `supabase.auth.exchangeCodeForSession(code)`.
-- Transitional handling for legacy `#access_token=` URLs (users with old email links in their inbox) for one release.
+- **PKCE callback ownership:** keep Supabase's `detectSessionInUrl: true` enabled (default). Supabase auto-handles the `?code=...` exchange on BOTH `/login` and `/reset-password` returns — no manual `exchangeCodeForSession()` in these entry points. Manual exchange lives ONLY in the Capacitor `appUrlOpen` handler, where Supabase's URL detection doesn't fire.
+- Old `#access_token=...` links from user inboxes: `detectSessionInUrl` continues to handle these transparently for one release. No dedicated fallback code needed in page components.
+- **Web Apple token capture (new):** a user who signs up via web Apple OAuth and never uses native still needs a revocation-capable refresh token stored server-side. On `onAuthStateChange` → `SIGNED_IN` with Apple identity and `session.provider_refresh_token` present, the client POSTs to a new `apple-token-persist` Edge Function that encrypts + stores it in `user_apple_tokens` with matching `apple_sub`. Supabase exposes `provider_refresh_token` briefly after web OAuth callback — we catch it there or lose it.
 
 ### Layer 2 — iOS native (the root fix)
 
 - Both Google and Apple use platform-native SDKs via `@capgo/capacitor-social-login` (actively maintained, one plugin for both providers; replaces abandoned `@codetrix-studio/capacitor-google-auth`).
 - Google: native iOS Google Sign-In SDK returns `{ idToken, accessToken }` → `supabase.auth.signInWithIdToken({ provider: 'google', token: idToken, access_token: accessToken })`.
-- Apple: native `ASAuthorizationController` returns `{ identityToken, authorizationCode, givenName, familyName, user = apple_sub }` → `supabase.auth.signInWithIdToken({ provider: 'apple', token: identityToken, nonce: rawNonce })`. First-sign-in extras trigger server-side `authorizationCode` exchange for refresh-token storage.
+- Apple: native `ASAuthorizationController` returns `{ identityToken, authorizationCode, givenName, familyName, user = apple_sub }` → `supabase.auth.signInWithIdToken({ provider: 'apple', token: identityToken, nonce: rawNonce })`. `authorizationCode` is NOT first-sign-in-only — Apple documents it as present on any successful auth. When present, client POSTs to `apple-token-exchange`; Edge Function UPSERTs (fresh code updates the stored refresh token; same-code duplicate within a 60s window is a 409).
 - No browser redirect, no deep-link dance, no custom scheme for OAuth.
 
 ### Layer 3 — Thin auth bridge (isolation guarantee)
@@ -54,11 +55,12 @@ Three layers, one mental model.
 
 Apple's guideline 5.1.1(v) requires apps supporting SIWA to revoke Apple's consent on account deletion. This needs:
 
-- **`user_apple_tokens`** table (per-user, refresh token ciphertext + key version + apple_sub). RLS: deny-all to authenticated role. Service-role only.
-- **`pending_apple_revocations`** table (no FK to users — survives cascade delete). Columns include `next_attempt_at` to drive aggressive-then-decaying retry cadence.
-- **`apple-token-exchange`** Edge Function: exchanges `authorizationCode` for refresh token on first Apple sign-in.
-- **`delete-account`** Edge Function (extended): queues the revocation BEFORE cascading delete. Queue insert is mandatory — failure blocks deletion.
-- **`apple-revocation-retry`** Edge Function: invoked by `pg_cron` every 15 minutes, retries pending revocations per backoff schedule.
+- **`user_apple_tokens`** table (per-user, refresh token ciphertext + `key_version` + `apple_sub` + `code_hash` for idempotency). RLS: deny-all to authenticated role. Service-role only. **Ciphertext is self-contained** — not a Vault reference handle — so the row can be copied byte-for-byte without needing Vault access at copy time.
+- **`pending_apple_revocations`** table (no FK to users — survives cascade delete). Columns include `next_attempt_at` (retry cadence), `locked_at` + `locked_by` (row leasing for concurrency safety), `unrevokable BOOLEAN` (sentinel for Apple identities we never captured a token for — tracked for audit but not retried).
+- **`apple-token-exchange`** Edge Function: native path. Exchanges `authorizationCode` whenever present (not first-sign-in-only). UPSERTs on matching `apple_sub` (fresh code = token refresh; duplicate within idempotency window = 409).
+- **`apple-token-persist`** Edge Function (new): web path. Receives `session.provider_refresh_token` from client on post-Apple-signin AuthStateChange. Encrypts + stores. Idempotent — duplicate submissions for same user no-op.
+- **`delete-account`** Edge Function (extended): queues the revocation BEFORE cascading delete. Queue insert is mandatory — failure blocks deletion. If Apple identity exists but no token row: insert sentinel row with `unrevokable = TRUE`, proceed with cascade.
+- **`apple-revocation-retry`** Edge Function: invoked by `pg_cron` every 15 minutes. Uses `FOR UPDATE SKIP LOCKED` with `locked_at` leasing to prevent concurrent workers from racing on the same row. Stale locks (> 10 min) auto-recoverable.
 - **Supabase Vault** for encryption key and `.p8` private key. Not raw `pgcrypto`.
 
 ### Universal links (canonical domain)
@@ -92,9 +94,11 @@ Apple's guideline 5.1.1(v) requires apps supporting SIWA to revoke Apple's conse
 
 | File | Change | Est. added lines |
 |---|---|---|
-| `src/api/authApi.js` | Add `Capacitor.isNativePlatform()` branches in `signInWithGoogle` and `signInWithApple`. Native branch calls bridge → `supabase.auth.signInWithIdToken`. On Apple native with `authorizationCode`, invoke `apple-token-exchange` (client body: `{ authorization_code }` only — no `apple_sub` or `user_id`). Apply nonce dance for Apple. Normalize errors. Add `signOut()` native branch that also calls Capgo's `logout()` to clear Google account picker. | 80–120 |
-| `src/lib/supabase.js` | Add `flowType: 'pkce'`. | 1 |
-| `src/pages/Login.jsx` | Handle both `?code=` (PKCE) and legacy `#access_token=` (one-release transition). Call `supabase.auth.exchangeCodeForSession()`. Fix existing `location.state?.from` intent-preservation bug. Activate Apple button. | 40 |
+| `src/api/authApi.js` | Add `Capacitor.isNativePlatform()` branches in `signInWithGoogle` and `signInWithApple`. Native branch calls bridge → `supabase.auth.signInWithIdToken`. On Apple with `authorizationCode` present (any sign-in), invoke `apple-token-exchange` (client body: `{ authorization_code }` only — no `apple_sub` or `user_id`). Apply nonce dance for Apple. Normalize errors. Add `signOut()` native branch that also calls Capgo's `logout()` to clear Google account picker. | 80–120 |
+| `src/lib/supabase.js` | Add `flowType: 'pkce'`. Keep `detectSessionInUrl: true` (default) — Supabase auto-handles `?code=` return on web. | 2 |
+| `src/context/AuthContext.jsx` (edit) | On `onAuthStateChange` → `SIGNED_IN` event: if identity is Apple AND `session.provider_refresh_token` is present, POST to `apple-token-persist` (web-path token capture). Fire-and-forget; failure is logged but non-blocking. | 15 |
+| `src/pages/Login.jsx` | Fix existing `location.state?.from` intent-preservation bug. Activate Apple button. (No manual `exchangeCodeForSession` — `detectSessionInUrl` handles it.) | 25 |
+| `src/pages/ResetPassword.jsx` (no edit needed) | `detectSessionInUrl` handles `?code=` automatically; existing logic reads session from `onAuthStateChange` once set. Verified during PKCE migration QA. | 0 |
 | `src/components/Auth/LoginModal.jsx` | Activate pre-wired Apple button with official SIWA asset. | 15 |
 | `src/components/Auth/WelcomeModal.jsx` | Open condition: `(!profile.has_onboarded \|\| !profile.display_name)`. Fix existing silent-error-on-duplicate-display_name bug (from H2 plan). | 10 |
 | `src/App.jsx` | Mount `AuthLifecycle` inside `AuthProvider`. No auth logic directly in App.jsx. | 5 |
@@ -119,12 +123,13 @@ Apple's guideline 5.1.1(v) requires apps supporting SIWA to revoke Apple's conse
 
 | File | Purpose | Est. size |
 |---|---|---|
-| `supabase/migrations/20260420_user_apple_tokens.sql` | Create `user_apple_tokens` table: `user_id UUID PK REFERENCES auth.users(id) ON DELETE CASCADE`, `apple_sub TEXT NOT NULL`, `encrypted_refresh_token TEXT NOT NULL`, `key_version TEXT NOT NULL`, `created_at`, `updated_at`, `last_exchange_at`, `revoked_at`. RLS: deny all to authenticated role. Index on `apple_sub`. Includes `-- ROLLBACK:` block. | 30 |
-| `supabase/migrations/20260420_pending_apple_revocations.sql` | Create `pending_apple_revocations` table (no FK to users). `apple_sub`, `encrypted_refresh_token`, `key_version`, `attempts INT DEFAULT 0`, `last_attempt_at`, `next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`, `created_at`, `dead_letter BOOLEAN DEFAULT FALSE`. RLS: deny all. Index on `next_attempt_at WHERE attempts < MAX_ATTEMPTS AND NOT dead_letter`. | 25 |
+| `supabase/migrations/20260420_user_apple_tokens.sql` | Create `user_apple_tokens` table: `user_id UUID PK REFERENCES auth.users(id) ON DELETE CASCADE`, `apple_sub TEXT NOT NULL`, `encrypted_refresh_token TEXT NOT NULL` (**self-contained ciphertext**, not a Vault reference), `key_version TEXT NOT NULL`, `code_hash TEXT` (SHA-256 of last `authorization_code` for idempotency), `created_at`, `updated_at`, `last_exchange_at`, `revoked_at`. RLS: deny all to authenticated role. Index on `apple_sub`. Unique index on `(user_id, code_hash)` for idempotency checks. Includes `-- ROLLBACK:` block. | 35 |
+| `supabase/migrations/20260420_pending_apple_revocations.sql` | Create `pending_apple_revocations` table (no FK to users — survives cascade). `apple_sub`, `encrypted_refresh_token`, `key_version`, `attempts INT DEFAULT 0`, `last_attempt_at`, `next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`, `locked_at TIMESTAMPTZ`, `locked_by TEXT`, `unrevokable BOOLEAN DEFAULT FALSE` (sentinel — Apple identity existed but no token was ever captured), `created_at`, `dead_letter BOOLEAN DEFAULT FALSE`. RLS: deny all. Index on `next_attempt_at WHERE attempts < MAX_ATTEMPTS AND NOT dead_letter AND NOT unrevokable`. | 35 |
 | `supabase/functions/_shared/apple.ts` | Shared Apple helper: `signClientSecretJWT()` (signs with `.p8` from Vault, 5-min TTL), `exchangeAuthorizationCode()` (POST `/auth/token`), `revokeToken()` (POST `/auth/revoke`), `decodeIdToken()` (parses `sub` and claims without external deps), shared error mapping. | 150 |
-| `supabase/functions/apple-token-exchange/index.ts` | Receives `{ authorization_code }` with `Authorization: Bearer <JWT>`. `getClaims()` → user_id. Looks up `auth.identities` for `apple_sub`. Calls `_shared/apple.exchangeAuthorizationCode()`. **Verifies decoded `id_token.sub` === stored `provider_id`** (security binding — without this, a stolen code could be bound to another user). Encrypts via Vault. UPSERTs `user_apple_tokens` (fresh code for existing user updates token; narrow idempotency window rejects same-event duplicates). Returns structured response with HTTP status. | 180–250 |
-| `supabase/functions/delete-account/index.ts` (edit) | Before existing cascade: query `auth.identities WHERE user_id = ? AND provider = 'apple'`. If Apple identity exists: fetch `user_apple_tokens` row, INSERT INTO `pending_apple_revocations` (mandatory — queue failure returns 500, blocks delete). Try inline revoke via `_shared/apple.revokeToken()`. Success → DELETE pending row. Failure → leave row for cron. Proceed with cascade regardless of revoke outcome. | 40 |
-| `supabase/functions/apple-revocation-retry/index.ts` | Invoked by `pg_cron` every 15min. SELECTs pending rows where `next_attempt_at <= NOW() AND attempts < MAX_ATTEMPTS AND NOT dead_letter`. For each: call `_shared/apple.revokeToken()`. Success → DELETE row. Apple 5xx/timeout → `attempts += 1`, `next_attempt_at = NOW() + backoff(attempts)` where backoff is `[15min, 1hr, 6hr, 24hr, 24hr, 24hr…]`. Apple 4xx → mark `dead_letter = true` (NOT retryable), Sentry event. Past MAX_ATTEMPTS → mark `dead_letter`, PostHog `apple_revoke_failed_final`. | 100 |
+| `supabase/functions/apple-token-exchange/index.ts` | **Native path.** Receives `{ authorization_code }` with `Authorization: Bearer <JWT>`. `getClaims()` → user_id. Looks up `auth.identities` for `apple_sub`. **Fail-closed if: no Apple identity row, multiple Apple identity rows, or `provider_id` null — all return 409/500 with Sentry.** Calls `_shared/apple.exchangeAuthorizationCode()`. **Verifies decoded `id_token.sub` === stored `provider_id`** (security binding). Hashes `authorization_code` (SHA-256) → `code_hash`. If existing row with same `code_hash` within 60s → 409 (duplicate submission). Else UPSERT — fresh code updates `encrypted_refresh_token`, `key_version`, `code_hash`, `updated_at`, `last_exchange_at`. Encrypts via Vault. Returns structured response with HTTP status. | 180–250 |
+| `supabase/functions/apple-token-persist/index.ts` (new) | **Web path.** Receives `{ provider_refresh_token }` with `Authorization: Bearer <JWT>`. `getClaims()` → user_id. Looks up `auth.identities` for `apple_sub`. Encrypts token via Vault. UPSERTs `user_apple_tokens` (idempotent — if row exists with same `apple_sub`, UPDATE; else INSERT). Does NOT call Apple endpoints (the token came from Supabase's own OAuth callback, already validated). Returns 200 on success, 400 if token missing, 401 if JWT invalid. | 80–100 |
+| `supabase/functions/delete-account/index.ts` (edit) | Before existing cascade: query `auth.identities WHERE user_id = ? AND provider = 'apple'`. If Apple identity exists: SELECT `user_apple_tokens` row. **Three cases:** (a) token row found → INSERT INTO `pending_apple_revocations` with full credential (mandatory — queue failure returns 500, blocks delete), try inline revoke, success → DELETE pending. (b) token row NOT found (web Apple who never synced, or prior exchange failed) → INSERT sentinel row with `apple_sub` + `unrevokable = TRUE` (mandatory for audit trail). (c) queue insert fails → 500, NO cascade. Proceed with cascade regardless of revoke outcome (case a/b both allow cascade). | 60 |
+| `supabase/functions/apple-revocation-retry/index.ts` | Invoked by `pg_cron` every 15min. Acquires row leases via `SELECT ... FOR UPDATE SKIP LOCKED` filtered by `next_attempt_at <= NOW() AND attempts < MAX_ATTEMPTS AND NOT dead_letter AND NOT unrevokable`. Stamps `locked_at = NOW()`, `locked_by = function_instance_id`. For each leased row: call `_shared/apple.revokeToken()`. Success → DELETE row. Apple 5xx/timeout → `attempts += 1`, `next_attempt_at = NOW() + backoff(attempts)` where backoff is `[1→15min, 2→1hr, 3→6hr, 4→24hr, 5+→24hr]`. Apple 4xx → mark `dead_letter = true` (NOT retryable), Sentry event. Past MAX_ATTEMPTS (=10) → mark `dead_letter`. Clears `locked_at` on exit. Stale leases (> 10min old) auto-recoverable on next cron tick. | 120 |
 
 ### Config
 
@@ -225,32 +230,52 @@ Tap Delete → authApi.deleteAccount() → POST delete-account (Bearer JWT)
        SELECT FROM auth.identities WHERE user_id=? AND provider='apple'
        IF Apple identity:
             SELECT FROM user_apple_tokens WHERE user_id=?
-            INSERT INTO pending_apple_revocations (apple_sub, encrypted_refresh_token, key_version, attempts=0)
-              → INSERT FAILS → return 500, BLOCK CASCADE (mandatory queue)
-              → INSERT OK → try _shared/apple.revokeToken()
-                   → success: DELETE pending row
-                   → failure: leave row, log, continue
+            CASE A — token row found:
+                 INSERT INTO pending_apple_revocations (apple_sub, encrypted_refresh_token, key_version, attempts=0)
+                   → INSERT FAILS → return 500, BLOCK CASCADE (mandatory queue)
+                   → INSERT OK → try _shared/apple.revokeToken()
+                        → success: DELETE pending row
+                        → failure: leave row, log, continue (cron handles retry)
+            CASE B — token row NOT found (web Apple never synced, or earlier exchange failed):
+                 INSERT INTO pending_apple_revocations (apple_sub, unrevokable=TRUE)
+                   → INSERT FAILS → return 500, BLOCK CASCADE (audit trail is mandatory)
+                   → INSERT OK → skip revoke attempt (no token to revoke)
+                   → PostHog apple_revoke_unrevokable (separate from revoke_failed)
        Existing cascade: delete user data, auth.admin.deleteUser(user_id)
        user_apple_tokens row cascades via FK
        pending_apple_revocations row survives (no FK)
        return 200
 ```
+Case B is honest — we can't revoke what we never captured. The sentinel row surfaces in health metrics so we see the volume and can tighten the web-capture path if it happens often.
 
 ### Flow G — Apple revocation retry cron
 
 ```
 pg_cron every 15min → apple-revocation-retry Edge Function
+  → BEGIN
   → SELECT FROM pending_apple_revocations
-       WHERE next_attempt_at <= NOW() AND attempts < MAX_ATTEMPTS AND NOT dead_letter
-  → For each row:
+       WHERE next_attempt_at <= NOW()
+         AND attempts < MAX_ATTEMPTS
+         AND NOT dead_letter
+         AND NOT unrevokable
+         AND (locked_at IS NULL OR locked_at < NOW() - INTERVAL '10 minutes')
+       FOR UPDATE SKIP LOCKED
+       LIMIT N
+  → For each leased row:
+       UPDATE locked_at = NOW(), locked_by = <function_instance_id>
        _shared/apple.revokeToken(row.encrypted_refresh_token, row.key_version)
          → success: DELETE row, PostHog apple_revoke_succeeded
-         → Apple 5xx / timeout: UPDATE attempts += 1, next_attempt_at = NOW() + backoff(attempts)
+         → Apple 5xx / timeout: UPDATE attempts += 1,
+             next_attempt_at = NOW() + backoff(attempts),
+             locked_at = NULL
              backoff schedule (attempt → wait): [1→15min, 2→1hr, 3→6hr, 4→24hr, 5+→24hr]
              MAX_ATTEMPTS = 10 (row dead-lettered ~9 days after first failure)
-         → Apple 4xx (invalid_grant, etc.): UPDATE dead_letter = true, Sentry event, PostHog apple_revoke_failed_final
-  → attempts past MAX_ATTEMPTS → UPDATE dead_letter = true, Sentry event once
+         → Apple 4xx (invalid_grant, etc.): UPDATE dead_letter = true,
+             locked_at = NULL, Sentry event, PostHog apple_revoke_failed_final
+  → attempts past MAX_ATTEMPTS → UPDATE dead_letter = true, locked_at = NULL, Sentry event once
+  → COMMIT
 ```
+`FOR UPDATE SKIP LOCKED` + `locked_at` lease prevents two cron invocations (or cron racing inline delete-flow revoke) from both grabbing the same row. Stale locks > 10min old are reclaimed automatically. `unrevokable` sentinels are never retried — they exist only for audit.
 
 ### Flow H — Later Apple sign-in healing
 
@@ -272,6 +297,31 @@ Without this, next Google tap silently reuses the same account. Problematic on s
 ### Flow J — Cross-device PKCE failure (handled in Flow D)
 
 Same-device-only constraint from Supabase PKCE. Signup on desktop + email on phone → exchange fails with "code verifier not found". Friendly recovery: "Send new link to this device" button.
+
+### Flow K — Web Apple token capture (first signin on web)
+
+```
+User signs in with Apple on web (PWA, not native)
+  → supabase.auth.signInWithOAuth({ provider: 'apple' }) → Supabase callback → session set
+  → onAuthStateChange fires SIGNED_IN with session.provider_refresh_token present (briefly, only on first post-callback event)
+  → AuthContext detects:
+       - provider is 'apple'
+       - session.provider_refresh_token is non-null
+       - identity row has apple_sub
+  → POST apple-token-persist (Bearer JWT, body: { provider_refresh_token })
+       → Edge Function:
+            getClaims() → user_id
+            SELECT provider_id FROM auth.identities WHERE user_id=? AND provider='apple' → apple_sub
+            encrypt provider_refresh_token via Vault
+            UPSERT user_apple_tokens (user_id, apple_sub, encrypted_refresh_token, key_version)
+              → fresh capture: INSERT
+              → existing row: UPDATE (idempotent — user may have re-authed Apple on web multiple times)
+            return 200
+  → client: fire-and-forget (logged failure is non-blocking; user is signed in)
+```
+**Why this flow exists:** Supabase exposes `provider_refresh_token` briefly after web OAuth callback. If we don't catch it there, it's gone — we can't get it back later without the user re-authorizing. A web-only Apple user who deletes their account would have no refresh token to revoke. This flow closes that compliance gap.
+
+**Timing sensitivity:** `onAuthStateChange` fires multiple times during session lifecycle; only the post-callback event carries `provider_refresh_token`. AuthContext tracks whether this user's row already has a stored token via a lightweight RPC check (or lets `apple-token-persist` handle idempotency). Either way, we don't lose the capture window.
 
 **Invariants across all flows:**
 - Web bundle never imports Capacitor plugin symbols (dynamic import inside `nativeAuth.js`, gated on `isNativePlatform()`)
@@ -338,9 +388,18 @@ Errors carry `{ code: <top-level>, subcode: <fine-grained>, cause?: string }`. U
 - Vault inaccessible AND row cannot be persisted as queue ciphertext → `500`.
 
 **`delete-account`:**
-- Queue insert fails → `500 { code: 'DELETE_QUEUE_FAILED', transient: true }`. **No cascade.** User sees retry copy.
+- Queue insert fails (either case A or case B sentinel) → `500 { code: 'DELETE_QUEUE_FAILED', transient: true }`. **No cascade.** User sees retry copy.
 - Revoke inline fails → still returns `200`. Cron owns it.
-- Vault inaccessible: if queue insert succeeded with raw ciphertext, return `200` (cron decrypts later when Vault recovers). If queue insert itself can't persist retryable material, return `500`.
+- Vault inaccessible: ciphertext in `user_apple_tokens` is self-contained (not a Vault reference), so the queue copy doesn't need Vault access. Return `200`, cron decrypts later when Vault recovers.
+- Apple identity exists but no token row → Case B sentinel path. Returns `200` with `unrevokable: true` flag internally (not exposed to client).
+- Multiple Apple identities for one user (shouldn't happen, Supabase dedupes) → fail-closed, `500`, Sentry page.
+
+**`apple-token-persist`:**
+- Missing `provider_refresh_token` → `400`.
+- JWT invalid → `401`.
+- No Apple identity row for user → `409 { code: 'NO_APPLE_IDENTITY' }`. Client silently drops — user may have signed in with a non-Apple provider; AuthContext's detection logic should have prevented this call.
+- Vault unavailable → `503 { transient: true }`. Client retries on next sign-in (the `provider_refresh_token` is gone after this session, but AuthContext can check a stored-token RPC on next login and prompt re-auth if missing — post-launch hardening).
+- Existing row for user with same `apple_sub` → UPDATE (idempotent).
 
 **`apple-revocation-retry`:**
 - Apple `invalid_grant` on retry → `dead_letter = true` immediately (not transient). Sentry event once.
@@ -382,11 +441,13 @@ Errors carry `{ code: <top-level>, subcode: <fine-grained>, cause?: string }`. U
 
 ### Integration tests (Vitest + Supabase test harness, mocked Apple/Google endpoints)
 
-**`apple-token-exchange`:** happy path; missing/invalid JWT → 401; token already exists + fresh code → UPDATE; duplicate submission within window → 409; Apple `invalid_grant` → 422; Apple `invalid_client` → 500 + Sentry; Apple 500 → 502 (transient); **Apple sub mismatch → 403 (security binding, critical)**; Vault unavailable → 500 when ciphertext cannot be persisted; JWT signing failure → 500; **client-supplied `apple_sub` in body is ignored** (derived server-side only).
+**`apple-token-exchange`:** happy path; missing/invalid JWT → 401; **no Apple identity for user → 409 fail-closed + Sentry**; **multiple Apple identities → 500 fail-closed + Sentry**; **apple_sub null on identity row → 500 fail-closed + Sentry**; token already exists + fresh code → UPDATE with new `code_hash`; duplicate submission within 60s (same `code_hash`) → 409; Apple `invalid_grant` → 422; Apple `invalid_client` → 500 + Sentry; Apple 500 → 502 (transient); **Apple sub mismatch (decoded id_token.sub ≠ stored provider_id) → 403 (security binding, critical)**; Vault unavailable → 500 when ciphertext cannot be persisted; JWT signing failure → 500; **client-supplied `apple_sub` in body is ignored** (derived server-side only).
 
-**`delete-account`:** non-Apple user → cascade only; Apple user + Apple 200 → pending inserted → revoke ok → pending deleted → cascade; Apple user + Apple 500 → pending survives → cascade still completes; Apple user + queue insert fails → 500, NO cascade; Apple user + Vault unavailable with queue OK → cascade proceeds (cron handles decrypt later); linked Google + Apple identities → pending for Apple side, both cleared.
+**`delete-account`:** non-Apple user → cascade only; Apple user + token row + Apple 200 → pending inserted → revoke ok → pending deleted → cascade (Case A happy); Apple user + token row + Apple 500 → pending survives → cascade still completes (Case A degraded); Apple user + queue insert fails → 500, NO cascade; Apple user + Vault unavailable + queue OK → cascade proceeds (cron decrypts later); **Apple user + NO token row → unrevokable sentinel inserted, cascade proceeds (Case B)**; **Apple user + NO token row + sentinel insert fails → 500, NO cascade**; linked Google + Apple identities → pending for Apple side, both identities cleared by cascade.
 
-**`apple-revocation-retry`:** no pending → no-op; Apple 200 → row deleted, PostHog; Apple 5xx → `attempts += 1`, `next_attempt_at` per backoff; Apple `invalid_grant` → `dead_letter = true` immediately; past MAX_ATTEMPTS → `dead_letter`, Sentry once; `next_attempt_at > NOW()` skipped.
+**`apple-token-persist`:** happy path (valid JWT + provider_refresh_token + Apple identity exists) → encrypted + upserted + 200; missing body → 400; invalid JWT → 401; no Apple identity → 409 `NO_APPLE_IDENTITY`; Vault unavailable → 503 transient; existing row same apple_sub → UPDATE, 200; existing row different apple_sub (edge case: account-link shenanigans) → 409, Sentry page.
+
+**`apple-revocation-retry`:** no pending → no-op; Apple 200 → row deleted, PostHog; Apple 5xx → `attempts += 1`, `next_attempt_at` per backoff; Apple `invalid_grant` → `dead_letter = true` immediately; past MAX_ATTEMPTS → `dead_letter`, Sentry once; `next_attempt_at > NOW()` skipped; **unrevokable sentinel rows are never selected**; **concurrency test: two workers run in parallel against the same pending row — one acquires lease via FOR UPDATE SKIP LOCKED, the other skips; no double-revoke; stale lease (locked_at > 10min old) is reclaimed on next tick**.
 
 ### E2E tests (Playwright, staging on `whatsgoodhere.app`)
 
@@ -405,8 +466,9 @@ Manual on real iPhone. Two passes:
 **Auth pass (~30 min):**
 - Native Google fresh, signed out
 - Native Google after sign-out (account picker works — doesn't auto-pick)
-- Native Apple first-time: name captured, display_name populated
-- Native Apple returning: server logs show single exchange OR 409 on second
+- Native Apple first-time: name captured, display_name populated, `user_apple_tokens` row present with `code_hash` set
+- Native Apple returning: server logs show exchange hits UPDATE path (not INSERT), `code_hash` changes, `last_exchange_at` advances; rapid double-tap within 60s returns 409 once
+- Web Apple first sign-in: `apple-token-persist` endpoint called, `user_apple_tokens` row present after page refresh (verifies Flow K end-to-end)
 - Apple with Hide My Email: sign-in succeeds, relay email in profile, auth emails arrive
 - Sign out → next Google tap shows account picker, not auto-pick
 - Background → foreground: session stays valid after 30 min
@@ -414,8 +476,9 @@ Manual on real iPhone. Two passes:
 **Account + email + backend pass (~30–60 min):**
 - Password reset: request in app → open email in iOS Mail → tap link → app opens (not Safari) → reset → sign in
 - Email confirmation: new sign-up, same iOS Mail flow
-- Account deletion on Apple user (online): via direct DB, verify `pending_apple_revocations` empty after
-- Account deletion on Apple user (offline — airplane mode mid-delete): verify `pending_apple_revocations` row present with `attempts = 0`
+- Account deletion on Apple user WITH token (Case A, online): via direct DB, verify `pending_apple_revocations` empty after (inline revoke succeeded + DELETE)
+- Account deletion on Apple user WITH token (Case A, offline — airplane mode mid-delete): verify `pending_apple_revocations` row present with `attempts = 0`, `unrevokable = FALSE`, cron picks it up later
+- Account deletion on Apple user WITHOUT token (Case B — web Apple who never synced): simulate by deleting token row before delete, verify sentinel row present with `unrevokable = TRUE`, cascade completed
 - Airplane mode during sign-in → clear network error UI, retry button works
 
 Backend visibility: direct Supabase SQL Editor. No dev-only public endpoints.
@@ -555,25 +618,45 @@ Backend visibility: direct Supabase SQL Editor. No dev-only public endpoints.
 
 | Area | Hours |
 |---|---|
-| Apple Developer + Google Cloud + Vercel config (Dan) | 2–3 |
+| Apple Developer + Google Cloud + Vercel DNS config (Dan) | 2–3 |
 | Web PKCE migration (Phase 2) | 3–5 |
 | Bridge + native auth wiring | 6–10 |
-| `user_apple_tokens` + `_shared/apple.ts` + `apple-token-exchange` | 8–12 |
-| `delete-account` extension + `pending_apple_revocations` + cron | 6–10 |
-| Supabase Vault setup | 1–2 |
-| Xcode capabilities + AASA + Info.plist | 2–3 |
-| WelcomeModal + Privacy/Terms copy | 1–2 |
-| Unit + integration tests | 6–10 |
+| `user_apple_tokens` + `code_hash` + `_shared/apple.ts` + `apple-token-exchange` (with fail-closed identity checks + apple_sub binding) | 10–14 |
+| `apple-token-persist` Edge Function + AuthContext web-capture wiring (new) | 4–6 |
+| `delete-account` extension (Case A + Case B sentinel) + `pending_apple_revocations` with `locked_at`/`locked_by`/`unrevokable` | 7–11 |
+| `apple-revocation-retry` with `FOR UPDATE SKIP LOCKED` + concurrency tests | 5–7 |
+| Supabase Vault setup + self-contained ciphertext verification | 1–2 |
+| Xcode capabilities + AASA + Info.plist (after DNS wired) | 2–3 |
+| WelcomeModal + Privacy/Terms copy + canonical domain sweep | 1–2 |
+| Unit + integration tests (including concurrency + negative observability + Case B + Flow K) | 8–12 |
 | E2E + security tests | 4–6 |
-| Real-device smoke execution | 1–2 |
+| Real-device smoke execution (60–90 min/pass, expect 2 passes) | 2–3 |
 
-**Total: 40–65 hours.**
+**Total: 55–84 hours.**
 
-Against 2026-04-30 TestFlight checkpoint (10 days): tight but achievable if Phase 2 ships in parallel with Phase 1 external work. Against 2026-05-12 submission target: comfortable with room for TestFlight iteration.
+Against 2026-04-30 TestFlight checkpoint (10 days): tight. Phase 2 (web PKCE, ~3–5h) can ship in parallel with Phase 1 external Dan tasks. Phase 3 native + revocation work is the long pole. Against 2026-05-12 submission target: achievable with disciplined sequencing and one TestFlight iteration round.
+
+**Critical-path dependencies:**
+- `whatsgoodhere.app` DNS → Vercel → cert provisioned MUST happen before AASA + universal-link testing can begin.
+- Apple Dev verification MUST complete before SIWA capability enable + Services ID config + .p8 generation.
+- Supabase Vault key + `.p8` upload MUST happen before `apple-token-exchange` can be tested against a staged Apple environment.
+- None of these three are coding tasks — they gate but don't consume engineering time.
 
 ---
 
 ## Revision log
+
+**2026-04-20 v2 (end-to-end review with Codex gpt-5.4/high):**
+- Added web Apple token capture path: new `apple-token-persist` Edge Function + AuthContext wiring + Flow K. Closes compliance gap where web-only Apple users had no revocation-capable refresh token.
+- PKCE callback ownership resolved: `detectSessionInUrl: true` stays on; manual `exchangeCodeForSession()` only lives in Capacitor `appUrlOpen` handler. Supabase auto-handles `?code=` on `/login` AND `/reset-password` returns; no dedicated legacy-hash fallback code needed in page components.
+- `pending_apple_revocations` gains `locked_at`, `locked_by`, `unrevokable` columns. Retry cron uses `FOR UPDATE SKIP LOCKED` with 10-min stale-lease reclamation. Prevents double-revoke from concurrent workers or cron-racing-inline-delete-revoke.
+- `user_apple_tokens` gains `code_hash` (SHA-256 of last authorization_code) with unique `(user_id, code_hash)` index. Persistent idempotency check for 60s-window duplicate submissions; fresh codes UPDATE.
+- Flow F Case B sentinel path: Apple identity exists but no token row → insert `unrevokable = TRUE` row for audit, proceed with cascade. Honest about what we can't revoke.
+- `apple-token-exchange` gains fail-closed checks: no Apple identity / multiple identities / null `provider_id` → 409/500 + Sentry. Prevents corrupted-state silent accepts.
+- Swept "first sign-in" wording across architecture and overview sections to align with "authorizationCode may be present on any Apple sign-in; fresh code UPDATES."
+- Ciphertext self-containment made explicit in migration comments: `encrypted_refresh_token` is real ciphertext + `key_version`, not a Vault reference handle. Enables Vault-outage-tolerant queue copies during delete.
+- Smoke checklist updated: verifies UPDATE path (not INSERT) on returning Apple, Case B simulation for web-Apple-no-token, Flow K end-to-end.
+- Estimates revised 40–65h → 55–84h for concurrency hardening, web capture path, additional tests.
 
 **2026-04-20 v1:** Drafted. Four pressure-test rounds with Codex gpt-5.4/high integrated. Corrections incorporated:
 - Architecture: replaced archived `@codetrix-studio/capacitor-google-auth` with `@capgo/capacitor-social-login` (covers both providers); moved auth lifecycle listeners out of `App.jsx` into `AuthLifecycle`; added `authUrl.js` parser; added `_shared/apple.ts` server helper; dropped `APPLE_SERVICES_ID` from client constants; deferred AASA until DNS wired.
