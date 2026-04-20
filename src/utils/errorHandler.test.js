@@ -58,6 +58,19 @@ describe('Error Handler Utilities', () => {
       expect(classifyError({})).toBe(ErrorTypes.UNKNOWN)
       expect(classifyError(null)).toBe(ErrorTypes.UNKNOWN)
     })
+
+    it('should honor pre-set .type (createClassifiedError wrapper)', () => {
+      const wrapped = new Error('Edge Function returned a non-2xx status code')
+      wrapped.type = ErrorTypes.RATE_LIMIT
+      expect(classifyError(wrapped)).toBe(ErrorTypes.RATE_LIMIT)
+    })
+
+    it('should classify Supabase FunctionsHttpError via context.status', () => {
+      // Supabase stashes HTTP status on error.context.status, not error.status
+      expect(classifyError({ context: { status: 429 } })).toBe(ErrorTypes.RATE_LIMIT)
+      expect(classifyError({ context: { status: 401 } })).toBe(ErrorTypes.AUTH_ERROR)
+      expect(classifyError({ context: { status: 500 } })).toBe(ErrorTypes.SERVER_ERROR)
+    })
   })
 
   describe('getUserMessage', () => {

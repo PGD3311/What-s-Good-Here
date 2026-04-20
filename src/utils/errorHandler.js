@@ -31,8 +31,17 @@ export function classifyError(error) {
     return ErrorTypes.UNKNOWN
   }
 
+  // If already classified (e.g. by createClassifiedError), trust it —
+  // otherwise getUserMessage re-classifies the wrapper and loses the type.
+  if (error.type && Object.prototype.hasOwnProperty.call(ErrorTypes, error.type)) {
+    return error.type
+  }
+
   const message = (error.message || '').toLowerCase()
-  const code = error.code || error.status
+  // Supabase FunctionsHttpError stashes the HTTP status on error.context.status
+  // rather than error.status; check both so edge-function errors classify
+  // correctly (429 → RATE_LIMIT, 401 → AUTH_ERROR, 5xx → SERVER_ERROR).
+  const code = error.code || error.status || error.context?.status
 
   // Network errors
   if (message.includes('network') || message.includes('failed to fetch')) {
