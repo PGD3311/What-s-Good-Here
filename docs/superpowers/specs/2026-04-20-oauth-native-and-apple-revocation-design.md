@@ -231,22 +231,31 @@ Tap Delete → authApi.deleteAccount() → POST delete-account (Bearer JWT)
        IF Apple identity:
             SELECT FROM user_apple_tokens WHERE user_id=?
             CASE A — token row found:
-                 INSERT INTO pending_apple_revocations (apple_sub, encrypted_refresh_token, key_version, attempts=0)
+                 INSERT INTO pending_apple_revocations (
+                   apple_sub, encrypted_refresh_token, key_version, attempts=0,
+                   locked_at=NOW(), locked_by='delete-account:<request_id>'
+                 )
                    → INSERT FAILS → return 500, BLOCK CASCADE (mandatory queue)
-                   → INSERT OK → try _shared/apple.revokeToken()
-                        → success: DELETE pending row
-                        → failure: leave row, log, continue (cron handles retry)
+                   → INSERT OK → row is LEASED to this request — cron cannot pick it up
+                        → try _shared/apple.revokeToken()
+                            → success: DELETE pending row
+                            → failure: UPDATE locked_at=NULL, locked_by=NULL (releases lease for cron pickup), log, continue
             CASE B — token row NOT found (web Apple never synced, or earlier exchange failed):
                  INSERT INTO pending_apple_revocations (apple_sub, unrevokable=TRUE)
                    → INSERT FAILS → return 500, BLOCK CASCADE (audit trail is mandatory)
                    → INSERT OK → skip revoke attempt (no token to revoke)
                    → PostHog apple_revoke_unrevokable (separate from revoke_failed)
+            AUTH.IDENTITIES DEGRADED STATES (fail-closed, mirror apple-token-exchange):
+                 → multiple Apple identity rows for one user → 500, Sentry page, NO cascade
+                 → Apple identity row with null provider_id → 500, Sentry page, NO cascade
        Existing cascade: delete user data, auth.admin.deleteUser(user_id)
        user_apple_tokens row cascades via FK
        pending_apple_revocations row survives (no FK)
        return 200
 ```
 Case B is honest — we can't revoke what we never captured. The sentinel row surfaces in health metrics so we see the volume and can tighten the web-capture path if it happens often.
+
+**Concurrency guarantee:** Case A's pending row is inserted ALREADY LEASED (`locked_at = NOW()`, `locked_by = 'delete-account:<request_id>'`). This makes the row invisible to the retry cron (which filters `locked_at IS NULL OR locked_at < NOW() - 10min`) until either (a) inline revoke succeeds and deletes the row, or (b) inline revoke fails and explicitly clears the lease for cron pickup. Eliminates the double-revoke race between inline revoke and cron.
 
 ### Flow G — Apple revocation retry cron
 
@@ -298,7 +307,7 @@ Without this, next Google tap silently reuses the same account. Problematic on s
 
 Same-device-only constraint from Supabase PKCE. Signup on desktop + email on phone → exchange fails with "code verifier not found". Friendly recovery: "Send new link to this device" button.
 
-### Flow K — Web Apple token capture (first signin on web)
+### Flow K — Web Apple token capture (on any web Apple sign-in with provider_refresh_token present)
 
 ```
 User signs in with Apple on web (PWA, not native)
@@ -309,6 +318,8 @@ User signs in with Apple on web (PWA, not native)
        - session.provider_refresh_token is non-null
        - identity row has apple_sub
   → POST apple-token-persist (Bearer JWT, body: { provider_refresh_token })
+       → on transient failure (network, 5xx, 503): retry ONCE after 1s while provider_refresh_token is still in memory
+       → on second failure: log + PostHog apple_token_persist_failed, continue (user is signed in; residual misses fall into Case B at delete time)
        → Edge Function:
             getClaims() → user_id
             SELECT provider_id FROM auth.identities WHERE user_id=? AND provider='apple' → apple_sub
@@ -317,11 +328,10 @@ User signs in with Apple on web (PWA, not native)
               → fresh capture: INSERT
               → existing row: UPDATE (idempotent — user may have re-authed Apple on web multiple times)
             return 200
-  → client: fire-and-forget (logged failure is non-blocking; user is signed in)
 ```
-**Why this flow exists:** Supabase exposes `provider_refresh_token` briefly after web OAuth callback. If we don't catch it there, it's gone — we can't get it back later without the user re-authorizing. A web-only Apple user who deletes their account would have no refresh token to revoke. This flow closes that compliance gap.
+**Why this flow exists:** Supabase exposes `provider_refresh_token` briefly after web OAuth callback. If we don't catch it there, it's gone — we can't get it back later without the user re-authorizing. A web-only Apple user who deletes their account would have no refresh token to revoke. This flow captures the token on the normal web path; Case B (delete-time sentinel) covers residual misses.
 
-**Timing sensitivity:** `onAuthStateChange` fires multiple times during session lifecycle; only the post-callback event carries `provider_refresh_token`. AuthContext tracks whether this user's row already has a stored token via a lightweight RPC check (or lets `apple-token-persist` handle idempotency). Either way, we don't lose the capture window.
+**Timing sensitivity:** `onAuthStateChange` fires multiple times during session lifecycle; only the post-callback event carries `provider_refresh_token`. AuthContext tracks whether this user's row already has a stored token via a lightweight RPC check (or lets `apple-token-persist` handle idempotency). Either way, the retry-once-in-session policy reduces Case B to transient-network edge cases.
 
 **Invariants across all flows:**
 - Web bundle never imports Capacitor plugin symbols (dynamic import inside `nativeAuth.js`, gated on `isNativePlatform()`)
@@ -538,26 +548,30 @@ Backend visibility: direct Supabase SQL Editor. No dev-only public endpoints.
 
 ### Phase 2 — Web PKCE migration (ship alone, low-risk)
 
-- `flowType: 'pkce'` in supabase.js
-- Rework `Login.jsx` hash → code handling + intent-preservation bug fix
-- Transitional fallback for legacy `#access_token` URLs
-- Fix `WelcomeModal` silent-error bug + open condition
-- Deploy, verify email confirmation and password reset still work on web
+- `flowType: 'pkce'` in `src/lib/supabase.js` (keep `detectSessionInUrl: true` — Supabase auto-handles `?code=` return on both `/login` and `/reset-password`)
+- Fix existing `location.state?.from` intent-preservation bug in `Login.jsx`
+- Fix `WelcomeModal` silent-error-on-duplicate-display_name bug + extend open condition to `!display_name`
+- Deploy, verify email confirmation and password reset still work on web (including users hitting old `#access_token=` URLs — Supabase handles the transition window transparently)
+- No manual `exchangeCodeForSession()` calls in page components. That logic belongs only in Capacitor `appUrlOpen` handler, which ships in Phase 3.
 
-### Phase 3 — Native auth + exchange + revocation (main ship)
+### Phase 3 — Native auth + exchange + revocation + web Apple capture (main ship)
 
 - Install `@capgo/capacitor-social-login`, `@capacitor/app`
 - Build `nativeAuth.js`, `nonce.js`, `authUrl.js`, `AuthLifecycle.jsx`
-- Supabase migrations: `user_apple_tokens`, `pending_apple_revocations`
-- `_shared/apple.ts` + `apple-token-exchange` + `apple-revocation-retry` Edge Functions
-- Extend `delete-account` with mandatory queue + revocation
-- Supabase Vault config (`.p8`, keys)
-- Supabase Auth → Providers → Apple enabled
+- **Wire `apple-token-persist` capture path in `AuthContext`** — detect web Apple sign-in with `session.provider_refresh_token` on `onAuthStateChange` → `SIGNED_IN`, POST with one retry on transient failure (1s delay) to reduce Case B rate, fire-and-forget on final failure
+- Supabase migrations: `user_apple_tokens` (with `code_hash`), `pending_apple_revocations` (with `locked_at`, `locked_by`, `unrevokable`)
+- `_shared/apple.ts` helper
+- `apple-token-exchange` Edge Function (native path, with fail-closed identity checks + apple_sub binding)
+- **`apple-token-persist` Edge Function (web path, for captured provider_refresh_token)**
+- `apple-revocation-retry` Edge Function with `FOR UPDATE SKIP LOCKED` + lease reclamation
+- Extend `delete-account` with pre-leased pending row (Case A) + unrevokable sentinel (Case B) + fail-closed on Apple identity degraded states
+- Supabase Vault config (`.p8`, encryption master key)
+- Supabase Auth → Providers → Apple enabled with redirect allow-list for `whatsgoodhere.app`
 - Xcode: SIWA + Associated Domains capabilities
-- `pg_cron` schedule for `apple-revocation-retry`
+- `pg_cron` schedule for `apple-revocation-retry` (every 15 min)
 - AASA file shipped in same PR as DNS wiring
-- Unit + integration + E2E green in CI
-- Real-device smoke green
+- Unit + integration + E2E green in CI (including concurrency, Flow K, Case B, negative observability)
+- Real-device smoke green (60–90 min/pass, both auth + account passes)
 - Merge, deploy to staging, TestFlight upload
 
 ### Phase 4 — TestFlight + App Store submission
@@ -645,6 +659,14 @@ Against 2026-04-30 TestFlight checkpoint (10 days): tight. Phase 2 (web PKCE, ~3
 ---
 
 ## Revision log
+
+**2026-04-20 v3 (post-v2 Codex confirmation pass):**
+- **Blocker fix:** `delete-account` Case A inline revoke was racing the cron. Fix: INSERT the pending row ALREADY LEASED (`locked_at = NOW()`, `locked_by = 'delete-account:<request_id>'`). Row is invisible to cron until inline revoke completes or explicitly releases the lease.
+- Delete flow gains explicit fail-closed branches for Apple identity degraded states (multiple identities, null provider_id), mirroring `apple-token-exchange`.
+- Phase 2 rollout text rewritten: no manual `exchangeCodeForSession` in `Login.jsx`/`ResetPassword.jsx` — `detectSessionInUrl: true` handles both.
+- Phase 3 rollout text gains explicit `apple-token-persist` + AuthContext web-capture entries (was architecturally present but not in the ship list).
+- Flow K adds an immediate in-session retry (1s delay, one attempt) before giving up on `apple-token-persist`, reducing Case B fallback rate. "Closes the gap" softened to "captures on normal path; Case B covers residual misses."
+- Flow K header renamed from "first signin on web" to "on any web Apple sign-in with provider_refresh_token present" to match UPSERT semantics.
 
 **2026-04-20 v2 (end-to-end review with Codex gpt-5.4/high):**
 - Added web Apple token capture path: new `apple-token-persist` Edge Function + AuthContext wiring + Flow K. Closes compliance gap where web-only Apple users had no revocation-capable refresh token.
