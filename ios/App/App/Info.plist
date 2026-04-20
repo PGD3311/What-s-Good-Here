@@ -47,5 +47,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>What's Good Here uses your location to show the best dishes and restaurants near you.</string>
 </dict>
 </plist>

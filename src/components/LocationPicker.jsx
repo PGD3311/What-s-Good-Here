@@ -166,8 +166,8 @@ export function RadiusSheet({ isOpen, onClose, radius, onRadiusChange }) {
           })}
         </div>
 
-        {/* Safe area padding */}
-        <div className="h-8" />
+        {/* Clearance for bottom nav (64px) + home-indicator safe area */}
+        <div style={{ height: 'calc(64px + env(safe-area-inset-bottom, 0px) + 0.5rem)' }} />
       </div>
     </div>
   )
