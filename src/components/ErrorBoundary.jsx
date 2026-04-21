@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { getSessionItem, setSessionItem } from '../lib/storage'
+import { isChunkLoadError, tryChunkReload } from '../utils/chunkReload'
 
 function ErrorFallback({ error, resetError }) {
   return (
@@ -69,20 +69,9 @@ export class ErrorBoundary extends Component {
       componentStack: errorInfo?.componentStack,
     })
 
-    // Auto-reload on chunk load errors (fallback if lazyWithRetry misses it)
-    const msg = error?.message || ''
-    const isChunkError = (
-      msg.includes('Failed to fetch dynamically imported module') ||
-      msg.includes('error loading dynamically imported module') ||
-      msg.includes('Importing a module script failed') ||
-      msg.includes('Loading chunk') ||
-      msg.includes('Failed to fetch')
-    )
-    if (isChunkError && !getSessionItem('wgh_chunk_reload')) {
-      setSessionItem('wgh_chunk_reload', '1')
-      window.location.reload()
-      return
-    }
+    // Auto-reload on chunk load errors (fallback if lazyWithRetry misses it).
+    // Shared attempt counter prevents reload loops across both paths.
+    if (isChunkLoadError(error) && tryChunkReload()) return
 
     // Lazy-load Sentry and report the error
     if (import.meta.env.PROD) {

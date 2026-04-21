@@ -13,7 +13,7 @@
     { "source": "/logo-concepts.html", "destination": "/logo-concepts.html" },
     { "source": "/profile-redesign.html", "destination": "/profile-redesign.html" },
     { "source": "/profile-soul.html", "destination": "/profile-soul.html" },
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/((?!.*\\.(?:js|mjs|css|map|png|jpg|jpeg|webp|svg|ico|woff|woff2|ttf|json|txt|xml)$).*)", "destination": "/" }
   ],
   "headers": [
     {

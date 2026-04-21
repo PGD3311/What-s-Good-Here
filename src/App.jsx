@@ -10,37 +10,19 @@ import { BottomNav } from './components/BottomNav'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { WelcomeModal } from './components/Auth/WelcomeModal'
 import { RouteProgress } from './components/RouteProgress'
-import { getSessionItem, removeSessionItem, setSessionItem } from './lib/storage'
 import { preloadSounds } from './lib/sounds'
 import { preloadCategoryImages } from './constants/categories'
-
-// Helper to handle chunk load failures after new deploys
-// If a lazy-loaded chunk fails to load (e.g., after deploy), reload the page once
-function isChunkLoadError(error) {
-  const msg = error?.message || ''
-  return (
-    msg.includes('Failed to fetch dynamically imported module') || // Chrome
-    msg.includes('error loading dynamically imported module') ||   // Safari
-    msg.includes('Importing a module script failed') ||            // Firefox
-    msg.includes('Loading chunk') ||                               // Generic bundler
-    msg.includes('Failed to fetch')                                // Network-level
-  )
-}
-
-const RELOAD_KEY = 'wgh_chunk_reload'
+import { isChunkLoadError, tryChunkReload, clearChunkReloadState } from './utils/chunkReload'
 
 function lazyWithRetry(importFn, namedExport) {
   return lazy(() =>
     importFn()
       .then(m => {
-        // Successful load — clear any reload flag
-        removeSessionItem(RELOAD_KEY)
+        clearChunkReloadState()
         return { default: namedExport ? m[namedExport] : m.default }
       })
       .catch((error) => {
-        if (isChunkLoadError(error) && !getSessionItem(RELOAD_KEY)) {
-          setSessionItem(RELOAD_KEY, '1')
-          window.location.reload()
+        if (isChunkLoadError(error) && tryChunkReload()) {
           return { default: () => null }
         }
         throw error
