@@ -729,3 +729,10 @@ The map interaction pattern (tap list item → fly to pin → pin lights up) is 
 - `src/pages/Discover.jsx` — poster icon import
 
 *Last updated: Feb 25, 2026*
+
+### Apple Vault Keys
+
+- `apple_encryption_master_key_v1` — AES-256-GCM key for `user_apple_tokens.encrypted_refresh_token` and `pending_apple_revocations.encrypted_refresh_token`. Corresponds to `key_version = 'v1'` in those tables.
+- `apple_signing_key_v1` — contents of the `.p8` private key from Apple Developer portal. Used to sign Apple client secret JWTs. Uploaded in B3-activate.
+- `apple_team_id`, `apple_key_id_v1`, `apple_services_id`, `apple_bundle_id` — non-secret identifiers kept in Vault for deployment consistency and single-lookup loading in `_shared/apple.ts`.
+- Key rotation: write a new vault secret `apple_encryption_master_key_v2`, update encryption-write paths to use v2, leave decryption paths reading key by `key_version` column. Re-encryption of existing rows is a background job (post-launch).
