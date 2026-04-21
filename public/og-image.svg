@@ -1,35 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0D1B22"/>
-      <stop offset="100%" style="stop-color:#0F1F2B"/>
-    </linearGradient>
-  </defs>
-  <!-- Background -->
-  <rect width="1200" height="630" fill="url(#bg)"/>
-  
-  <!-- Subtle border -->
-  <rect x="40" y="40" width="1120" height="550" rx="24" fill="none" stroke="#D9A765" stroke-width="1.5" opacity="0.3"/>
-  
-  <!-- Top accent line -->
-  <rect x="40" y="40" width="1120" height="4" rx="2" fill="#D9A765" opacity="0.6"/>
-  
-  <!-- Logo text: What's Good Here -->
-  <text x="600" y="260" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="72" fill="#F5F1E8" letter-spacing="-1">What's <tspan fill="#D9A765">Good</tspan> Here</text>
-  
-  <!-- Gold underline under Good -->
-  <rect x="480" y="275" width="120" height="4" rx="2" fill="#D9A765" opacity="0.8"/>
-  
+  <!-- Warm Appetite palette: stone bg, near-black ink, amber accent -->
+  <rect width="1200" height="630" fill="#F0ECE8"/>
+
+  <!-- Top accent strip -->
+  <rect x="0" y="0" width="1200" height="8" fill="#E4440A"/>
+  <!-- Bottom accent strip -->
+  <rect x="0" y="622" width="1200" height="8" fill="#C48A12"/>
+
+  <!-- Brand wordmark (sans-serif for reliable cairosvg rendering) -->
+  <text x="600" y="270" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="800" font-size="72" fill="#1A1A1A" letter-spacing="-1">What's <tspan fill="#C48A12">Good</tspan> Here</text>
+
   <!-- Tagline -->
-  <text x="600" y="340" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="28" fill="#B8A99A">The best dishes, ranked by locals</text>
-  
-  <!-- Location tag -->
-  <rect x="470" y="380" width="260" height="40" rx="20" fill="#1A3A42" stroke="#D9A765" stroke-width="1" opacity="0.8"/>
-  <text x="600" y="406" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="16" fill="#D9A765">Martha's Vineyard &amp; Beyond</text>
-  
-  <!-- Bottom accent dots -->
-  <circle cx="570" cy="520" r="4" fill="#C85A54" opacity="0.6"/>
-  <circle cx="590" cy="520" r="4" fill="#D9A765" opacity="0.6"/>
-  <circle cx="610" cy="520" r="4" fill="#6BB384" opacity="0.6"/>
-  <circle cx="630" cy="520" r="4" fill="#E07856" opacity="0.6"/>
+  <text x="600" y="340" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="500" font-size="30" fill="#555555" letter-spacing="0.3">
+    The best dishes, ranked by locals
+  </text>
+
+  <!-- Location pill -->
+  <rect x="395" y="400" width="410" height="56" rx="28" fill="#FFFFFF" stroke="#E4440A" stroke-width="2"/>
+  <text x="600" y="436" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="700" font-size="21" fill="#E4440A" letter-spacing="2">
+    MARTHA'S VINEYARD &amp; BEYOND
+  </text>
+
+  <!-- Accent dots -->
+  <circle cx="555" cy="530" r="6" fill="#E4440A"/>
+  <circle cx="580" cy="530" r="6" fill="#C48A12"/>
+  <circle cx="605" cy="530" r="6" fill="#1A1A1A"/>
+  <circle cx="630" cy="530" r="6" fill="#C48A12"/>
+  <circle cx="655" cy="530" r="6" fill="#E4440A"/>
+
+  <!-- Domain -->
+  <text x="600" y="590" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="700" font-size="18" fill="#999999" letter-spacing="3">
+    WGHAPP.COM
+  </text>
 </svg>

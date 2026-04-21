@@ -112,62 +112,47 @@ function generateOgSvg(title: string, subtitle: string, rating: string, badge: s
   const displayTitle = title.length > 40 ? title.slice(0, 37) + '...' : title
   const titleSize = displayTitle.length > 25 ? 48 : 56
 
+  // Appetite palette: warm stone bg, near-black ink, amber accent, coral primary
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0D1B22"/>
-      <stop offset="100%" stop-color="#1A3A42"/>
-    </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#D9A765"/>
-      <stop offset="100%" stop-color="#E8C088"/>
-    </linearGradient>
-  </defs>
-
   <!-- Background -->
-  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="#F0ECE8"/>
 
-  <!-- Subtle top accent line -->
-  <rect x="0" y="0" width="1200" height="4" fill="url(#gold)"/>
+  <!-- Top accent strip -->
+  <rect x="0" y="0" width="1200" height="8" fill="#E4440A"/>
+  <!-- Bottom accent strip -->
+  <rect x="0" y="622" width="1200" height="8" fill="#C48A12"/>
 
-  <!-- Bottom accent line -->
-  <rect x="0" y="626" width="1200" height="4" fill="url(#gold)"/>
-
-  <!-- Brand wordmark area -->
-  <text x="80" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="#7D7168">
-    WHAT'S <tspan fill="#D9A765">GOOD</tspan> HERE
+  <!-- Brand wordmark -->
+  <text x="80" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" fill="#1A1A1A" letter-spacing="1">
+    WHAT'S <tspan fill="#C48A12">GOOD</tspan> HERE
   </text>
 
   ${badge ? `
   <!-- Badge -->
-  <rect x="80" y="140" width="${badge.length * 18 + 40}" height="44" rx="22" fill="#D9A765" opacity="0.15"/>
-  <text x="100" y="168" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#D9A765">${esc(badge)}</text>
+  <rect x="80" y="140" width="${badge.length * 18 + 40}" height="44" rx="22" fill="#E4440A" opacity="0.12"/>
+  <text x="100" y="168" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#E4440A" letter-spacing="1.5">${esc(badge)}</text>
   ` : ''}
 
   <!-- Main title -->
-  <text x="80" y="${badge ? 250 : 220}" font-family="system-ui, -apple-system, sans-serif" font-size="${titleSize}" font-weight="700" fill="#F5F1E8">
+  <text x="80" y="${badge ? 250 : 220}" font-family="system-ui, -apple-system, sans-serif" font-size="${titleSize}" font-weight="800" fill="#1A1A1A">
     ${esc(displayTitle)}
   </text>
 
   <!-- Subtitle -->
-  <text x="80" y="${badge ? 305 : 275}" font-family="system-ui, -apple-system, sans-serif" font-size="26" fill="#B8A99A">
+  <text x="80" y="${badge ? 305 : 275}" font-family="system-ui, -apple-system, sans-serif" font-size="26" fill="#555555">
     ${esc(subtitle)}
   </text>
 
   ${rating ? `
   <!-- Rating -->
-  <text x="80" y="${badge ? 370 : 340}" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="600" fill="#6BB384">
+  <text x="80" y="${badge ? 370 : 340}" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="700" fill="#16A34A">
     ${esc(rating)}
   </text>
   ` : ''}
 
-  <!-- Decorative circle (brand element) -->
-  <circle cx="1050" cy="315" r="160" fill="none" stroke="#D9A765" stroke-width="1" opacity="0.1"/>
-  <circle cx="1050" cy="315" r="120" fill="none" stroke="#D9A765" stroke-width="1" opacity="0.08"/>
-
-  <!-- Bottom CTA -->
-  <text x="80" y="570" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#7D7168">
-    whats-good-here.vercel.app
+  <!-- Bottom domain -->
+  <text x="80" y="580" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="#999999" letter-spacing="2">
+    WGHAPP.COM
   </text>
 </svg>`
 }
