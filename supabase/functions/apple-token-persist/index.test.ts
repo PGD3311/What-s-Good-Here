@@ -8,8 +8,15 @@
 //
 // Tests that don't hit Vault (400/401/409 paths) succeed without credentials
 // as long as the Edge Function is deployed and SUPABASE_URL is reachable.
+//
+// DB-error paths (IDENTITY_LOOKUP_FAILED, TOKEN_LOOKUP_FAILED, UPSERT_FAILED)
+// require fault injection and are not covered by integration tests. If the
+// handler is ever refactored to accept injected dependencies, add unit tests
+// driving those branches directly. For now they're exercised implicitly by
+// the live Postgres error channel.
 
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   createTestUser,
   insertAppleIdentity,
@@ -18,11 +25,22 @@ import {
   getAppleTokenRow,
 } from '../_test/harness.ts';
 
+// Service-role admin client for test-only operations the harness doesn't expose
+// (identity deletion, direct auth.identities inserts with null provider_id).
+function adminClient() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { auth: { persistSession: false } },
+  );
+}
+
 Deno.test('happy path: JWT + Apple identity + token → 200, row upserted', async () => {
   const { userId, jwt } = await createTestUser();
-  const appleSub = `0001.${crypto.randomUUID()}.000`;
-  await insertAppleIdentity(userId, appleSub);
   try {
+    const appleSub = `0001.${crypto.randomUUID()}.000`;
+    await insertAppleIdentity(userId, appleSub);
+
     const res = await invokeFn('apple-token-persist', {
       jwt,
       body: { provider_refresh_token: 'rt.happy-path' },
@@ -84,6 +102,8 @@ Deno.test('malformed JSON body → 400 MALFORMED_BODY', async () => {
       body: '{not-json',
     });
     assertEquals(res.status, 400);
+    const body = await res.json();
+    assertEquals(body.code, 'MALFORMED_BODY');
   } finally {
     await cleanupUser(userId);
   }
@@ -91,8 +111,8 @@ Deno.test('malformed JSON body → 400 MALFORMED_BODY', async () => {
 
 Deno.test('user without Apple identity → 409 NO_APPLE_IDENTITY', async () => {
   const { userId, jwt } = await createTestUser();
-  // deliberately NO insertAppleIdentity
   try {
+    // deliberately NO insertAppleIdentity
     const res = await invokeFn('apple-token-persist', {
       jwt,
       body: { provider_refresh_token: 'rt.x' },
@@ -105,11 +125,69 @@ Deno.test('user without Apple identity → 409 NO_APPLE_IDENTITY', async () => {
   }
 });
 
+Deno.test('multi Apple identity rows → 500 MULTI_APPLE_IDENTITY', async () => {
+  const { userId, jwt } = await createTestUser();
+  try {
+    // Insert two rows for the same user with provider='apple'. This is a
+    // degraded state Supabase should prevent but the function fails closed.
+    await insertAppleIdentity(userId, `0001.${crypto.randomUUID()}.dup1`);
+    await insertAppleIdentity(userId, `0001.${crypto.randomUUID()}.dup2`);
+
+    const res = await invokeFn('apple-token-persist', {
+      jwt,
+      body: { provider_refresh_token: 'rt.x' },
+    });
+    assertEquals(res.status, 500);
+    const body = await res.json();
+    assertEquals(body.code, 'MULTI_APPLE_IDENTITY');
+  } finally {
+    await cleanupUser(userId);
+  }
+});
+
+Deno.test('Apple identity with null provider_id → 500 IDENTITY_MISSING_SUB', async () => {
+  const { userId, jwt } = await createTestUser();
+  try {
+    // Insert directly with provider_id = NULL to force the degraded branch.
+    // This bypasses harness.insertAppleIdentity which requires an appleSub.
+    const admin = adminClient();
+    const now = new Date().toISOString();
+    const { error: idErr } = await admin.schema('auth').from('identities').insert({
+      id: crypto.randomUUID(),
+      user_id: userId,
+      provider_id: null,
+      provider: 'apple',
+      identity_data: { sub: null },
+      last_sign_in_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+    if (idErr) {
+      // Some Supabase versions have a NOT NULL constraint on provider_id. If
+      // the insert fails, skip the test — the branch is unreachable in that
+      // configuration.
+      console.warn(`skipping IDENTITY_MISSING_SUB test — insert rejected: ${idErr.message}`);
+      return;
+    }
+
+    const res = await invokeFn('apple-token-persist', {
+      jwt,
+      body: { provider_refresh_token: 'rt.x' },
+    });
+    assertEquals(res.status, 500);
+    const body = await res.json();
+    assertEquals(body.code, 'IDENTITY_MISSING_SUB');
+  } finally {
+    await cleanupUser(userId);
+  }
+});
+
 Deno.test('idempotent: second call upserts in place, same user row', async () => {
   const { userId, jwt } = await createTestUser();
-  const appleSub = `0001.${crypto.randomUUID()}.idem`;
-  await insertAppleIdentity(userId, appleSub);
   try {
+    const appleSub = `0001.${crypto.randomUUID()}.idem`;
+    await insertAppleIdentity(userId, appleSub);
+
     const r1 = await invokeFn('apple-token-persist', {
       jwt,
       body: { provider_refresh_token: 'rt.first' },
@@ -138,10 +216,11 @@ Deno.test('APPLE_SUB_MISMATCH: existing row with different apple_sub → 409', a
   // Simulate account-linking drift: row in user_apple_tokens has apple_sub A,
   // but auth.identities now says apple_sub B. Function must refuse to overwrite.
   const { userId, jwt } = await createTestUser();
-  const oldSub = `0001.${crypto.randomUUID()}.old`;
-  const newSub = `0001.${crypto.randomUUID()}.new`;
-  await insertAppleIdentity(userId, oldSub);
   try {
+    const oldSub = `0001.${crypto.randomUUID()}.old`;
+    const newSub = `0001.${crypto.randomUUID()}.new`;
+    await insertAppleIdentity(userId, oldSub);
+
     // First write — establishes the row with oldSub.
     const r1 = await invokeFn('apple-token-persist', {
       jwt,
@@ -150,16 +229,26 @@ Deno.test('APPLE_SUB_MISMATCH: existing row with different apple_sub → 409', a
     assertEquals(r1.status, 200);
 
     // Swap the identity: delete the old row, insert a new one with newSub.
-    // Harness doesn't expose deleteIdentity — do it inline via service-role.
-    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-    const admin = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-      { auth: { persistSession: false } },
-    );
-    await admin.schema('auth').from('identities').delete()
-      .eq('user_id', userId).eq('provider', 'apple');
+    const admin = adminClient();
+    const { error: delErr } = await admin
+      .schema('auth')
+      .from('identities')
+      .delete()
+      .eq('user_id', userId)
+      .eq('provider', 'apple');
+    assert(!delErr, `identity delete must succeed: ${delErr?.message}`);
     await insertAppleIdentity(userId, newSub);
+
+    // Sanity — exactly one Apple identity row for this user.
+    const { data: idsAfter, error: countErr } = await admin
+      .schema('auth')
+      .from('identities')
+      .select('provider_id')
+      .eq('user_id', userId)
+      .eq('provider', 'apple');
+    assert(!countErr, `identity count query failed: ${countErr?.message}`);
+    assertEquals(idsAfter?.length, 1);
+    assertEquals(idsAfter?.[0].provider_id, newSub);
 
     // Second write — should 409 because user_apple_tokens row still has oldSub.
     const r2 = await invokeFn('apple-token-persist', {
