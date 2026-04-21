@@ -6,6 +6,7 @@ import { logger } from '../utils/logger'
 import { CameraIcon } from '../components/CameraIcon'
 import { SmileyPin } from '../components/SmileyPin'
 import { FEATURES } from '../constants/features'
+import { getAuthUrlType } from '../utils/authUrlType'
 
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
 
@@ -17,8 +18,9 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
-  // If user arrives with confirmation hash params, go straight to sign-in
-  const isPostConfirmation = window.location.hash.includes('type=signup') || window.location.hash.includes('type=email')
+  // If user arrives with confirmation params (PKCE query or legacy hash), go straight to sign-in
+  const authUrlType = getAuthUrlType(window.location.href)
+  const isPostConfirmation = authUrlType === 'signup' || authUrlType === 'email'
   const [message, setMessage] = useState(
     isPostConfirmation ? { type: 'success', text: 'Email verified! Sign in to get started.' } : null
   )
