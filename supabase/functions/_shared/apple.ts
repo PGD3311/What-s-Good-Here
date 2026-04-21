@@ -11,7 +11,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const KEY_VERSION = 'v1';
-const VAULT_KEY_NAME = `apple_encryption_master_key_${KEY_VERSION}`;
 
 let cachedKey: CryptoKey | null = null;
 let cachedKeyVersion: string | null = null;
