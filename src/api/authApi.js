@@ -10,6 +10,10 @@ import { validateUserContent } from '../lib/reviewBlocklist'
  * Auth API - Centralized authentication operations
  */
 
+// Flow K (Apple SIWA provider_refresh_token persistence) retry policy
+const APPLE_PERSIST_TRANSIENT_STATUSES = new Set([500, 502, 503, 504])
+const APPLE_PERSIST_RETRY_DELAY_MS = 1000
+
 /**
  * Validate redirect URL against allowlist to prevent open redirect attacks
  * Only allows same-origin URLs
@@ -370,6 +374,61 @@ export const authApi = {
       logger.error('Error deleting account:', error)
       throw error.type ? error : createClassifiedError(error)
     }
+  },
+
+  /**
+   * POST the Apple provider_refresh_token (from Supabase web OAuth callback)
+   * to the apple-token-persist Edge Function. One retry on transient failure
+   * after 1s. Never throws — Flow K is fire-and-forget from the auth context's
+   * perspective. The token is only in memory briefly after SIGNED_IN; if we
+   * lose it, Case B (unrevokable sentinel) picks up at delete time.
+   *
+   * @param {string|null} providerRefreshToken
+   * @returns {Promise<{ ok: boolean, code?: string, status?: number }>}
+   */
+  async persistAppleRefreshToken(providerRefreshToken) {
+    if (!providerRefreshToken) {
+      return { ok: false, reason: 'missing_token' }
+    }
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke('apple-token-persist', {
+          method: 'POST',
+          body: { provider_refresh_token: providerRefreshToken },
+        })
+
+        if (!error && data?.ok === true) {
+          capture('apple_token_persisted')
+          return { ok: true }
+        }
+
+        const status = error?.status ?? 500
+        const code = data?.code
+
+        if (!APPLE_PERSIST_TRANSIENT_STATUSES.has(status)) {
+          logger.warn('apple-token-persist non-transient failure', { status, code })
+          return { ok: false, code, status }
+        }
+
+        if (attempt === 2) {
+          capture('apple_token_persist_failed', { status, code })
+          logger.warn('apple-token-persist failed after retry', { status, code })
+          return { ok: false, code, status }
+        }
+
+        await new Promise((r) => setTimeout(r, APPLE_PERSIST_RETRY_DELAY_MS))
+      } catch (err) {
+        if (attempt === 2) {
+          capture('apple_token_persist_failed', { status: 0, error: err?.message })
+          logger.warn('apple-token-persist threw after retry', err)
+          return { ok: false, error: err?.message }
+        }
+        await new Promise((r) => setTimeout(r, APPLE_PERSIST_RETRY_DELAY_MS))
+      }
+    }
+
+    return { ok: false }
   },
 
   /**

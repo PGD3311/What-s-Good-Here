@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { authApi } from '../api/authApi'
 import { capture, identify, reset } from '../lib/analytics'
 import { clearPendingVoteStorage, clearCache, removeStorageItem, removeSessionItem, STORAGE_KEYS } from '../lib/storage'
 import { logger } from '../utils/logger'
@@ -60,6 +61,20 @@ export function AuthProvider({ children }) {
           capture('session_expired')
           reset()
         }
+      }
+
+      // Flow K — Apple SIWA refresh token capture (CLAUDE.md §1.4 routes
+      // through authApi.persistAppleRefreshToken). We gate on
+      // session.provider_refresh_token presence only; the server-side
+      // identity lookup decides whether this user's identity is actually
+      // Apple and returns 409 NO_APPLE_IDENTITY otherwise (cheap no-op).
+      // Do NOT gate on !prevUserRef.current — Supabase may fire SIGNED_IN
+      // again if the browser restores session with provider_refresh_token
+      // briefly visible. The Edge Function is idempotent.
+      if (event === 'SIGNED_IN' && session?.provider_refresh_token) {
+        authApi.persistAppleRefreshToken(session.provider_refresh_token).catch((err) => {
+          logger.warn('persistAppleRefreshToken unexpected throw', err)
+        })
       }
 
       setUser(newUser)

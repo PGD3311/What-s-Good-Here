@@ -15,10 +15,31 @@ vi.mock('../lib/supabase', () => ({
         single: vi.fn(),
       })),
     })),
+    functions: {
+      invoke: vi.fn(),
+    },
+  },
+}))
+
+// Mock analytics so we can assert on capture() calls for Flow K
+vi.mock('../lib/analytics', () => ({
+  capture: vi.fn(),
+  identify: vi.fn(),
+  reset: vi.fn(),
+}))
+
+// Mock logger so transient-failure warnings don't spam test output
+vi.mock('../utils/logger', () => ({
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
   },
 }))
 
 import { supabase } from '../lib/supabase'
+import { capture } from '../lib/analytics'
 
 describe('Auth API', () => {
   beforeEach(() => {
@@ -163,6 +184,80 @@ describe('Auth API', () => {
       const result = await authApi.getUserVoteForDish('dish-1', 'user-1')
 
       expect(result).toBeNull()
+    })
+  })
+
+  describe('persistAppleRefreshToken (Flow K)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('returns ok on 200 + fires PostHog apple_token_persisted', async () => {
+      supabase.functions.invoke.mockResolvedValueOnce({ data: { ok: true }, error: null })
+
+      const r = await authApi.persistAppleRefreshToken('rt.abc')
+
+      expect(r).toEqual({ ok: true })
+      expect(supabase.functions.invoke).toHaveBeenCalledTimes(1)
+      expect(supabase.functions.invoke).toHaveBeenCalledWith('apple-token-persist', {
+        method: 'POST',
+        body: { provider_refresh_token: 'rt.abc' },
+      })
+      expect(capture).toHaveBeenCalledWith('apple_token_persisted')
+    })
+
+    it('retries once on transient 503, then succeeds', async () => {
+      supabase.functions.invoke
+        .mockResolvedValueOnce({ data: null, error: { status: 503 } })
+        .mockResolvedValueOnce({ data: { ok: true }, error: null })
+
+      const promise = authApi.persistAppleRefreshToken('rt.abc')
+      await vi.advanceTimersByTimeAsync(1000)
+      const r = await promise
+
+      expect(r).toEqual({ ok: true })
+      expect(supabase.functions.invoke).toHaveBeenCalledTimes(2)
+    })
+
+    it('does NOT retry on 409 NO_APPLE_IDENTITY', async () => {
+      supabase.functions.invoke.mockResolvedValueOnce({
+        data: { ok: false, code: 'NO_APPLE_IDENTITY' },
+        error: { status: 409 },
+      })
+
+      const r = await authApi.persistAppleRefreshToken('rt.abc')
+
+      expect(r.ok).toBe(false)
+      expect(r.code).toBe('NO_APPLE_IDENTITY')
+      expect(supabase.functions.invoke).toHaveBeenCalledTimes(1)
+    })
+
+    it('fires PostHog failure event after two transient 503s', async () => {
+      supabase.functions.invoke
+        .mockResolvedValueOnce({ data: null, error: { status: 503 } })
+        .mockResolvedValueOnce({ data: null, error: { status: 503 } })
+
+      const promise = authApi.persistAppleRefreshToken('rt.abc')
+      await vi.advanceTimersByTimeAsync(1000)
+      const r = await promise
+
+      expect(r.ok).toBe(false)
+      expect(supabase.functions.invoke).toHaveBeenCalledTimes(2)
+      expect(capture).toHaveBeenCalledWith(
+        'apple_token_persist_failed',
+        expect.objectContaining({ status: 503 })
+      )
+    })
+
+    it('no-ops on missing token', async () => {
+      const r = await authApi.persistAppleRefreshToken(null)
+
+      expect(r.ok).toBe(false)
+      expect(supabase.functions.invoke).not.toHaveBeenCalled()
     })
   })
 })
