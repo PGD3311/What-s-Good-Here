@@ -319,6 +319,175 @@ Expected: commit succeeds.
 
 ---
 
+### Task 4.5: Harden ResetPassword.jsx against PKCE race
+
+**Why this task exists:** `ResetPassword.jsx:16-33` currently does a single `authApi.getSession()` on mount and renders "Invalid or expired reset link" if it returns `null`. Under **implicit** flow this was fine — the hash token was parsed synchronously during client init. Under **PKCE**, Supabase does an async HTTP POST to `/token` to exchange `?code=`. On slow networks the React `useEffect` can run before the exchange completes → valid links show as expired. The spec v3 (line 101) claims this page needs no edit because it already reads from `onAuthStateChange`, but that is inaccurate for the current code. This task closes the real gap.
+
+Event-handling approach (confirmed with Codex second opinion):
+- Subscribe to `onAuthStateChange`.
+- Resolve as valid on: `PASSWORD_RECOVERY` with session (primary), `SIGNED_IN` with session (compat), or `INITIAL_SESSION` with **truthy** session (fast path for already-signed-in user, and for PKCE exchange that completes before subscription).
+- Do NOT treat `INITIAL_SESSION` with null session as failure (ordering is `INITIAL_SESSION` → `PASSWORD_RECOVERY` in current supabase-js).
+- 5s timeout fallback: call `getSession()` once; if still null, show the invalid-link message. Prevents an indefinite spinner on silent failure.
+- Use a closure `decided` flag (not React state) so multiple racing async paths resolve exactly once.
+
+**Files:**
+- Modify: `src/pages/ResetPassword.jsx:1-33`
+
+- [ ] **Step 1: Read the current state**
+
+Lines 1-33 currently read:
+```jsx
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { authApi } from '../api/authApi'
+import { SmileyPin } from '../components/SmileyPin'
+
+export function ResetPassword() {
+  const navigate = useNavigate()
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [isValidSession, setIsValidSession] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  // Check if we have a valid recovery session
+  useEffect(() => {
+    const checkSession = async () => {
+      // Supabase automatically handles the recovery token from the URL
+      const { data: { session } } = await authApi.getSession()
+
+      if (session) {
+        setIsValidSession(true)
+      } else {
+        setMessage({
+          type: 'error',
+          text: 'Invalid or expired reset link. Please request a new one.'
+        })
+      }
+      setCheckingSession(false)
+    }
+
+    checkSession()
+  }, [])
+```
+
+- [ ] **Step 2: Add the `supabase` import**
+
+Use Edit to change:
+```jsx
+import { authApi } from '../api/authApi'
+import { SmileyPin } from '../components/SmileyPin'
+```
+to:
+```jsx
+import { authApi } from '../api/authApi'
+import { supabase } from '../lib/supabase'
+import { SmileyPin } from '../components/SmileyPin'
+```
+
+- [ ] **Step 3: Replace the useEffect body**
+
+Use Edit to change:
+```jsx
+  // Check if we have a valid recovery session
+  useEffect(() => {
+    const checkSession = async () => {
+      // Supabase automatically handles the recovery token from the URL
+      const { data: { session } } = await authApi.getSession()
+
+      if (session) {
+        setIsValidSession(true)
+      } else {
+        setMessage({
+          type: 'error',
+          text: 'Invalid or expired reset link. Please request a new one.'
+        })
+      }
+      setCheckingSession(false)
+    }
+
+    checkSession()
+  }, [])
+```
+to:
+```jsx
+  // Check for a valid recovery session. Under PKCE, Supabase exchanges
+  // ?code= asynchronously, so we subscribe to auth events instead of
+  // relying on a single getSession() read that can fire before the
+  // exchange completes.
+  useEffect(() => {
+    let decided = false
+    let cancelled = false
+
+    const decide = (session) => {
+      if (cancelled || decided) return
+      decided = true
+      if (session) {
+        setIsValidSession(true)
+      } else {
+        setMessage({
+          type: 'error',
+          text: 'Invalid or expired reset link. Please request a new one.'
+        })
+      }
+      setCheckingSession(false)
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        decide(session)
+      } else if (event === 'INITIAL_SESSION' && session) {
+        decide(session)
+      }
+    })
+
+    // Fallback: if no recovery/signed-in event arrives within 5s, resolve
+    // with whatever getSession reports. Guards against silent init failure.
+    const timer = setTimeout(async () => {
+      if (cancelled || decided) return
+      const { data: { session } } = await supabase.auth.getSession()
+      decide(session)
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      subscription.unsubscribe()
+    }
+  }, [])
+```
+
+- [ ] **Step 4: Verify eslint passes**
+
+Run:
+```bash
+npx eslint src/pages/ResetPassword.jsx
+```
+Expected: no errors.
+
+- [ ] **Step 5: Commit**
+
+Run:
+```bash
+git add src/pages/ResetPassword.jsx
+git commit -m "fix(auth): wait for auth events on password reset under PKCE
+
+ResetPassword previously called getSession() once on mount. Under
+implicit flow the hash token was parsed synchronously so this worked.
+Under PKCE the ?code= exchange is async — a slow exchange made valid
+reset links show 'Invalid or expired' before the session landed.
+
+Subscribe to onAuthStateChange (PASSWORD_RECOVERY, SIGNED_IN, plus
+INITIAL_SESSION-with-session as a fast path). Keep a 5s fallback to
+getSession so silent init failure doesn't strand the user on a spinner.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+Expected: commit succeeds.
+
+---
+
 ### Task 5: Full test + build verification
 
 **Files:**
@@ -428,6 +597,7 @@ gh pr create --title "feat(auth): migrate web flow to PKCE (Plan A)" --body "$(c
 - Sets \`flowType: 'pkce'\` on the Supabase web client.
 - \`detectSessionInUrl: true\` stays on so Supabase auto-exchanges \`?code=\` on \`/login\` and \`/reset-password\` entry points. No manual \`exchangeCodeForSession\` in page components.
 - New \`src/utils/authUrlType.js\` reads Supabase auth type param from both \`?type=\` (PKCE) and \`#type=\` (legacy implicit). \`Login.jsx\` uses it in place of the hash-only check for post-confirmation detection.
+- \`ResetPassword.jsx\` now subscribes to \`onAuthStateChange\` (PASSWORD_RECOVERY / SIGNED_IN / INITIAL_SESSION-with-session) instead of a one-shot \`getSession()\`. Closes a real PKCE race where a slow \`?code=\` exchange made valid recovery links show as expired. 5s \`getSession()\` fallback guards silent init failure.
 
 ## Why
 First of three plans implementing the OAuth-on-native-iOS + Apple-token-revocation design (spec: \`docs/superpowers/specs/2026-04-20-oauth-native-and-apple-revocation-design.md\`). Plan A is the web-side security upgrade that unblocks Plans B + C. PKCE is the 2026 industry default and removes tokens-in-URL-fragment risk.
