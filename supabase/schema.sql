@@ -322,6 +322,35 @@ CREATE TABLE IF NOT EXISTS events (
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
+-- 1w. user_apple_tokens
+-- Per-user Apple refresh-token storage for App Store compliance with
+-- guideline 5.1.1(v) — account deletion must revoke Apple consent.
+--
+-- encrypted_refresh_token is self-contained ciphertext (not a Vault reference)
+-- so rows can be copied byte-for-byte into pending_apple_revocations during
+-- account deletion without needing Vault access at copy time.
+CREATE TABLE IF NOT EXISTS user_apple_tokens (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  apple_sub TEXT NOT NULL,
+  encrypted_refresh_token TEXT NOT NULL,
+  key_version TEXT NOT NULL,
+  -- client_id_type determines which Apple client_id was used when the token
+  -- was issued. Revocation MUST use the same client_id — 'native' = bundle id
+  -- (com.whatsgoodhere.app), 'web' = services id (com.whatsgoodhere.service).
+  -- Mixing these causes Apple to reject the revoke with invalid_client.
+  client_id_type TEXT NOT NULL CHECK (client_id_type IN ('native', 'web')),
+  -- Idempotency: code_hash + code_hash_seen_at together identify the most
+  -- recent authorization_code. Duplicate submission within 60s returns 409
+  -- without re-calling Apple. code_hash_seen_at is NOT the same as updated_at
+  -- (which is bumped by non-exchange writes like web token re-captures).
+  code_hash TEXT,
+  code_hash_seen_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_exchange_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ
+);
+
 -- 1v. category_median_prices (view)
 -- SECURITY INVOKER ensures this runs with the querying user's permissions, not the creator's
 CREATE OR REPLACE VIEW category_median_prices
@@ -452,6 +481,9 @@ CREATE INDEX IF NOT EXISTS idx_events_active_upcoming ON events(event_date, is_p
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type) WHERE is_active = true;
 -- Audit 2026-04-16: FK index on events.created_by.
 CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
+
+-- user_apple_tokens
+CREATE INDEX IF NOT EXISTS user_apple_tokens_apple_sub_idx ON user_apple_tokens (apple_sub);
 
 -- jitter_samples (keep only last 30 samples per user, rolling window)
 CREATE INDEX IF NOT EXISTS idx_jitter_samples_user ON jitter_samples (user_id, collected_at DESC);
@@ -607,6 +639,9 @@ CREATE POLICY "Admin or manager update events" ON events FOR UPDATE
   USING (is_admin() OR is_restaurant_manager(restaurant_id))
   WITH CHECK (is_admin() OR is_restaurant_manager(restaurant_id));
 CREATE POLICY "Admin or manager delete events" ON events FOR DELETE USING (is_admin() OR is_restaurant_manager(restaurant_id));
+
+-- user_apple_tokens: service-role only. No policies for authenticated role = deny all.
+ALTER TABLE user_apple_tokens ENABLE ROW LEVEL SECURITY;
 
 -- jitter_profiles + jitter_samples: users can read own profile, insert own samples, service role manages all
 ALTER TABLE jitter_profiles ENABLE ROW LEVEL SECURITY;
