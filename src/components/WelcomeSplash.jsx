@@ -1,39 +1,14 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { SmileyPin } from './SmileyPin'
 
-// Total animation runtime before natural dismiss (ms).
-// Matches CSS timing: wink fires at 4.2s, period ghosts in at 4.7s + 0.55s.
-// Hold ~0.6s after the period settles so the final state reads as intentional.
-const SPLASH_DURATION_MS = 5800
+// Total visible time before fade-out starts. CSS choreography lands by ~0.8s;
+// we hold until 1.2s, then fade out 0.3s — total 1.5s splash.
+const SPLASH_DURATION_MS = 1200
 const FADE_OUT_MS = 300
 
 // Module-level flag — persists across re-renders within a session so
 // the splash doesn't replay when Layout remounts for any reason.
 let hasShownThisSession = false
-
-function makeLine(chars, baseDelay) {
-  const n = chars.length
-  const center = (n - 1) / 2
-  const maxDist = center + 0.001
-  return chars.map((ch, i) => {
-    const side = i - center
-    const t = Math.abs(side) / maxDist
-    // V-shape: outer letters lift highest, center letters lift least. Negative = up.
-    const dy = -(6 + t * 32)
-    // Tilt outward — left CCW, right CW — strongest at edges.
-    const rot = Math.sign(side) * t * 14
-    const style = {
-      '--dy': `${dy}px`,
-      '--rot': `${rot}deg`,
-      '--delay': `${baseDelay}s`,
-    }
-    return (
-      <span key={i} className="wgh-splash__letter" style={style}>
-        {ch}
-      </span>
-    )
-  })
-}
 
 export function WelcomeSplash() {
   const [phase, setPhase] = useState('visible')
@@ -63,10 +38,6 @@ export function WelcomeSplash() {
     }
   }
 
-  const whats = useMemo(() => makeLine(['w', 'h', 'a', 't', '\u2019', 's'], 0.65), [])
-  const good = useMemo(() => makeLine(['g', 'o', 'o', 'd'], 0.85), [])
-  const here = useMemo(() => makeLine(['h', 'e', 'r', 'e'], 1.05), [])
-
   if (!shouldShow) return null
 
   return (
@@ -84,11 +55,10 @@ export function WelcomeSplash() {
         <div className="wgh-splash__rule" />
         <div className="wgh-splash__text">
           <span className="wgh-splash__b1" style={{ display: 'inline-block' }}>
-            <span className="wgh-splash__line">{whats}</span>
-            <span className="wgh-splash__line">{good}</span>
-            <span className="wgh-splash__line">
-              {here}
-              <span className="wgh-splash__period">.</span>
+            <span className="wgh-splash__line wgh-splash__letter">what&rsquo;s</span>
+            <span className="wgh-splash__line wgh-splash__letter">good</span>
+            <span className="wgh-splash__line wgh-splash__letter">
+              here<span className="wgh-splash__period">.</span>
             </span>
           </span>
         </div>

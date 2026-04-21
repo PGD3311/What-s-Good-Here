@@ -238,6 +238,7 @@
     background: var(--color-surface);
     cursor: pointer;
     transition: opacity 300ms ease-out;
+    animation: fadeIn 0.25s ease-out both;
   }
 
   .wgh-splash__wordmark {
@@ -254,7 +255,7 @@
     background: var(--color-text-primary);
     opacity: 0.18;
     transform: scaleX(0);
-    animation: ruleGrow 0.5s 3.0s cubic-bezier(.3, .8, .3, 1) forwards;
+    animation: ruleGrow 0.35s 0.5s cubic-bezier(.3, .8, .3, 1) forwards;
   }
 
   .wgh-splash__text {
@@ -264,110 +265,46 @@
     letter-spacing: 0.02em;
     line-height: 0.82;
     color: var(--color-text-primary);
-    animation: groundShake 0.6s 1.9s linear both;
   }
 
-  .wgh-splash__b1 { animation: fadeIn 0.3s 0.6s both; }
+  .wgh-splash__b1 { animation: fadeIn 0.25s 0.25s both; }
   .wgh-splash__line { display: block; }
 
-  /* Amatic SC tops out at weight 700 — text-stroke fakes heavier weight.
-     Applied per-letter so the period (a separate span) stays a clean coral dot. */
+  /* Amatic SC tops out at weight 700 — text-stroke fakes heavier weight. */
   .wgh-splash__letter {
     display: inline-block;
-    transform-origin: center bottom;
-    animation: letterDeflect 1.6s cubic-bezier(.45, .05, .55, .95) var(--delay, 0s) both;
-    will-change: transform;
     -webkit-text-stroke: 1px currentColor;
   }
 
   .wgh-splash__period {
     display: inline-block;
-    transform-origin: center;
     color: var(--color-primary);
-    animation: ghostIn 0.55s 4.7s cubic-bezier(.34, 1.4, .5, 1) both;
   }
 
   .wgh-splash .pin-drop {
-    animation: pinPierce 2.6s 0.5s cubic-bezier(.5, .05, .35, 1) both;
-  }
-  .wgh-splash .plate-pop {
-    animation: platePop 0.4s 3.05s cubic-bezier(.34, 1.56, .64, 1) both;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-  .wgh-splash .eye {
-    animation: fadeIn 0.25s 3.2s both, wink 1.6s 4.2s 1 forwards;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-  .wgh-splash .eye.left {
-    animation: fadeIn 0.25s 3.2s both;
+    animation: pinPop 0.4s cubic-bezier(.34, 1.4, .5, 1) both;
   }
   .wgh-splash .smile-draw {
     stroke-dasharray: 80;
-    stroke-dashoffset: 80;
-    animation: drawSmile 0.45s 3.4s cubic-bezier(.5, .2, .3, 1) forwards;
+    stroke-dashoffset: 0;
   }
 
-  @keyframes pinPierce {
-    0%   { opacity: 0; transform: translateY(-500px) scale(0.7) rotate(-3deg); }
-    15%  { opacity: 1; }
-    38%  { transform: translateY(140px) scale(1.02) rotate(2deg); }
-    55%  { transform: translateY(230px) scale(1.04, 0.96) rotate(-1deg); }
-    78%  { transform: translateY(-30px) scale(0.98, 1.02) rotate(1deg); }
-    90%  { transform: translateY(6px) scale(1.01, 0.99); }
-    100% { transform: translateY(0) scale(1) rotate(0); }
+  @keyframes pinPop {
+    0%   { opacity: 0; transform: scale(0.88); }
+    60%  { opacity: 1; transform: scale(1.04); }
+    100% { transform: scale(1); }
   }
 
-  /* V-shape letter deflection — outer letters lift highest, rotate outward;
-     center letters barely move. All letters in a line peak together at 55%. */
-  @keyframes letterDeflect {
-    0%   { transform: translateY(0) rotate(0); }
-    20%  { transform: translateY(calc(var(--dy) * 0.22)) rotate(calc(var(--rot) * 0.2)); }
-    40%  { transform: translateY(calc(var(--dy) * 0.72)) rotate(calc(var(--rot) * 0.7)); }
-    55%  { transform: translateY(var(--dy)) rotate(var(--rot)); }
-    70%  { transform: translateY(calc(var(--dy) * 0.72)) rotate(calc(var(--rot) * 0.7)); }
-    85%  { transform: translateY(calc(var(--dy) * 0.22)) rotate(calc(var(--rot) * 0.2)); }
-    100% { transform: translateY(0) rotate(0); }
-  }
-
-  @keyframes groundShake {
-    0%, 100% { transform: translateX(0); }
-    15%      { transform: translateX(-3px); }
-    30%      { transform: translateX(3px); }
-    45%      { transform: translateX(-2px); }
-    60%      { transform: translateX(2px); }
-    75%      { transform: translateX(-1px); }
-    90%      { transform: translateX(1px); }
-  }
-  @keyframes platePop { from { transform: scale(0); } to { transform: scale(1); } }
-  @keyframes wink {
-    0%, 100% { transform: scaleY(1); }
-    15%, 30% { transform: scaleY(0.08); }
-  }
-  @keyframes drawSmile { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
   @keyframes ruleGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-  @keyframes ghostIn {
-    0%   { opacity: 0; transform: scale(0.4); filter: blur(4px); }
-    60%  { opacity: 0.85; transform: scale(1.18); filter: blur(0.5px); }
-    100% { opacity: 1; transform: scale(1); filter: blur(0); }
-  }
 
-  /* Reduced motion — render the final state without the pierce sequence. */
+  /* Reduced motion — render the final state without the pop. */
   @media (prefers-reduced-motion: reduce) {
+    .wgh-splash,
     .wgh-splash .pin-drop,
-    .wgh-splash .plate-pop,
-    .wgh-splash .eye,
-    .wgh-splash .eye.left,
-    .wgh-splash .smile-draw,
-    .wgh-splash__letter,
     .wgh-splash__rule,
-    .wgh-splash__text,
-    .wgh-splash__b1,
-    .wgh-splash__period {
+    .wgh-splash__b1 {
       animation: none;
     }
-    .wgh-splash .smile-draw { stroke-dashoffset: 0; }
     .wgh-splash__rule { transform: scaleX(1); }
   }
 }
