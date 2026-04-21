@@ -61,14 +61,18 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
     }
   }, [activeIndex, onCategoryChange])
 
-  // Auto-scroll tab bar to keep active tab visible
+  // Auto-scroll tab bar to keep active tab visible.
+  // Scroll tabsRef horizontally ourselves — scrollIntoView with block: 'nearest'
+  // will vertically scroll the outer container when the tab bar is off-screen,
+  // which fights any page-level scroll-to-carousel animation from callers.
   useEffect(function () {
-    if (!tabsRef.current) return
-    var activeTab = tabsRef.current.children[activeIndex]
-    if (activeTab) {
-      var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      activeTab.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', inline: 'center', block: 'nearest' })
-    }
+    var tabs = tabsRef.current
+    if (!tabs) return
+    var activeTab = tabs.children[activeIndex]
+    if (!activeTab) return
+    var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    var targetLeft = activeTab.offsetLeft - (tabs.offsetWidth - activeTab.offsetWidth) / 2
+    tabs.scrollTo({ left: targetLeft, behavior: prefersReducedMotion ? 'auto' : 'smooth' })
   }, [activeIndex])
 
   // Get all dishes for a tab (unsliced)
