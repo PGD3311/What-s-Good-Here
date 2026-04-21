@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/authApi'
+import { supabase } from '../lib/supabase'
 import { SmileyPin } from '../components/SmileyPin'
 
 export function ResetPassword() {
@@ -12,12 +13,16 @@ export function ResetPassword() {
   const [isValidSession, setIsValidSession] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
 
-  // Check if we have a valid recovery session
+  // Under PKCE, Supabase exchanges ?code= asynchronously, so we subscribe
+  // to auth events instead of relying on a single getSession() read that
+  // can fire before the exchange completes.
   useEffect(() => {
-    const checkSession = async () => {
-      // Supabase automatically handles the recovery token from the URL
-      const { data: { session } } = await authApi.getSession()
+    let decided = false
+    let cancelled = false
 
+    const decide = (session) => {
+      if (cancelled || decided) return
+      decided = true
       if (session) {
         setIsValidSession(true)
       } else {
@@ -29,7 +34,27 @@ export function ResetPassword() {
       setCheckingSession(false)
     }
 
-    checkSession()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        decide(session)
+      } else if (event === 'INITIAL_SESSION' && session) {
+        decide(session)
+      }
+    })
+
+    // Fallback: if no recovery/signed-in event arrives within 5s, resolve
+    // with whatever getSession reports. Guards against silent init failure.
+    const timer = setTimeout(async () => {
+      if (cancelled || decided) return
+      const { data: { session } } = await supabase.auth.getSession()
+      decide(session)
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      subscription.unsubscribe()
+    }
   }, [])
 
   const handleSubmit = async (e) => {
