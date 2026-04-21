@@ -259,5 +259,41 @@ describe('Auth API', () => {
       expect(r.ok).toBe(false)
       expect(supabase.functions.invoke).not.toHaveBeenCalled()
     })
+
+    it('does NOT retry on body-only failure without transient marker', async () => {
+      // Regression guard for the "default status to 500 → retry" bug caught
+      // in Codex review: a structured failure body like NO_APPLE_IDENTITY
+      // without transient:true must NOT be retried, even when error.status is
+      // missing (which is the case for supabase.functions.invoke body-only
+      // failures in some SDK versions).
+      supabase.functions.invoke.mockResolvedValueOnce({
+        data: { ok: false, code: 'NO_APPLE_IDENTITY' },
+        error: null,
+      })
+
+      const r = await authApi.persistAppleRefreshToken('rt.abc')
+
+      expect(r.ok).toBe(false)
+      expect(r.code).toBe('NO_APPLE_IDENTITY')
+      expect(supabase.functions.invoke).toHaveBeenCalledTimes(1)
+    })
+
+    it('retries on body-marked transient failure', async () => {
+      // Inverse of the above — when the Edge Function returns
+      // { ok: false, transient: true } (e.g., VAULT_UNAVAILABLE), we DO retry.
+      supabase.functions.invoke
+        .mockResolvedValueOnce({
+          data: { ok: false, code: 'VAULT_UNAVAILABLE', transient: true },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: { ok: true }, error: null })
+
+      const promise = authApi.persistAppleRefreshToken('rt.abc')
+      await vi.advanceTimersByTimeAsync(1000)
+      const r = await promise
+
+      expect(r.ok).toBe(true)
+      expect(supabase.functions.invoke).toHaveBeenCalledTimes(2)
+    })
   })
 })

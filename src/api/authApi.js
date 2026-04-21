@@ -387,8 +387,45 @@ export const authApi = {
    * @returns {Promise<{ ok: boolean, code?: string, status?: number }>}
    */
   async persistAppleRefreshToken(providerRefreshToken) {
+    // Local safe side-effect helpers. PostHog and the logger transport can
+    // themselves throw (storage full, network blocked, etc.). Flow K is
+    // contract-bound to never reject, so wrap every side effect.
+    const safeCapture = (event, props) => {
+      try {
+        // Avoid passing undefined — keeps toHaveBeenCalledWith assertions
+        // simple and matches the 1-arg shape existing callsites use.
+        if (props === undefined) capture(event)
+        else capture(event, props)
+      } catch { /* swallow — never block Flow K */ }
+    }
+    const safeWarn = (msg, meta) => {
+      try { logger.warn(msg, meta) } catch { /* swallow */ }
+    }
+
     if (!providerRefreshToken) {
       return { ok: false, reason: 'missing_token' }
+    }
+
+    // Retry-eligibility rule:
+    //   - Server sent structured failure (data.ok === false): respect it.
+    //     Retry ONLY if the body explicitly marks itself transient.
+    //     (Our Edge Function sets `transient: true` on VAULT_UNAVAILABLE,
+    //     TOKEN_LOOKUP_FAILED, UPSERT_FAILED, IDENTITY_LOOKUP_FAILED.)
+    //   - Transport-level error (no structured body, only error.status):
+    //     Retry on 5xx / 504 per APPLE_PERSIST_TRANSIENT_STATUSES.
+    //   - Anything else: no retry.
+    //
+    // Without this guard, a body-only failure like NO_APPLE_IDENTITY (status
+    // defaults to 500 when the SDK doesn't populate it) would incorrectly
+    // hit the transient-retry branch.
+    const isTransient = (data, error) => {
+      if (data && data.ok === false) {
+        return data.transient === true
+      }
+      if (error?.status && APPLE_PERSIST_TRANSIENT_STATUSES.has(error.status)) {
+        return true
+      }
+      return false
     }
 
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -399,29 +436,29 @@ export const authApi = {
         })
 
         if (!error && data?.ok === true) {
-          capture('apple_token_persisted')
+          safeCapture('apple_token_persisted')
           return { ok: true }
         }
 
-        const status = error?.status ?? 500
+        const status = error?.status ?? null
         const code = data?.code
 
-        if (!APPLE_PERSIST_TRANSIENT_STATUSES.has(status)) {
-          logger.warn('apple-token-persist non-transient failure', { status, code })
+        if (!isTransient(data, error)) {
+          safeWarn('apple-token-persist non-transient failure', { status, code })
           return { ok: false, code, status }
         }
 
         if (attempt === 2) {
-          capture('apple_token_persist_failed', { status, code })
-          logger.warn('apple-token-persist failed after retry', { status, code })
+          safeCapture('apple_token_persist_failed', { status, code })
+          safeWarn('apple-token-persist failed after retry', { status, code })
           return { ok: false, code, status }
         }
 
         await new Promise((r) => setTimeout(r, APPLE_PERSIST_RETRY_DELAY_MS))
       } catch (err) {
         if (attempt === 2) {
-          capture('apple_token_persist_failed', { status: 0, error: err?.message })
-          logger.warn('apple-token-persist threw after retry', err)
+          safeCapture('apple_token_persist_failed', { status: 0, error: err?.message })
+          safeWarn('apple-token-persist threw after retry', err)
           return { ok: false, error: err?.message }
         }
         await new Promise((r) => setTimeout(r, APPLE_PERSIST_RETRY_DELAY_MS))
