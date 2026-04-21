@@ -41,11 +41,11 @@ export function Privacy() {
               What's Good Here is operated by Daniel Walsh (Martha's Vineyard, Massachusetts).
               Contact:{' '}
               <a
-                href="mailto:hello@whatsgoodhere.app"
+                href="mailto:hello@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@whatsgoodhere.app
+                hello@wghapp.com
               </a>
               . A mailing address is available on request for formal data access requests.
             </p>
@@ -117,7 +117,7 @@ export function Privacy() {
                     className="font-medium"
                     style={{ color: 'var(--color-primary)' }}
                   >
-                    whatsgoodhere.app/jitter
+                    wghapp.com/jitter
                   </a>
                   .
                 </p>
@@ -289,11 +289,11 @@ export function Privacy() {
               If you believe a dish photo or review on the app infringes your copyright, send
               a written notice to{' '}
               <a
-                href="mailto:hello@whatsgoodhere.app"
+                href="mailto:hello@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@whatsgoodhere.app
+                hello@wghapp.com
               </a>
               {' '}that includes: (1) an identification of the copyrighted work you claim has
               been infringed; (2) the URL or description of the infringing content; (3) your
@@ -323,11 +323,11 @@ export function Privacy() {
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               If you have questions about this Privacy Policy, please contact us at:{' '}
               <a
-                href="mailto:hello@whatsgoodhere.app"
+                href="mailto:hello@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@whatsgoodhere.app
+                hello@wghapp.com
               </a>
             </p>
           </section>

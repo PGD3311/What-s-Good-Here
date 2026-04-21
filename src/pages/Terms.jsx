@@ -213,11 +213,11 @@ export function Terms() {
                 <li>You represent that you are not located in a country subject to U.S. government embargo or designated as a "terrorist supporting" country, and you are not on any U.S. government list of prohibited or restricted parties.</li>
                 <li>Any questions or complaints about the app should be directed to{' '}
                   <a
-                    href="mailto:hello@whatsgoodhere.app"
+                    href="mailto:hello@wghapp.com"
                     className="font-medium"
                     style={{ color: 'var(--color-primary)' }}
                   >
-                    hello@whatsgoodhere.app
+                    hello@wghapp.com
                   </a>
                   .
                 </li>
@@ -266,11 +266,11 @@ export function Terms() {
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               Questions about these Terms? Contact us at:{' '}
               <a
-                href="mailto:hello@whatsgoodhere.app"
+                href="mailto:hello@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@whatsgoodhere.app
+                hello@wghapp.com
               </a>
             </p>
           </section>

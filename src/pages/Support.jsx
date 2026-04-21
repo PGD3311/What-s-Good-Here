@@ -60,11 +60,11 @@ export function Support() {
               The fastest way to reach us:
             </p>
             <a
-              href="mailto:hello@whatsgoodhere.app"
+              href="mailto:hello@wghapp.com"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold"
               style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)', fontSize: '14px' }}
             >
-              hello@whatsgoodhere.app
+              hello@wghapp.com
             </a>
             <p className="leading-relaxed mt-3" style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
               We read every email. Typical response time: 1-2 business days.
@@ -102,7 +102,7 @@ export function Support() {
                     className="font-medium"
                     style={{ color: 'var(--color-primary)' }}
                   >
-                    whatsgoodhere.app/for-restaurants
+                    wghapp.com/for-restaurants
                   </a>
                   {' '}or email us to claim your restaurant and get access to the manager portal.
                 </p>
@@ -131,7 +131,7 @@ export function Support() {
                     className="font-medium"
                     style={{ color: 'var(--color-primary)' }}
                   >
-                    whatsgoodhere.app/how-reviews-work
+                    wghapp.com/how-reviews-work
                   </a>
                   {' '}for the full breakdown.
                 </p>
