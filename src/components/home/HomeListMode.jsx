@@ -40,14 +40,15 @@ export const HomeListMode = memo(function HomeListMode({
       carouselRef.current.scrollToCategory(cat)
     }
     setTimeout(function () {
+      var container = listScrollRef && listScrollRef.current
       var el = document.getElementById('top10-carousel')
-      if (el) {
+      if (container && el) {
         var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        var offset = el.getBoundingClientRect().top + window.scrollY - 8
-        window.scrollTo({ top: offset, behavior: prefersReducedMotion ? 'auto' : 'smooth' })
+        var target = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 8
+        container.scrollTo({ top: target, behavior: prefersReducedMotion ? 'auto' : 'smooth' })
       }
     }, 100)
-  }, [onExpandedCategoryChange])
+  }, [onExpandedCategoryChange, listScrollRef])
 
   return (
     <div
@@ -181,20 +182,7 @@ export const HomeListMode = memo(function HomeListMode({
               bestValueMeal={bestValueMeal}
               bestIceCream={bestIceCream}
               localsAggregate={localsAggregate}
-              onExpandCategory={function (cat) {
-                onExpandedCategoryChange(cat)
-                if (carouselRef.current) {
-                  carouselRef.current.scrollToCategory(cat)
-                }
-                setTimeout(function () {
-                  var el = document.getElementById('top10-carousel')
-                  if (el) {
-                    var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-                    var offset = el.getBoundingClientRect().top + window.scrollY - 8
-                    window.scrollTo({ top: offset, behavior: prefersReducedMotion ? 'auto' : 'smooth' })
-                  }
-                }, 100)
-              }}
+              onExpandCategory={handleCategorySelect}
             />
 
             {/* Local Lists — horizontal scroll above the food icon tabs */}
