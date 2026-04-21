@@ -91,14 +91,37 @@ Deno.serve(async (req) => {
   }
   const appleSub = identities[0].provider_id;
   if (!appleSub) {
+    console.error(JSON.stringify({
+      event: 'apple_token_persist_null_provider_id',
+      user_hash: await hashUserId(userId),
+    }));
     return json(500, { ok: false, code: 'IDENTITY_MISSING_SUB' });
   }
 
-  // 4. Encrypt + upsert
+  // 4. Refuse to overwrite a row whose apple_sub differs from the identity
+  // we just derived — defense against account-linking edge cases where the
+  // stored row drifted from auth.identities. Spec Flow K: 409 + alert.
+  const { data: existing, error: existingErr } = await supa
+    .from('user_apple_tokens')
+    .select('apple_sub')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (existingErr) {
+    return json(500, { ok: false, code: 'TOKEN_LOOKUP_FAILED', transient: true });
+  }
+  if (existing && existing.apple_sub !== appleSub) {
+    console.error(JSON.stringify({
+      event: 'apple_token_persist_sub_mismatch',
+      user_hash: await hashUserId(userId),
+    }));
+    return json(409, { ok: false, code: 'APPLE_SUB_MISMATCH' });
+  }
+
+  // 5. Encrypt + upsert
   let encrypted: { ciphertext: string; keyVersion: string };
   try {
     encrypted = await encryptRefreshToken(providerRefreshToken);
-  } catch (e) {
+  } catch {
     console.error(JSON.stringify({
       event: 'apple_token_persist_encrypt_failed',
       user_hash: await hashUserId(userId),
