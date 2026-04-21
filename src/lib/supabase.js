@@ -34,6 +34,7 @@ export const supabase = createClient(
       storageKey: 'whats-good-here-auth',
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      flowType: 'pkce',
     }
   }
 )
