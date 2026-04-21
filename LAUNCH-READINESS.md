@@ -39,7 +39,7 @@ Any Claude session (Dan's, Denis's, mine, a future one) can check items off as w
 ## iOS native (Capacitor)
 
 - [ ] Apple Developer account active (individual now, LLC transfer post-launch)
-- [ ] Capacitor shell builds locally
+- [x] Capacitor shell builds locally — simulator smoke passed 2026-04-20 (#62, #67–#72)
 - [ ] App Store review passed
 - [ ] Sign In with Apple wired
 
