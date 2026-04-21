@@ -78,12 +78,15 @@ export async function decryptRefreshToken(
   ciphertext: string,
   keyVersion: string,
 ): Promise<string> {
-  const key = await loadMasterKey(keyVersion);
+  // Version-byte check comes BEFORE Vault load — fail-fast on malformed
+  // ciphertext without burning a Vault round-trip, and keeps the
+  // version-rejection test self-contained (no credentials required).
   const all = base64ToBytes(ciphertext);
   const version = all[0];
   if (version !== 1) {
     throw new Error(`Unsupported ciphertext version: ${version}`);
   }
+  const key = await loadMasterKey(keyVersion);
   const iv = all.slice(1, 13);
   const body = all.slice(13);
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, body);
@@ -96,9 +99,11 @@ export async function decryptRefreshToken(
  * read `sub` post-Apple-exchange for the sub-binding assertion.
  */
 export function decodeIdToken(jwt: string): { sub: string; [k: string]: unknown } {
-  const [, payload] = jwt.split('.');
-  if (!payload) throw new Error('Malformed JWT');
-  const json = new TextDecoder().decode(base64UrlToBytes(payload));
+  const parts = jwt.split('.');
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+    throw new Error('Malformed JWT');
+  }
+  const json = new TextDecoder().decode(base64UrlToBytes(parts[1]));
   const parsed = JSON.parse(json);
   if (typeof parsed.sub !== 'string' || !parsed.sub) {
     throw new Error('JWT missing sub claim');

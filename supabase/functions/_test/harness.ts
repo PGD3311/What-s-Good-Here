@@ -67,12 +67,15 @@ export async function createTestUser(): Promise<{ userId: string; jwt: string }>
 
   const userId = createData.user.id;
 
-  // Sign in to obtain a real access JWT. The test must present this to the
-  // Edge Function; a manufactured JWT would fail Supabase's getUser() check.
-  const { data: signInData, error: signInErr } = await supa.auth.signInWithPassword({
-    email,
-    password,
+  // Sign in to obtain a real access JWT. Use a throwaway client — if we
+  // reused `supa` (the shared service-role client) for signInWithPassword,
+  // its subsequent DB calls would travel as the user's JWT instead of the
+  // service role, silently losing RLS bypass and leaking fixtures.
+  const signInClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
+  const { data: signInData, error: signInErr } = await signInClient.auth
+    .signInWithPassword({ email, password });
 
   if (signInErr || !signInData?.session?.access_token) {
     // Best-effort cleanup before throwing so we don't leak users.
