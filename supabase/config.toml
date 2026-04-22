@@ -17,11 +17,20 @@ verify_jwt = false
 [functions.menu-refresh]
 verify_jwt = false
 
-# places-details is called from the browser with the publishable anon key. The
-# Supabase Functions gateway rejects the new-format sb_publishable_* key as
-# "UNAUTHORIZED_INVALID_JWT_FORMAT" because it checks JWT shape. The function
-# itself does no DB mutation — it proxies Google Places Details with the server's
-# GOOGLE_PLACES_API_KEY and returns public place data. Same gating exception as
-# places-autocomplete (which is already open and serving from production).
+# places-autocomplete / places-details / places-nearby-search are all browser-
+# facing proxies over the Google Places API. The Supabase Functions gateway
+# rejects the new-format sb_publishable_* anon key as "UNAUTHORIZED_INVALID_JWT_
+# FORMAT" because it checks JWT shape. These functions do no DB writes — they
+# proxy Places results using the server-side GOOGLE_PLACES_API_KEY and return
+# public place data. Disabling the gateway check lets browser calls (including
+# unauthenticated ones from the Add Restaurant modal) reach the function.
+# Abuse surface: only Google Places API cost; rate-limit at the function if
+# needed.
+[functions.places-autocomplete]
+verify_jwt = false
+
 [functions.places-details]
+verify_jwt = false
+
+[functions.places-nearby-search]
 verify_jwt = false
