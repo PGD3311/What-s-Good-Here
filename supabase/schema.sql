@@ -539,8 +539,11 @@ CREATE POLICY "Users can read own favorites" ON favorites FOR SELECT USING ((sel
 CREATE POLICY "Users can insert own favorites" ON favorites FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
 CREATE POLICY "Users can delete own favorites" ON favorites FOR DELETE USING ((select auth.uid()) = user_id);
 
--- admins: admins can read
-CREATE POLICY "Admins can read admins" ON admins FOR SELECT USING (EXISTS (SELECT 1 FROM admins WHERE user_id = (select auth.uid())));
+-- admins: each user can read their own admin row.
+-- Never query `FROM admins` inside this policy — doing so triggers infinite
+-- policy recursion and returns 500. No caller needs the full admin list;
+-- clients check their own admin status via adminApi.isAdmin().
+CREATE POLICY "Users can read own admin row" ON admins FOR SELECT USING ((select auth.uid()) = user_id);
 
 -- dish_photos: public read, users manage own
 CREATE POLICY "Public read access" ON dish_photos FOR SELECT USING (true);

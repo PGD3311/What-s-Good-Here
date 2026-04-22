@@ -853,8 +853,10 @@ DROP POLICY IF EXISTS "Users can delete own favorites" ON favorites;
 CREATE POLICY "Users can delete own favorites" ON favorites FOR DELETE USING ((select auth.uid()) = user_id);
 
 -- ---- admins ----
+-- Each user can read their own admin row (avoids RLS recursion).
 DROP POLICY IF EXISTS "Admins can read admins" ON admins;
-CREATE POLICY "Admins can read admins" ON admins FOR SELECT USING (EXISTS (SELECT 1 FROM admins WHERE user_id = (select auth.uid())));
+DROP POLICY IF EXISTS "Users can read own admin row" ON admins;
+CREATE POLICY "Users can read own admin row" ON admins FOR SELECT USING ((select auth.uid()) = user_id);
 
 -- ---- dish_photos ----
 DROP POLICY IF EXISTS "Public read access" ON dish_photos;
