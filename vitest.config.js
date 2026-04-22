@@ -11,6 +11,13 @@ export default defineConfig({
       'e2e/**',
       'whats-good-here-soul/**',
       'node_modules/**',
+      // Deno-native tests — these use `https://deno.land/std/...` + `https://esm.sh/...`
+      // URL imports that Node's ESM loader rejects. Run them with:
+      //   deno test --allow-net --allow-env <path>
+      // Other supabase/functions/*.test.ts files are pure vitest (import from 'vitest')
+      // and stay included by default — only list the Deno-specific ones here.
+      'supabase/functions/_shared/apple.test.ts',
+      'supabase/functions/apple-token-persist/index.test.ts',
     ],
   },
 })
