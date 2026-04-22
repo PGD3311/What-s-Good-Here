@@ -10,13 +10,15 @@
  */
 
 const NAMED_ORIGINS = new Set<string>([
-  'https://whats-good-here.vercel.app', // prod web
+  'https://wghapp.com',                 // canonical prod web (post 2026-04-21)
+  'https://www.wghapp.com',             // www apex alias
+  'https://whats-good-here.vercel.app', // legacy prod alias (same deployment)
   'capacitor://localhost',              // Capacitor iOS
   'https://localhost',                  // Capacitor Android (default scheme)
   'http://localhost:5173',              // Vite dev
 ])
 
-const DEFAULT_ORIGIN = 'https://whats-good-here.vercel.app'
+const DEFAULT_ORIGIN = 'https://wghapp.com'
 
 export function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false

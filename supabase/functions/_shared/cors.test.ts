@@ -4,6 +4,8 @@ import { corsHeaders, isAllowedOrigin } from './cors.ts'
 describe('cors helper', () => {
   describe('isAllowedOrigin', () => {
     it('accepts named origins', () => {
+      expect(isAllowedOrigin('https://wghapp.com')).toBe(true)
+      expect(isAllowedOrigin('https://www.wghapp.com')).toBe(true)
       expect(isAllowedOrigin('https://whats-good-here.vercel.app')).toBe(true)
       expect(isAllowedOrigin('capacitor://localhost')).toBe(true)
       expect(isAllowedOrigin('https://localhost')).toBe(true)
@@ -30,6 +32,8 @@ describe('cors helper', () => {
       expect(isAllowedOrigin('')).toBe(false)
       expect(isAllowedOrigin('https://evil.com')).toBe(false)
       expect(isAllowedOrigin('http://whats-good-here.vercel.app')).toBe(false)
+      expect(isAllowedOrigin('http://wghapp.com')).toBe(false)
+      expect(isAllowedOrigin('https://wghapp.com.evil.com')).toBe(false)
     })
   })
 
@@ -37,8 +41,15 @@ describe('cors helper', () => {
     it('emits default origin when Origin header is missing', () => {
       const req = new Request('https://example.com')
       const h = corsHeaders(req)
-      expect(h['Access-Control-Allow-Origin']).toBe('https://whats-good-here.vercel.app')
+      expect(h['Access-Control-Allow-Origin']).toBe('https://wghapp.com')
       expect(h['Vary']).toBe('Origin')
+    })
+
+    it('echoes canonical wghapp.com origin back', () => {
+      const req = new Request('https://example.com', {
+        headers: { Origin: 'https://wghapp.com' },
+      })
+      expect(corsHeaders(req)['Access-Control-Allow-Origin']).toBe('https://wghapp.com')
     })
 
     it('echoes allowed Origin back', () => {
