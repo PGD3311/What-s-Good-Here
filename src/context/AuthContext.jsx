@@ -93,6 +93,9 @@ export function AuthProvider({ children }) {
     // SECURITY: Clear any cached PII (email was previously stored for convenience)
     removeSessionItem(STORAGE_KEYS.EMAIL_CACHE)
     removeStorageItem(STORAGE_KEYS.EMAIL_CACHE)
+    // Native: clear the Capgo provider session so the next Google/Apple tap
+    // doesn't silently reuse the cached account (spec Flow I). No-op on web.
+    await authApi.signOutNative()
     await supabase.auth.signOut()
     // Clear React Query cache so the next user on this browser doesn't inherit stale data
     queryClient.clear()
