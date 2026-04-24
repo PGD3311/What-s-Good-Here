@@ -1,0 +1,56 @@
+-- Migration: <NAME>
+-- Created:   <TIMESTAMP>
+-- Purpose:   [Describe WHAT this migration does and WHY — link to CURRENT_FOCUS.md or issue # if relevant]
+--
+-- DEPLOY: Run this file in the Supabase SQL Editor. Adding it to supabase/migrations/
+--         does NOT deploy it. After running, verify with a test call.
+--
+-- SOURCE OF TRUTH: Update supabase/schema.sql first, then mirror the change here.
+
+-- ============================================================================
+-- FORWARD MIGRATION
+-- ============================================================================
+
+-- [Your SQL goes here.]
+--
+-- Reminders from CLAUDE.md §1.5 — delete these comments once you've handled them:
+--
+--   • ROUND() on a float expression needs ::NUMERIC cast, or Postgres errors:
+--        ROUND(avg_rating::NUMERIC, 2)
+--
+--   • In PL/pgSQL functions with RETURNS TABLE (col_name ...), the column
+--     names become local variables inside the function body. Bare references
+--     are ambiguous if a joined table has the same column. ALWAYS qualify:
+--        SELECT votes.dish_id FROM votes   -- correct
+--        SELECT dish_id        FROM votes   -- ambiguous, will bite you
+--
+--   • In JS (src/api/*), use .maybeSingle() for lookups that might return 0
+--     rows. .single() throws on zero results.
+--
+--   • .rpc() function names in JS must exactly match the CREATE FUNCTION name
+--     here. Do not rename based on Postgres hint messages.
+
+
+-- ============================================================================
+-- ROLLBACK
+-- ============================================================================
+-- Required when this migration:
+--   • changes column types
+--   • drops or recreates triggers
+--   • alters FK strategies
+--   • rewrites RLS policies
+--
+-- Exempt (rollback is obvious):
+--   • pure additive CREATE INDEX IF NOT EXISTS
+--   • CREATE OR REPLACE FUNCTION (just re-run the previous version)
+--
+-- If a SQL rollback is not possible (e.g., the migration triggers a data
+-- backfill), say so explicitly:
+--
+--   -- No SQL rollback. Recovery requires restore from <timestamp> backup.
+--
+-- Otherwise, paste the revert SQL below.
+
+-- ROLLBACK:
+--
+-- [Paste-ready SQL to revert the forward migration above.]
