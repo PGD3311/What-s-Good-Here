@@ -424,6 +424,34 @@ function mergeCandidates(a: MenuCandidate[], b: MenuCandidate[]): MenuCandidate[
 }
 
 /**
+ * Anthropic's image and document URL sources require HTTPS — they reject http:// with
+ * "Only HTTPS URLs are supported." Many restaurant sites still list assets at http://.
+ * Most CDNs/hosts serve the same asset over https, so upgrade the protocol before sending.
+ * URLs that aren't http/https (data:, file:, mailto:, etc.) are dropped — the extractors
+ * can't use them anyway. Output is deduped to avoid double-charging when both protocols
+ * appeared in the source.
+ */
+function toHttpsUrls(urls: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const u of urls) {
+    if (!u) continue
+    let upgraded: string
+    if (u.startsWith('https://')) {
+      upgraded = u
+    } else if (u.startsWith('http://')) {
+      upgraded = 'https://' + u.slice('http://'.length)
+    } else {
+      continue
+    }
+    if (seen.has(upgraded)) continue
+    seen.add(upgraded)
+    out.push(upgraded)
+  }
+  return out
+}
+
+/**
  * Extract dishes from menu text using Claude
  */
 async function extractMenuWithClaude(content: string, restaurantName: string): Promise<MenuExtractionResult> {
@@ -485,16 +513,17 @@ async function extractMenuFromImagesWithClaude(
   imageUrls: string[],
   restaurantName: string
 ): Promise<MenuExtractionResult> {
-  if (imageUrls.length === 0) return { dishes: [], menu_section_order: [] }
+  const httpsUrls = toHttpsUrls(imageUrls)
+  if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
 
-  const content: Array<Record<string, unknown>> = imageUrls.map(url => ({
+  const content: Array<Record<string, unknown>> = httpsUrls.map(url => ({
     type: 'image',
     source: { type: 'url', url },
   }))
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${imageUrls.length === 1 ? 'attached image' : `${imageUrls.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached image' : `${httpsUrls.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -546,11 +575,12 @@ async function extractMenuFromPdfsWithClaude(
   pdfUrls: string[],
   restaurantName: string
 ): Promise<MenuExtractionResult> {
-  if (pdfUrls.length === 0) return { dishes: [], menu_section_order: [] }
+  const httpsUrls = toHttpsUrls(pdfUrls)
+  if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
 
   // Use URL source instead of base64 — Sonnet fetches the PDFs server-side,
   // avoiding memory pressure on the Edge Function runtime.
-  const content: Array<Record<string, unknown>> = pdfUrls.map(url => ({
+  const content: Array<Record<string, unknown>> = httpsUrls.map(url => ({
     type: 'document',
     source: {
       type: 'url',
@@ -560,7 +590,7 @@ async function extractMenuFromPdfsWithClaude(
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${pdfUrls.length === 1 ? 'attached PDF' : `${pdfUrls.length} attached PDFs`}. Combine all dishes into a single output. If different PDFs represent different meal services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached PDF' : `${httpsUrls.length} attached PDFs`}. Combine all dishes into a single output. If different PDFs represent different meal services (breakfast, lunch, dinner), preserve those as menu sections.`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
