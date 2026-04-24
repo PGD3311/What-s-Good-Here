@@ -8,8 +8,12 @@ vi.mock('../lib/supabase', () => ({
       getUser: vi.fn(),
     },
     from: vi.fn(),
+    rpc: vi.fn(),
     storage: {
       from: vi.fn(),
+    },
+    functions: {
+      invoke: vi.fn(),
     },
   },
 }))
@@ -297,6 +301,57 @@ describe('Dish Photos API', () => {
           analysisResults: {},
         })
       ).rejects.toThrow('You must be logged in to upload photos')
+    })
+
+    describe('moderation gating', () => {
+      // Helpers to build up the happy-path-up-to-moderation mock chain.
+      function setupUploadUntilModeration() {
+        supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'user-1' } } })
+        supabase.rpc.mockResolvedValue({ data: { allowed: true }, error: null })
+        const removeMock = vi.fn().mockResolvedValue({ data: null, error: null })
+        supabase.storage.from.mockReturnValue({
+          upload: vi.fn().mockResolvedValue({ data: {}, error: null }),
+          getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/user-1/dish-1.jpg' } }),
+          remove: removeMock,
+        })
+        return { removeMock }
+      }
+
+      it('rejects when moderation flags is_unsafe and removes the storage object', async () => {
+        const { removeMock } = setupUploadUntilModeration()
+        supabase.functions.invoke.mockResolvedValueOnce({
+          data: { is_food_photo: true, is_unsafe: true, reason: "This photo isn't allowed." },
+          error: null,
+        })
+        const file = new File(['x'], 'x.jpg', { type: 'image/jpeg' })
+
+        await expect(dishPhotosApi.uploadPhoto({ dishId: 'dish-1', file })).rejects.toThrow("This photo isn't allowed.")
+        expect(removeMock).toHaveBeenCalledWith(['user-1/dish-1.jpg'])
+      })
+
+      it('rejects when moderation says photo is not food', async () => {
+        const { removeMock } = setupUploadUntilModeration()
+        supabase.functions.invoke.mockResolvedValueOnce({
+          data: { is_food_photo: false, is_unsafe: false, reason: 'Please upload a food photo.' },
+          error: null,
+        })
+        const file = new File(['x'], 'x.jpg', { type: 'image/jpeg' })
+
+        await expect(dishPhotosApi.uploadPhoto({ dishId: 'dish-1', file })).rejects.toThrow('Please upload a food photo.')
+        expect(removeMock).toHaveBeenCalled()
+      })
+
+      it('fails closed when the moderation function errors (Anthropic outage / function down)', async () => {
+        const { removeMock } = setupUploadUntilModeration()
+        supabase.functions.invoke.mockResolvedValueOnce({
+          data: null,
+          error: new Error('Function invocation failed'),
+        })
+        const file = new File(['x'], 'x.jpg', { type: 'image/jpeg' })
+
+        await expect(dishPhotosApi.uploadPhoto({ dishId: 'dish-1', file })).rejects.toThrow()
+        expect(removeMock).toHaveBeenCalled()
+      })
     })
   })
 

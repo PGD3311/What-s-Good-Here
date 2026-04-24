@@ -81,6 +81,23 @@ export const dishPhotosApi = {
         .from('dish-photos')
         .getPublicUrl(fileName)
 
+      // Pre-display moderation (Apple App Store guideline 1.2 — UGC filtering).
+      // The file is in storage but not yet exposed via the dish_photos row.
+      // If Sonnet vision rejects it, delete from storage and surface a clear
+      // error to the user. Fail closed: any moderation outage rejects the upload.
+      const { data: modResult, error: modError } = await supabase.functions.invoke(
+        'photo-moderate',
+        { body: { photo_url: publicUrl } }
+      )
+      const isUnsafe = modError || !modResult || modResult.is_unsafe === true || modResult.is_food_photo === false
+      if (isUnsafe) {
+        await supabase.storage.from('dish-photos').remove([fileName])
+        const userMessage = modResult?.reason || "Couldn't verify your photo. Please try again."
+        if (modError) logger.error('photo-moderate invoke failed:', modError)
+        else logger.warn('photo rejected by moderation:', { reason: modResult.reason })
+        throw new Error(userMessage)
+      }
+
       // Build record with quality fields if analysis was provided
       const photoRecord = {
         dish_id: dishId,
