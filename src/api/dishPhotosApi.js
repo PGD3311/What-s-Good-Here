@@ -91,7 +91,16 @@ export const dishPhotosApi = {
       )
       const isUnsafe = modError || !modResult || modResult.is_unsafe === true || modResult.is_food_photo === false
       if (isUnsafe) {
-        await supabase.storage.from('dish-photos').remove([fileName])
+        // Bucket is public, so a failed delete leaves a rejected photo accessible
+        // by direct URL. Log loudly so monitoring catches the orphan; surface the
+        // user-facing rejection regardless (we can't return success on rejected
+        // content even if cleanup fails).
+        const { error: removeError } = await supabase.storage.from('dish-photos').remove([fileName])
+        if (removeError) {
+          logger.error('photo-moderate: failed to remove rejected photo from storage', {
+            fileName, removeError,
+          })
+        }
         const userMessage = modResult?.reason || "Couldn't verify your photo. Please try again."
         if (modError) logger.error('photo-moderate invoke failed:', modError)
         else logger.warn('photo rejected by moderation:', { reason: modResult.reason })

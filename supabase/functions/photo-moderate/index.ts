@@ -156,6 +156,18 @@ serve(async (req) => {
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
+  // Allowlist: only URLs from THIS project's dish-photos bucket. Without this,
+  // any authenticated user could burn the Anthropic budget asking us to moderate
+  // arbitrary internet images. JWT auth alone scopes WHO can call; this scopes
+  // WHAT they can ask us to moderate.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  const allowedPrefix = supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/dish-photos/` : ''
+  if (!allowedPrefix || !photoUrl.startsWith(allowedPrefix)) {
+    return new Response(JSON.stringify({ error: 'photo_url must point to the dish-photos bucket' }), {
+      status: 400,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
 
   const result = await moderate(photoUrl)
 
