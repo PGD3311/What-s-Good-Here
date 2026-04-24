@@ -104,6 +104,15 @@ export const authApi = {
   },
 
   /**
+   * Subscribe to auth state changes. Synchronous passthrough — returns the
+   * { data: { subscription } } shape directly so callers can call
+   * subscription.unsubscribe() in cleanup.
+   */
+  onAuthStateChange(callback) {
+    return supabase.auth.onAuthStateChange(callback)
+  },
+
+  /**
    * Sign in with Google OAuth
    * @param {string|null} redirectUrl - Optional custom redirect URL (must be same-origin)
    * @returns {Promise<Object>} Auth response

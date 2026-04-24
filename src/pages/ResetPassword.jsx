@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/authApi'
-import { supabase } from '../lib/supabase'
 import { SmileyPin } from '../components/SmileyPin'
 
 export function ResetPassword() {
@@ -34,7 +33,7 @@ export function ResetPassword() {
       setCheckingSession(false)
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = authApi.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
         decide(session)
       } else if (event === 'INITIAL_SESSION' && session) {
@@ -46,7 +45,7 @@ export function ResetPassword() {
     // with whatever getSession reports. Guards against silent init failure.
     const timer = setTimeout(async () => {
       if (cancelled || decided) return
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await authApi.getSession()
       decide(session)
     }, 5000)
 

@@ -186,7 +186,7 @@ export function LocationPicker({ radius, onRadiusChange }) {
           <button
             onClick={function () { setShowRadiusSheet(true) }}
             aria-label={radius === 0 ? 'Showing dishes everywhere. Tap to change' : 'Search radius: ' + radius + ' miles. Tap to change'}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border transition-all hover:border-neutral-300"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border transition-all hover:border-black/10"
             style={{
               background: 'var(--color-surface)',
               borderColor: 'var(--color-divider)',
