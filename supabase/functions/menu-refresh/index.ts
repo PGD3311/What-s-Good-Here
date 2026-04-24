@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
-import { discoverMenuCandidates, type MenuCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, findSubMenuPages, type MenuCandidate } from './menu-candidates.ts'
 
 /**
  * Menu Refresh Edge Function
@@ -393,16 +393,23 @@ async function fetchMenuContent(url: string): Promise<string> {
 }
 
 interface ExtractionAttempt {
-  strategy: 'image' | 'pdf' | 'html'
+  strategy: 'image' | 'pdf' | 'html' | 'sub-page'
   url_count: number
   top_score?: number
   dishes_found: number
   error?: string
+  url?: string  // for sub-page attempts, which sub-URL was tried
 }
 
 // Caps per strategy. Vision is per-pixel-token expensive — keep image batches small.
 const MAX_IMAGE_CANDIDATES = 3
 const MAX_PDF_CANDIDATES = 6
+const MAX_SUB_PAGES = 4
+// Render fallback #2 fires more broadly than fallback #1: even on plain HTML
+// sites without a CMS signature, if everything else returned 0 dishes the page
+// might just be a JS-loaded shell. One Browserless call per failed job is cheap
+// insurance vs. another dead-letter restaurant.
+const SPARSE_TEXT_THRESHOLD = 2000
 
 // Merge two candidate lists by URL (last-write-wins on score), then re-sort.
 // Used when Browserless renders surface JS-injected assets that weren't in the raw HTML.
@@ -1035,8 +1042,62 @@ serve(async (req) => {
             }
           }
 
-          // Render fallback #2: zero dishes AND CMS requires rendering AND we haven't rendered yet
-          if (extracted.dishes.length === 0 && cmsRequiresRender(cms) && !rendererAttempted) {
+          // Sub-page fallback (Pattern 1): when /menu is just a navigation page
+          // linking to /brunch /lunch /dinner /breakfast (Webflow / WordPress /
+          // multi-service restaurants split the menu across pages). Fetch each
+          // sub-page, run extraction on each, merge results.
+          if (extracted.dishes.length === 0) {
+            const subPages = findSubMenuPages(rawHtml, menuUrl, MAX_SUB_PAGES)
+            if (subPages.length > 0) {
+              console.log(`${restaurant.name}: trying ${subPages.length} sub-menu pages`)
+              // Dedupe across sub-pages by (lowercased name, lowercased section).
+              // Many restaurants list the same dish on /lunch and /dinner; without
+              // deduping we'd report inflated dishes_found, and even though
+              // upsertDishes coalesces by name later, keeping the merged result
+              // honest matters for telemetry and for pages that genuinely share
+              // sections (e.g. desserts).
+              const seenDishes = new Set<string>()
+              const mergedDishes: typeof extracted.dishes = []
+              const mergedSections: string[] = []
+              for (const subUrl of subPages) {
+                try {
+                  const subHtml = await fetchRawHtml(subUrl)
+                  const subText = extractMenuTextFromHtml(subHtml)
+                  if (subText.length < 50) {
+                    attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: 0, url: subUrl, error: 'page_too_short' })
+                    continue
+                  }
+                  const subResult = await extractMenuWithClaude(subText, restaurant.name)
+                  attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: subResult.dishes.length, url: subUrl })
+                  for (const dish of subResult.dishes) {
+                    const key = `${dish.name.toLowerCase()}|${(dish.menu_section || '').toLowerCase()}`
+                    if (seenDishes.has(key)) continue
+                    seenDishes.add(key)
+                    mergedDishes.push(dish)
+                  }
+                  for (const sec of subResult.menu_section_order) {
+                    if (!mergedSections.includes(sec)) mergedSections.push(sec)
+                  }
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : String(err)
+                  console.error(`${restaurant.name}: sub-page ${subUrl} failed:`, message)
+                  attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: 0, url: subUrl, error: message })
+                }
+              }
+              if (mergedDishes.length > 0) {
+                extracted = { dishes: mergedDishes, menu_section_order: mergedSections }
+              }
+            }
+          }
+
+          // Render fallback #2: zero dishes AND not yet rendered AND the site
+          // either matches a known JS CMS OR has sparse raw text. The sparse-text
+          // gate catches custom React/Vue restaurants that don't carry a CMS
+          // signature — Quitsa-class sites. Without the gate we'd burn Browserless
+          // on every 0-dish failure, including restaurants that legitimately have
+          // no menu we can extract.
+          const looksJsRendered = cmsRequiresRender(cms) || rawTextLen < SPARSE_TEXT_THRESHOLD
+          if (extracted.dishes.length === 0 && !rendererAttempted && looksJsRendered) {
             console.log(`${restaurant.name}: Sonnet found 0 dishes in ${cms} site, attempting render fallback`)
             rendererAttempted = true  // mark ATTEMPTED regardless of outcome
             try {

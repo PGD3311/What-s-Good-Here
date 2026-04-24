@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverMenuCandidates, scoreCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, findSubMenuPages, scoreCandidate } from './menu-candidates.ts'
 
 describe('scoreCandidate', () => {
   it('positive: menu in URL', () => {
@@ -190,5 +190,90 @@ describe('discoverMenuCandidates', () => {
     `
     const out = discoverMenuCandidates(html, 'https://x.com/')
     expect(out.map(c => c.url)).toEqual([])
+  })
+})
+
+describe('findSubMenuPages', () => {
+  it('finds /brunch /lunch /dinner /breakfast nav links', () => {
+    const html = `
+      <nav>
+        <a href="/brunch">Brunch</a>
+        <a href="/lunch">Lunch</a>
+        <a href="/dinner">Dinner</a>
+        <a href="/breakfast">Breakfast</a>
+      </nav>
+    `
+    const out = findSubMenuPages(html, 'https://otwnantucket.com/menu')
+    expect(out).toEqual([
+      'https://otwnantucket.com/brunch',
+      'https://otwnantucket.com/lunch',
+      'https://otwnantucket.com/dinner',
+      'https://otwnantucket.com/breakfast',
+    ])
+  })
+
+  it('matches /brunch-menu and /our-dinner', () => {
+    const html = `
+      <a href="/brunch-menu">Brunch Menu</a>
+      <a href="/our-dinner">Dinner</a>
+    `
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toContain('https://x.com/brunch-menu')
+    expect(out).toContain('https://x.com/our-dinner')
+  })
+
+  it('skips false positives like /brunch-recipes /lunch-club', () => {
+    const html = `
+      <a href="/brunch-recipes">Recipes</a>
+      <a href="/lunch-club">Lunch Club</a>
+    `
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
+  })
+
+  it('skips external links (different origin)', () => {
+    const html = `
+      <a href="/brunch">Internal</a>
+      <a href="https://other.com/dinner">External</a>
+    `
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/brunch'])
+  })
+
+  it('skips self-links (the page we are already fetching)', () => {
+    const html = '<a href="/menu">Menu</a><a href="/dinner">Dinner</a>'
+    const out = findSubMenuPages(html, 'https://x.com/menu')
+    expect(out).toEqual(['https://x.com/dinner'])
+  })
+
+  it('skips self-links even when the link has a different query/hash', () => {
+    const html = '<a href="/menu?tab=dinner">Dinner Tab</a><a href="/menu#brunch">Brunch Anchor</a><a href="/lunch">Lunch</a>'
+    const out = findSubMenuPages(html, 'https://x.com/menu')
+    expect(out).toEqual(['https://x.com/lunch'])
+  })
+
+  it('caps at max (default 4)', () => {
+    const html = `
+      <a href="/brunch">B</a>
+      <a href="/lunch">L</a>
+      <a href="/dinner">D</a>
+      <a href="/breakfast">Bk</a>
+      <a href="/menu-1">M1</a>
+      <a href="/menu-2">M2</a>
+    `
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toHaveLength(4)
+  })
+
+  it('dedupes URLs that differ only by query/hash', () => {
+    const html = '<a href="/brunch?ref=nav">B1</a><a href="/brunch#section">B2</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/brunch'])
+  })
+
+  it('returns empty when no menu nav links exist', () => {
+    const html = '<a href="/about">About</a><a href="/contact">Contact</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
   })
 })

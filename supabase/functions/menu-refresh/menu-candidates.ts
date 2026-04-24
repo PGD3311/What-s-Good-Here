@@ -209,6 +209,50 @@ function extractRawMatches(html: string, baseUrl: string): RawMatch[] {
   return matches
 }
 
+// Path patterns that name a sub-menu page (Webflow / WordPress sites often
+// split their menu across /brunch, /lunch, /dinner, etc.). Anchor regex lets
+// us match `/brunch`, `/our-brunch`, `/brunch-menu`, but not `/brunch-recipes`.
+const SUB_MENU_PATH_PATTERNS = [
+  /\/(?:[\w-]*-)?brunch(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?lunch(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?dinner(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?breakfast(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?menu(?:-\d+)?\/?$/i,  // /menu-1, /our-menu — but only as standalone path
+]
+
+/**
+ * Find sub-menu page URLs on a parent menu page. Used as Pattern 1 fallback
+ * when the menu page itself yielded no dishes — many restaurants split their
+ * menu across /brunch, /lunch, /dinner instead of putting it all on /menu.
+ *
+ * Same-origin only (don't follow external links). Capped to keep cost bounded.
+ */
+export function findSubMenuPages(html: string, baseUrl: string, max = 4): string[] {
+  const base = new URL(baseUrl)
+  const baseNormalized = base.origin + base.pathname  // strip query/hash for self-link check
+  const found = new Set<string>()
+  const out: string[] = []
+  const anchorRegex = /<a\b[^>]*\shref=["']([^"']+)["']/gi
+  let m
+  while ((m = anchorRegex.exec(html)) !== null) {
+    let absolute: URL
+    try {
+      absolute = new URL(m[1], base)
+    } catch {
+      continue
+    }
+    if (absolute.origin !== base.origin) continue
+    const normalized = absolute.origin + absolute.pathname  // drop ?query #hash
+    if (normalized === baseNormalized) continue  // skip self-links (compare normalized)
+    if (!SUB_MENU_PATH_PATTERNS.some(p => p.test(absolute.pathname))) continue
+    if (found.has(normalized)) continue
+    found.add(normalized)
+    out.push(normalized)
+    if (out.length >= max) break
+  }
+  return out
+}
+
 /**
  * Discover and score every menu candidate on the page, sorted by descending score.
  *
