@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
+import { discoverMenuCandidates, type MenuCandidate } from './menu-candidates.ts'
 
 /**
  * Menu Refresh Edge Function
@@ -391,30 +392,28 @@ async function fetchMenuContent(url: string): Promise<string> {
   return extractMenuTextFromHtml(html)
 }
 
-/**
- * Extract PDF URLs from HTML that look like menu documents.
- * Returns absolute URLs. Skips PDFs that clearly aren't menus (gift cards, terms, etc).
- */
-function extractPdfMenuUrls(html: string, baseUrl: string): string[] {
-  const base = new URL(baseUrl)
-  // Match href="..."pdf and src="..."pdf
-  const pdfRegex = /(?:href|src)=["']([^"']*\.pdf[^"']*)["']/gi
-  const found = new Set<string>()
-  let match
-  while ((match = pdfRegex.exec(html)) !== null) {
-    try {
-      const url = new URL(match[1], base).href
-      // Skip obvious non-menu PDFs
-      const lower = url.toLowerCase()
-      if (/\b(terms|privacy|policy|giftcard|gift-card|application|job|employment|contract|waiver|rules)\b/.test(lower)) {
-        continue
-      }
-      found.add(url)
-    } catch {
-      // Invalid URL, skip
-    }
+interface ExtractionAttempt {
+  strategy: 'image' | 'pdf' | 'html'
+  url_count: number
+  top_score?: number
+  dishes_found: number
+  error?: string
+}
+
+// Caps per strategy. Vision is per-pixel-token expensive — keep image batches small.
+const MAX_IMAGE_CANDIDATES = 3
+const MAX_PDF_CANDIDATES = 6
+
+// Merge two candidate lists by URL (last-write-wins on score), then re-sort.
+// Used when Browserless renders surface JS-injected assets that weren't in the raw HTML.
+function mergeCandidates(a: MenuCandidate[], b: MenuCandidate[]): MenuCandidate[] {
+  const byUrl = new Map<string, MenuCandidate>()
+  for (const c of a) byUrl.set(c.url, c)
+  for (const c of b) {
+    const existing = byUrl.get(c.url)
+    if (!existing || c.score > existing.score) byUrl.set(c.url, c)
   }
-  return Array.from(found).slice(0, 6) // Cap at 6 PDFs per restaurant
+  return Array.from(byUrl.values()).sort((x, y) => y.score - x.score)
 }
 
 /**
@@ -457,6 +456,67 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
   const parsed = JSON.parse(jsonMatch[0])
 
   // Validate categories
+  const validDishes = (Array.isArray(parsed.dishes) ? parsed.dishes : [])
+    .filter((d: ExtractedDish) => d.name && d.category)
+    .map((d: ExtractedDish) => ({
+      ...d,
+      category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+    }))
+
+  return {
+    dishes: validDishes,
+    menu_section_order: Array.isArray(parsed.menu_section_order) ? parsed.menu_section_order : [],
+  }
+}
+
+/**
+ * Extract dishes from one or more menu IMAGES (PNG/JPG/WEBP) using Sonnet vision.
+ * Images are passed by URL so Sonnet fetches them server-side (no Edge Function OOM).
+ * Vision is more expensive than document blocks per token — keep batches small (≤3).
+ */
+async function extractMenuFromImagesWithClaude(
+  imageUrls: string[],
+  restaurantName: string
+): Promise<MenuExtractionResult> {
+  if (imageUrls.length === 0) return { dishes: [], menu_section_order: [] }
+
+  const content: Array<Record<string, unknown>> = imageUrls.map(url => ({
+    type: 'image',
+    source: { type: 'url', url },
+  }))
+
+  content.push({
+    type: 'text',
+    text: `Extract the full menu from "${restaurantName}" from the ${imageUrls.length === 1 ? 'attached image' : `${imageUrls.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
+  })
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
+      messages: [{ role: 'user', content }],
+      system: MENU_EXTRACTION_PROMPT,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Claude image API error: ${response.status} - ${errorText}`)
+  }
+
+  const data = await response.json()
+  const text = data.content?.[0]?.text || '{}'
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) return { dishes: [], menu_section_order: [] }
+
+  const parsed = JSON.parse(jsonMatch[0])
   const validDishes = (Array.isArray(parsed.dishes) ? parsed.dishes : [])
     .filter((d: ExtractedDish) => d.name && d.category)
     .map((d: ExtractedDish) => ({
@@ -752,10 +812,10 @@ serve(async (req) => {
               dbUpdates.menu_url = menuUrl
             } else {
               // Ephemeral fallback for THIS run only. Many restaurants link the
-              // menu as a PDF (e.g. /wp-content/uploads/*.pdf) only from the
-              // homepage — paths findMenuUrl's probe list misses. Letting the
-              // downstream pipeline see the homepage gives extractPdfMenuUrls a
-              // chance to find those links and Sonnet a shot at the homepage
+              // menu as a PDF or image (e.g. /wp-content/uploads/*.pdf) only from
+              // the homepage — paths findMenuUrl's probe list misses. Letting the
+              // downstream pipeline see the homepage gives discoverMenuCandidates
+              // a chance to find those links and Sonnet a shot at the homepage
               // HTML. We do NOT persist this to dbUpdates.menu_url — that would
               // lock the restaurant into the homepage forever and prevent
               // future discovery of a real /menu URL.
@@ -816,10 +876,14 @@ serve(async (req) => {
           let renderError: string | null = null
           let renderedTextLen: number | null = null
 
-          // Detect PDF menu links in the HTML (many Wix/Squarespace sites embed menus as PDFs)
-          const pdfUrls = extractPdfMenuUrls(rawHtml, menuUrl)
-          let pdfsUsed = false
-          let pdfsDownloaded = 0
+          // Discover all menu candidates (PDFs + images) and rank by score.
+          // Score combines URL keywords (+menu/+dinner/-beverage/-logo) with
+          // anchor/alt context. Highest-scoring asset wins, regardless of format.
+          // `let` because Browserless renders below may surface JS-injected
+          // candidates that need to merge into this pool.
+          let candidates = discoverMenuCandidates(rawHtml, menuUrl)
+          const attempts: ExtractionAttempt[] = []
+          const triedUrls = new Set<string>()
 
           // Fast path: compute raw hash BEFORE any Sonnet/render call.
           // If the raw HTML shell hasn't changed since last successful run, skip everything.
@@ -855,6 +919,9 @@ serve(async (req) => {
               if (renderedText.length >= 50) {
                 extractionContent = renderedText
                 renderSucceeded = true
+                // Re-discover candidates from the rendered HTML — JS-injected menu
+                // PDFs/images are invisible in raw HTML.
+                candidates = mergeCandidates(candidates, discoverMenuCandidates(renderedHtml, menuUrl))
               }
             } catch (renderErr) {
               renderError = renderErr instanceof Error ? renderErr.message : String(renderErr)
@@ -881,9 +948,7 @@ serve(async (req) => {
                 render_succeeded: renderSucceeded,
                 render_error: renderError,
                 rendered_text_len: renderedTextLen,
-                pdf_urls_found: pdfUrls.length,
-                pdfs_downloaded: pdfsDownloaded,
-                pdfs_used: pdfsUsed,
+                candidates_found: candidates.length,
               },
               lock_expires_at: null,
               updated_at: new Date().toISOString(),
@@ -912,21 +977,62 @@ serve(async (req) => {
             }
           }
 
-          // Extract with Sonnet — PDFs take priority if detected, else use text extraction
-          // PDFs are passed as URL sources so Sonnet fetches them server-side (avoids Edge Function OOM)
-          let extracted: MenuExtractionResult
-          if (pdfUrls.length > 0) {
-            console.log(`${restaurant.name}: found ${pdfUrls.length} PDF menu(s), sending URLs to Sonnet`)
-            pdfsDownloaded = pdfUrls.length  // all URLs passed through (no download on our side)
-            try {
-              extracted = await extractMenuFromPdfsWithClaude(pdfUrls, restaurant.name)
-              pdfsUsed = true
-            } catch (pdfExtractErr) {
-              console.error(`${restaurant.name}: PDF extraction failed:`, pdfExtractErr)
-              extracted = await extractMenuWithClaude(extractionContent, restaurant.name)
+          // Extract with Sonnet. Try strategies in score order:
+          // image batch (if highest-scoring candidates are images) → pdf batch → html text.
+          // First non-empty result wins. Stop early to avoid extra Sonnet calls.
+          let extracted: MenuExtractionResult = { dishes: [], menu_section_order: [] }
+
+          const tryAssetExtraction = async (cands: MenuCandidate[]): Promise<void> => {
+            const fresh = cands.filter(c => !triedUrls.has(c.url))
+            const images = fresh.filter(c => c.type === 'image').slice(0, MAX_IMAGE_CANDIDATES)
+            const pdfs = fresh.filter(c => c.type === 'pdf').slice(0, MAX_PDF_CANDIDATES)
+            const imageMaxScore = images[0]?.score ?? -Infinity
+            const pdfMaxScore = pdfs[0]?.score ?? -Infinity
+            const tryImagesFirst = images.length > 0 && imageMaxScore >= pdfMaxScore
+            const ordered: Array<{ type: 'image' | 'pdf'; cands: MenuCandidate[] }> = []
+            if (tryImagesFirst) {
+              if (images.length > 0) ordered.push({ type: 'image', cands: images })
+              if (pdfs.length > 0) ordered.push({ type: 'pdf', cands: pdfs })
+            } else {
+              if (pdfs.length > 0) ordered.push({ type: 'pdf', cands: pdfs })
+              if (images.length > 0) ordered.push({ type: 'image', cands: images })
             }
-          } else {
-            extracted = await extractMenuWithClaude(extractionContent, restaurant.name)
+
+            for (const group of ordered) {
+              const urls = group.cands.map(c => c.url)
+              urls.forEach(u => triedUrls.add(u))
+              const topScore = group.cands[0].score
+              try {
+                console.log(`${restaurant.name}: trying ${group.type} batch (${urls.length} urls, top score ${topScore})`)
+                const result = group.type === 'image'
+                  ? await extractMenuFromImagesWithClaude(urls, restaurant.name)
+                  : await extractMenuFromPdfsWithClaude(urls, restaurant.name)
+                attempts.push({ strategy: group.type, url_count: urls.length, top_score: topScore, dishes_found: result.dishes.length })
+                if (result.dishes.length > 0) {
+                  extracted = result
+                  return
+                }
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err)
+                console.error(`${restaurant.name}: ${group.type} extraction failed:`, message)
+                attempts.push({ strategy: group.type, url_count: urls.length, top_score: topScore, dishes_found: 0, error: message })
+              }
+            }
+          }
+
+          await tryAssetExtraction(candidates)
+
+          // Fallback: extract from page text if no asset-based strategy yielded dishes
+          if (extracted.dishes.length === 0) {
+            try {
+              const result = await extractMenuWithClaude(extractionContent, restaurant.name)
+              attempts.push({ strategy: 'html', url_count: 0, dishes_found: result.dishes.length })
+              if (result.dishes.length > 0) extracted = result
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err)
+              console.error(`${restaurant.name}: html extraction failed:`, message)
+              attempts.push({ strategy: 'html', url_count: 0, dishes_found: 0, error: message })
+            }
           }
 
           // Render fallback #2: zero dishes AND CMS requires rendering AND we haven't rendered yet
@@ -961,7 +1067,17 @@ serve(async (req) => {
                     continue
                   }
                 }
-                extracted = await extractMenuWithClaude(extractionContent, restaurant.name)
+                // Re-discover candidates from rendered HTML — JS-injected PDF/image
+                // menus that were invisible in raw HTML may be present now.
+                candidates = mergeCandidates(candidates, discoverMenuCandidates(renderedHtml, menuUrl))
+                await tryAssetExtraction(candidates)
+                if (extracted.dishes.length === 0) {
+                  // No new asset candidates worked either — fall back to text extraction
+                  // on the rendered page.
+                  const result = await extractMenuWithClaude(extractionContent, restaurant.name)
+                  attempts.push({ strategy: 'html', url_count: 0, dishes_found: result.dishes.length })
+                  if (result.dishes.length > 0) extracted = result
+                }
               }
             } catch (renderErr) {
               renderError = renderErr instanceof Error ? renderErr.message : String(renderErr)
@@ -988,9 +1104,8 @@ serve(async (req) => {
                 render_succeeded: renderSucceeded,
                 render_error: renderError,
                 rendered_text_len: renderedTextLen,
-                pdf_urls_found: pdfUrls.length,
-                pdfs_downloaded: pdfsDownloaded,
-                pdfs_used: pdfsUsed,
+                candidates_found: candidates.length,
+                attempts,
               },
               lock_expires_at: null,
               updated_at: new Date().toISOString(),
@@ -1011,6 +1126,8 @@ serve(async (req) => {
             menu_content_hash: rawHash,
           }).eq('id', restaurant.id)
 
+          const winningStrategy = attempts.find(a => a.dishes_found > 0)?.strategy ?? 'html'
+
           await supabase.from('menu_import_jobs').update({
             status: 'completed',
             completed_at: new Date().toISOString(),
@@ -1028,9 +1145,9 @@ serve(async (req) => {
               render_succeeded: renderSucceeded,
               render_error: renderError,
               rendered_text_len: renderedTextLen,
-              pdf_urls_found: pdfUrls.length,
-              pdfs_downloaded: pdfsDownloaded,
-              pdfs_used: pdfsUsed,
+              candidates_found: candidates.length,
+              winning_strategy: winningStrategy,
+              attempts,
             },
             lock_expires_at: null,
             updated_at: new Date().toISOString(),
@@ -1040,7 +1157,7 @@ serve(async (req) => {
             job_id: job.id, status: 'success', restaurant: restaurant.name,
             dishes: extracted.dishes.length, inserted: stats.inserted, updated: stats.updated,
             rendered: renderSucceeded,
-            pdfs_used: pdfsUsed,
+            strategy: winningStrategy,
           })
 
         } catch (err) {
