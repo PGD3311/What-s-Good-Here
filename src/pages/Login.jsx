@@ -81,23 +81,29 @@ export function Login() {
       : null
   }
 
+  // Native flow resolves in-place. On success the user-redirect effect at
+  // the top of this component handles navigation; only cancel needs to
+  // clear loading so the user can retry. Web redirect unmounts this page.
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
-      await authApi.signInWithGoogle(buildOAuthRedirect())
+      const result = await authApi.signInWithGoogle(buildOAuthRedirect())
+      if (result?.cancelled) {
+        setLoading(false)
+      }
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
       setLoading(false)
     }
   }
 
-  // Pre-wired for activation: gets referenced when the compliant Apple
-  // button JSX is dropped in. See the Sign in with Apple comment block in
-  // the options-mode section below for activation steps.
   const handleAppleSignIn = async () => {
     try {
       setLoading(true)
-      await authApi.signInWithApple(buildOAuthRedirect())
+      const result = await authApi.signInWithApple(buildOAuthRedirect())
+      if (result?.cancelled) {
+        setLoading(false)
+      }
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
       setLoading(false)

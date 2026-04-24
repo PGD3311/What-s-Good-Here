@@ -64,23 +64,39 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
     return redirectUrl.toString()
   }
 
+  // Native flow resolves in-place (no browser redirect). Close modal on
+  // success and silently clear loading on user cancel. Web redirect
+  // unmounts the modal entirely so these branches are effectively native-only.
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
-      await authApi.signInWithGoogle(buildOAuthRedirect())
+      const result = await authApi.signInWithGoogle(buildOAuthRedirect())
+      if (result?.cancelled) {
+        setLoading(false)
+        return
+      }
+      if (result?.success) {
+        setLoading(false)
+        onClose?.()
+      }
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
       setLoading(false)
     }
   }
 
-  // Pre-wired for activation: gets referenced when the compliant Apple
-  // button JSX is dropped in. See the Sign in with Apple comment block in
-  // the options-mode section below for activation steps.
   const handleAppleSignIn = async () => {
     try {
       setLoading(true)
-      await authApi.signInWithApple(buildOAuthRedirect())
+      const result = await authApi.signInWithApple(buildOAuthRedirect())
+      if (result?.cancelled) {
+        setLoading(false)
+        return
+      }
+      if (result?.success) {
+        setLoading(false)
+        onClose?.()
+      }
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
       setLoading(false)
