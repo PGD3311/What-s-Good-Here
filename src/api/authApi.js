@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { supabase } from '../lib/supabase'
 import { capture } from '../lib/analytics'
 import { checkRateLimit, RATE_LIMITS } from '../lib/rateLimiter'
@@ -39,6 +40,61 @@ function getSafeRedirectUrl(redirectUrl) {
   }
 }
 
+/**
+ * Persist Apple-provided first/last name as profile.display_name on the user's
+ * FIRST sign-in only. Apple only returns name on the first authorization.
+ *
+ * Never throws — name persistence is nice-to-have. Any failure is logged and
+ * swallowed. Silent-failure on DB errors would leave profiles half-updated,
+ * so we DO inspect {error} from supabase and log each specific failure.
+ */
+async function persistFirstSignInName(givenName, familyName) {
+  try {
+    if (!givenName && !familyName) return
+    const displayName = [givenName, familyName].filter(Boolean).join(' ').trim()
+    if (!displayName) return
+
+    // Codex fix #4: validate Apple-provided names against blocklist before write.
+    const contentError = validateUserContent(displayName, 'Display name')
+    if (contentError) {
+      logger.warn('persistFirstSignInName: display name rejected by blocklist', {
+        reason: contentError,
+      })
+      return
+    }
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError) {
+      logger.warn('persistFirstSignInName: getSession failed', sessionError)
+      return
+    }
+    const userId = sessionData?.session?.user?.id
+    if (!userId) return
+
+    const { data: profile, error: selectError } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', userId)
+      .maybeSingle()
+    if (selectError) {
+      logger.warn('persistFirstSignInName: profile select failed', selectError)
+      return
+    }
+    // Don't overwrite an existing name — only fill if blank.
+    if (profile?.display_name && profile.display_name.trim()) return
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ display_name: displayName })
+      .eq('id', userId)
+    if (updateError) {
+      logger.warn('persistFirstSignInName: profile update failed', updateError)
+    }
+  } catch (err) {
+    logger.warn('persistFirstSignInName: unexpected error', err)
+  }
+}
+
 export const authApi = {
   /**
    * Get current auth session
@@ -59,13 +115,37 @@ export const authApi = {
         throw new Error(rateLimit.message)
       }
 
-      capture('login_started', { method: 'google' })
+      capture('login_started', {
+        method: 'google',
+        platform: Capacitor.isNativePlatform() ? 'native' : 'web',
+      })
+
+      if (Capacitor.isNativePlatform()) {
+        const { signInWithGoogleNative } = await import('../lib/nativeAuth')
+        let tokens
+        try {
+          tokens = await signInWithGoogleNative()
+        } catch (err) {
+          if (err?.code === 'AUTH_USER_CANCELLED') {
+            return { success: false, cancelled: true, code: err.code }
+          }
+          throw err
+        }
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: tokens.idToken,
+          access_token: tokens.accessToken,
+        })
+        if (error) {
+          capture('login_failed', { method: 'google', error: error.message })
+          throw createClassifiedError(error)
+        }
+        return { success: true }
+      }
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: getSafeRedirectUrl(redirectUrl),
-        },
+        options: { redirectTo: getSafeRedirectUrl(redirectUrl) },
       })
       if (error) {
         capture('login_failed', { method: 'google', error: error.message })
@@ -104,13 +184,52 @@ export const authApi = {
         throw new Error(rateLimit.message)
       }
 
-      capture('login_started', { method: 'apple' })
+      capture('login_started', {
+        method: 'apple',
+        platform: Capacitor.isNativePlatform() ? 'native' : 'web',
+      })
+
+      if (Capacitor.isNativePlatform()) {
+        const { signInWithAppleNative } = await import('../lib/nativeAuth')
+        let appleRes
+        try {
+          appleRes = await signInWithAppleNative()
+        } catch (err) {
+          if (err?.code === 'AUTH_USER_CANCELLED') {
+            return { success: false, cancelled: true, code: err.code }
+          }
+          throw err
+        }
+
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: appleRes.identityToken,
+          nonce: appleRes.rawNonce,
+        })
+        if (error) {
+          capture('login_failed', { method: 'apple', error: error.message })
+          throw createClassifiedError(error)
+        }
+
+        // First-sign-in name persistence runs independently of token exchange.
+        // Never allowed to block sign-in — helper itself is wrapped in try/catch
+        // but we also catch here for defense in depth.
+        await persistFirstSignInName(appleRes.givenName, appleRes.familyName).catch((e) => {
+          logger.warn('persistFirstSignInName failed', e)
+        })
+
+        // B3 lands the apple-token-exchange call here for revocation compliance.
+        // For B2, authorizationCode is dropped; Flow H healing will re-capture.
+        if (appleRes.authorizationCode) {
+          logger.info('authorizationCode present — exchange deferred to B3 deployment')
+        }
+
+        return { success: true }
+      }
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
-        options: {
-          redirectTo: getSafeRedirectUrl(redirectUrl),
-        },
+        options: { redirectTo: getSafeRedirectUrl(redirectUrl) },
       })
       if (error) {
         capture('login_failed', { method: 'apple', error: error.message })
@@ -466,6 +585,26 @@ export const authApi = {
     }
 
     return { ok: false }
+  },
+
+  /**
+   * Native-only: clear the Capgo social-login session for any providers that
+   * may have been used. Called from AuthContext.signOut before the Supabase
+   * sign-out so the next native sign-in doesn't silently reuse a cached
+   * provider identity. No-op on web (Capacitor.isNativePlatform() returns false).
+   *
+   * Best-effort: logs but never throws. Sign-out must not fail because the
+   * plugin couldn't log out a provider we may not even have used.
+   */
+  async signOutNative() {
+    if (!Capacitor.isNativePlatform()) return
+    try {
+      const { logoutNative } = await import('../lib/nativeAuth')
+      // Clear both providers — cheap and avoids branching on which one we used.
+      await Promise.all([logoutNative('google'), logoutNative('apple')])
+    } catch (err) {
+      logger.warn('signOutNative failed', err)
+    }
   },
 
   /**

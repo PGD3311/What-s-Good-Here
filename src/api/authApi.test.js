@@ -8,6 +8,8 @@ vi.mock('../lib/supabase', () => ({
     auth: {
       signInWithOAuth: vi.fn(),
       signInWithOtp: vi.fn(),
+      signInWithIdToken: vi.fn(),
+      getSession: vi.fn(),
     },
     from: vi.fn(() => ({
       select: vi.fn(() => ({
@@ -38,13 +40,30 @@ vi.mock('../utils/logger', () => ({
   },
 }))
 
+// Mock Capacitor — default to web (isNativePlatform returns false)
+vi.mock('@capacitor/core', () => ({
+  Capacitor: { isNativePlatform: vi.fn(() => false) },
+}))
+
+// Mock nativeAuth bridge
+vi.mock('../lib/nativeAuth', () => ({
+  signInWithGoogleNative: vi.fn(),
+  signInWithAppleNative: vi.fn(),
+  logoutNative: vi.fn(),
+}))
+
 import { supabase } from '../lib/supabase'
 import { capture } from '../lib/analytics'
+import { Capacitor } from '@capacitor/core'
+import { signInWithGoogleNative, signInWithAppleNative, logoutNative } from '../lib/nativeAuth'
 
 describe('Auth API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearRateLimit('auth')
+    // Default to web platform for existing tests
+    Capacitor.isNativePlatform.mockReturnValue(false)
+    logoutNative.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -295,5 +314,124 @@ describe('Auth API', () => {
       expect(r.ok).toBe(true)
       expect(supabase.functions.invoke).toHaveBeenCalledTimes(2)
     })
+  })
+})
+
+// ─── B2.5 native branch tests ─────────────────────────────────────────────────
+
+describe('authApi.signInWithGoogle on native (B2.5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearRateLimit('auth')
+    logoutNative.mockResolvedValue(undefined)
+  })
+
+  it('calls signInWithIdToken with plugin tokens', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithGoogleNative.mockResolvedValueOnce({ idToken: 'g-id', accessToken: 'g-access' })
+    supabase.auth.signInWithIdToken.mockResolvedValueOnce({ error: null })
+
+    const r = await authApi.signInWithGoogle()
+
+    expect(r).toEqual({ success: true })
+    expect(supabase.auth.signInWithIdToken).toHaveBeenCalledWith({
+      provider: 'google',
+      token: 'g-id',
+      access_token: 'g-access',
+    })
+    expect(supabase.auth.signInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it('returns cancelled shape on user cancel (no throw)', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithGoogleNative.mockRejectedValueOnce(
+      Object.assign(new Error('cancelled'), { code: 'AUTH_USER_CANCELLED' }),
+    )
+
+    const r = await authApi.signInWithGoogle()
+
+    expect(r).toEqual({ success: false, cancelled: true, code: 'AUTH_USER_CANCELLED' })
+  })
+})
+
+describe('authApi.signInWithGoogle on web (B2.5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearRateLimit('auth')
+  })
+
+  it('falls back to signInWithOAuth on web', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(false)
+    supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
+
+    await authApi.signInWithGoogle()
+
+    expect(supabase.auth.signInWithOAuth).toHaveBeenCalled()
+    expect(supabase.auth.signInWithIdToken).not.toHaveBeenCalled()
+  })
+})
+
+describe('authApi.signInWithApple on native (B2.5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearRateLimit('auth')
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: null })
+  })
+
+  it('calls signInWithIdToken with identityToken and rawNonce', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithAppleNative.mockResolvedValueOnce({
+      identityToken: 'a-id',
+      authorizationCode: 'a-code',
+      appleSub: '000.abc',
+      givenName: null,
+      familyName: null,
+      rawNonce: 'a'.repeat(64),
+    })
+    supabase.auth.signInWithIdToken.mockResolvedValueOnce({ error: null })
+
+    const r = await authApi.signInWithApple()
+
+    expect(r).toEqual({ success: true })
+    expect(supabase.auth.signInWithIdToken).toHaveBeenCalledWith({
+      provider: 'apple',
+      token: 'a-id',
+      nonce: 'a'.repeat(64),
+    })
+  })
+
+  it('returns cancelled shape on user cancel (no throw)', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithAppleNative.mockRejectedValueOnce(
+      Object.assign(new Error('cancelled'), { code: 'AUTH_USER_CANCELLED' }),
+    )
+
+    const r = await authApi.signInWithApple()
+
+    expect(r).toEqual({ success: false, cancelled: true, code: 'AUTH_USER_CANCELLED' })
+  })
+})
+
+describe('authApi.signOutNative (B2.5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    logoutNative.mockResolvedValue(undefined)
+  })
+
+  it('no-ops on web', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(false)
+
+    await authApi.signOutNative()
+
+    expect(logoutNative).not.toHaveBeenCalled()
+  })
+
+  it('logs out both providers on native', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+
+    await authApi.signOutNative()
+
+    expect(logoutNative).toHaveBeenCalledWith('google')
+    expect(logoutNative).toHaveBeenCalledWith('apple')
   })
 })
