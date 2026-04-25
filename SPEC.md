@@ -22,10 +22,10 @@ Evidence: `supabase/schema.sql:24-259`
 
 | Table | PK | Key Columns | Relationships | Constraints | Status |
 |---|---|---|---|---|---|
-| **restaurants** | `id` UUID | name, address, lat/lng, is_open, cuisine, town, menu_section_order[], website_url, facebook_url, instagram_url, phone, google_place_id, menu_url, created_by | — | — | **VERIFIED** |
-| **dishes** | `id` UUID | name, category, menu_section, price, avg_rating, total_votes, consensus_*, value_score, parent_dish_id, tags[] | FK → restaurants; self-ref parent_dish_id (variants) | — | **VERIFIED** |
-| **votes** | `id` UUID | dish_id, user_id, would_order_again (bool), rating_10 (decimal), review_text, vote_position, category_snapshot, purity_score, source, source_metadata | FK → dishes, auth.users; partial UNIQUE(dish_id, user_id) WHERE source='user' | review_text max 200 chars; source IN (user, ai_estimated) | **VERIFIED** |
-| **profiles** | `id` UUID = auth.users(id) | display_name, has_onboarded, preferred_categories[], follower_count, following_count | PK references auth.users | unique lowercase display_name | **VERIFIED** |
+| **restaurants** | `id` UUID | name, address, lat/lng, is_open, cuisine, town, menu_section_order[], website_url, facebook_url, instagram_url, phone, google_place_id, menu_url, created_by | — | name must pass `is_offensive()` content filter | **VERIFIED** |
+| **dishes** | `id` UUID | name, category, menu_section, price, avg_rating, total_votes, consensus_*, value_score, parent_dish_id, tags[] | FK → restaurants; self-ref parent_dish_id (variants) | name must pass `is_offensive()` content filter | **VERIFIED** |
+| **votes** | `id` UUID | dish_id, user_id, would_order_again (bool), rating_10 (decimal), review_text, vote_position, category_snapshot, purity_score, source, source_metadata | FK → dishes, auth.users; partial UNIQUE(dish_id, user_id) WHERE source='user' | review_text max 200 chars; source IN (user, ai_estimated); review_text must pass `is_offensive()` | **VERIFIED** |
+| **profiles** | `id` UUID = auth.users(id) | display_name, has_onboarded, preferred_categories[], follower_count, following_count | PK references auth.users | unique lowercase display_name; display_name must pass `is_offensive()` | **VERIFIED** |
 | **favorites** | `id` UUID | user_id, dish_id | FK → auth.users, dishes; UNIQUE(user_id, dish_id) | — | **VERIFIED** |
 | **admins** | `id` UUID | user_id (unique), created_by | FK → auth.users | — | **VERIFIED** |
 | **dish_photos** | `id` UUID | dish_id, user_id, photo_url, quality_score, status, source_type, dimensions, brightness stats | FK → dishes, auth.users; UNIQUE(dish_id, user_id) | status IN (featured, community, hidden, rejected); source_type IN (user, restaurant) | **VERIFIED** |
