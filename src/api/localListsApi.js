@@ -32,6 +32,52 @@ export const localListsApi = {
     }
   },
 
+  async getConsensus() {
+    try {
+      const { data, error } = await supabase.rpc('get_local_picks_consensus')
+      if (error) throw createClassifiedError(error)
+      return data || []
+    } catch (error) {
+      logger.error('Failed to fetch local picks consensus:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  async getCurators() {
+    try {
+      const { data, error } = await supabase.rpc('get_local_picks_curators')
+      if (error) throw createClassifiedError(error)
+      return data || []
+    } catch (error) {
+      logger.error('Failed to fetch local picks curators:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  async searchPicks(query) {
+    try {
+      const trimmed = (query || '').trim()
+      if (!trimmed) return []
+      const { data, error } = await supabase.rpc('search_local_picks', { p_query: trimmed })
+      if (error) throw createClassifiedError(error)
+      return data || []
+    } catch (error) {
+      logger.error('Failed to search local picks:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  async getIndex() {
+    try {
+      const { data, error } = await supabase.rpc('get_local_picks_index')
+      if (error) throw createClassifiedError(error)
+      return data || []
+    } catch (error) {
+      logger.error('Failed to fetch local picks index:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
   async getByUser(userId) {
     try {
       const { data, error } = await supabase.rpc('get_local_list_by_user', { target_user_id: userId })
