@@ -9,6 +9,8 @@
  *
  * Reference: https://developers.google.com/maps/documentation/places/web-service/policies
  */
+import { openExternalLink } from '../utils/openExternalLink'
+
 export function PlaceAttributions({ attributions, className = '' }) {
   if (!Array.isArray(attributions) || attributions.length === 0) return null
 
@@ -25,6 +27,7 @@ export function PlaceAttributions({ attributions, className = '' }) {
               href={a.url}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => openExternalLink(e, e.currentTarget.href)}
               style={{ color: 'var(--color-accent-gold)' }}
             >
               {a.provider}

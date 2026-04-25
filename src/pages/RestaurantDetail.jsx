@@ -8,6 +8,7 @@ import { logger } from '../utils/logger'
 import { getUserMessage } from '../utils/errorHandler'
 import { shareOrCopy } from '../utils/share'
 import { sanitizeUrl } from '../utils/sanitize'
+import { openExternalLink } from '../utils/openExternalLink'
 import { restaurantsApi } from '../api/restaurantsApi'
 import { placesApi } from '../api/placesApi'
 import { votesApi } from '../api/votesApi'
@@ -474,6 +475,7 @@ export function RestaurantDetail() {
                   }
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => openExternalLink(e, e.currentTarget.href)}
                   className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-80"
                   style={{ color: 'var(--color-accent-gold)' }}
                 >
@@ -500,6 +502,7 @@ export function RestaurantDetail() {
                   href={sanitizeUrl(restaurant.website_url)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => openExternalLink(e, e.currentTarget.href)}
                   className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-80"
                   style={{ color: 'var(--color-accent-gold)' }}
                 >
@@ -514,6 +517,7 @@ export function RestaurantDetail() {
                   href={sanitizeUrl(restaurant.facebook_url)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => openExternalLink(e, e.currentTarget.href)}
                   className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-80"
                   style={{ color: 'var(--color-accent-gold)' }}
                 >
@@ -528,6 +532,7 @@ export function RestaurantDetail() {
                   href={sanitizeUrl(restaurant.instagram_url)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => openExternalLink(e, e.currentTarget.href)}
                   className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-80"
                   style={{ color: 'var(--color-accent-gold)' }}
                 >
@@ -689,6 +694,7 @@ export function RestaurantDetail() {
               href={restaurant.toast_slug ? 'https://order.toasttab.com/online/' + restaurant.toast_slug : sanitizeUrl(restaurant.order_url)}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => openExternalLink(e, e.currentTarget.href)}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
               style={{
                 background: 'var(--color-accent-orange)',

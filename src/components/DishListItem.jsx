@@ -6,6 +6,7 @@ import { getCategoryNeonImage, getCategoryEmoji, getDishNameIcon } from '../cons
 import { RestaurantAvatar } from './RestaurantAvatar'
 import { HearingIcon } from './HearingIcon'
 import { sanitizeUrl } from '../utils/sanitize'
+import { openExternalLink } from '../utils/openExternalLink'
 /**
  * DishListItem — the ONE component for showing a dish in any list.
  *
@@ -207,7 +208,7 @@ export const DishListItem = memo(function DishListItem({
                 href={toastSlug ? 'https://order.toasttab.com/online/' + toastSlug : sanitizeUrl(orderUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={function (e) { e.stopPropagation() }}
+                onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
                 style={{
                   background: 'var(--color-primary)',
@@ -223,7 +224,7 @@ export const DishListItem = memo(function DishListItem({
                 href={'https://www.google.com/maps/dir/?api=1&destination=' + restaurantLat + ',' + restaurantLng}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={function (e) { e.stopPropagation() }}
+                onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
                 style={{
                   border: '1px solid var(--color-divider)',

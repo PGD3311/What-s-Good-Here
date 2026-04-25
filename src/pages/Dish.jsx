@@ -18,6 +18,7 @@ import { ReportModal } from '../components/ReportModal'
 import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../lib/storage'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { sanitizeUrl } from '../utils/sanitize'
+import { openExternalLink } from '../utils/openExternalLink'
 import { authApi } from '../api/authApi'
 import { dishPhotosApi } from '../api/dishPhotosApi'
 
@@ -400,12 +401,15 @@ export function Dish() {
                 href={sanitizeUrl(dish.website_url)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => capture('order_link_clicked', {
-                  dish_id: dish.dish_id,
-                  dish_name: dish.dish_name,
-                  restaurant_id: dish.restaurant_id,
-                  restaurant_name: dish.restaurant_name,
-                })}
+                onClick={(e) => {
+                  capture('order_link_clicked', {
+                    dish_id: dish.dish_id,
+                    dish_name: dish.dish_name,
+                    restaurant_id: dish.restaurant_id,
+                    restaurant_name: dish.restaurant_name,
+                  })
+                  openExternalLink(e, e.currentTarget.href)
+                }}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm transition-all active:scale-95"
                 style={{
                   background: 'var(--color-primary)',
@@ -443,13 +447,16 @@ export function Dish() {
               href={dish.toast_slug ? 'https://order.toasttab.com/online/' + dish.toast_slug : sanitizeUrl(dish.order_url)}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={function () { capture('order_clicked', {
-                dish_id: dish.dish_id,
-                dish_name: dish.dish_name,
-                restaurant_id: dish.restaurant_id,
-                restaurant_name: dish.restaurant_name,
-                source: dish.toast_slug ? 'toast' : 'order_url',
-              }) }}
+              onClick={(e) => {
+                capture('order_clicked', {
+                  dish_id: dish.dish_id,
+                  dish_name: dish.dish_name,
+                  restaurant_id: dish.restaurant_id,
+                  restaurant_name: dish.restaurant_name,
+                  source: dish.toast_slug ? 'toast' : 'order_url',
+                })
+                openExternalLink(e, e.currentTarget.href)
+              }}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.97]"
               style={{
                 background: 'var(--color-accent-orange)',
@@ -466,6 +473,7 @@ export function Dish() {
               href={sanitizeUrl(dish.website_url)}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => openExternalLink(e, e.currentTarget.href)}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.97]"
               style={{
                 background: 'var(--color-primary)',
@@ -486,6 +494,7 @@ export function Dish() {
             }
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => openExternalLink(e, e.currentTarget.href)}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.97]"
             style={{
               background: 'var(--color-accent-gold)',
