@@ -18,6 +18,8 @@ type AdminClient = SupabaseClient<any, any, any>
  *
  * Order of operations (abort on any destructive failure before auth delete):
  *   1.   Verify JWT, extract user.id
+ *   1.4  Advisory lock — prevent concurrent duplicate delete requests for the
+ *        same user (Important #3). Returns 409 if already in progress.
  *   1.5  Apple revocation pre-cascade (B3.6): look up Apple identity, insert
  *        pending_apple_revocations row (Case A or B), attempt inline revoke.
  *   2.   Null FK columns on tables where created_by is nullable
@@ -77,223 +79,340 @@ serve(async (req) => {
     const admin = createClient(supabaseUrl, supabaseServiceKey)
 
     // -----------------------------------------------------------------------
-    // 1.5  Apple Revocation Pre-Cascade (B3.6 — Plan B Flow F)
+    // 1.4  Advisory lock — serialize concurrent delete requests for the same user.
     //
-    // Goals:
-    //   Case A: Token row exists → insert pending row (already leased), attempt
-    //           inline revoke, fall through to cascade.
-    //   Case B: No token row   → insert unrevokable sentinel for audit, fall
-    //           through to cascade.
-    //   Non-Apple user          → skip entirely, no pending row inserted.
+    // Two concurrent calls would both attempt revoke + cascade. The "loser"
+    // would log a false apple_revoke_cascade_mismatch (row 2 sees Apple
+    // revoked + cascade failed because the user is already gone from row 1).
+    // An advisory lock on a hash of the userId prevents the second call from
+    // proceeding at all.
     //
-    // Two state variables thread through the remainder of this function and
-    // control post-cascade and cascade-failure cleanup:
-    //   pendingRowId        — id of the pending_apple_revocations row we inserted,
-    //                         or null if no Apple identity was found.
-    //   inlineRevokeSucceeded — true iff we successfully called revokeToken()
-    //                           before the cascade. Used to decide what to do with
-    //                           the pending row if the cascade later fails.
+    // The lock is held for the duration of this function via a try/finally.
+    // Advisory locks held by service-role connections are released automatically
+    // when the connection is returned to the pool, so a crash still releases it.
     // -----------------------------------------------------------------------
-
-    let pendingRowId: string | null = null
-    let inlineRevokeSucceeded = false
-
-    {
-      // Look up Apple identities for this user. Fail closed — don't proceed
-      // with deletion if we can't determine Apple state.
-      const { data: appleIdentities, error: appleIdErr } = await admin
-        .schema('auth')
-        .from('identities')
-        .select('provider_id')
-        .eq('user_id', userId)
-        .eq('provider', 'apple')
-
-      if (appleIdErr) {
-        return json({ error: 'Identity lookup failed', code: 'IDENTITY_LOOKUP_FAILED' }, 500)
-      }
-
-      if (appleIdentities && appleIdentities.length > 0) {
-        if (appleIdentities.length > 1) {
-          console.error(JSON.stringify({
-            event: 'delete_account_multi_apple_identity',
-            user_hash: await hashUserId(userId),
-          }))
-          return json({ error: 'Multiple Apple identities', code: 'MULTI_APPLE_IDENTITY' }, 500)
-        }
-
-        const appleSub = appleIdentities[0].provider_id
-        if (!appleSub) {
-          console.error(JSON.stringify({
-            event: 'delete_account_null_provider_id',
-            user_hash: await hashUserId(userId),
-          }))
-          return json({ error: 'Apple identity missing sub', code: 'IDENTITY_MISSING_SUB' }, 500)
-        }
-
-        // Check for existing token row (determines Case A vs Case B).
-        const { data: tokenRow } = await admin
-          .from('user_apple_tokens')
-          .select('encrypted_refresh_token, key_version, client_id_type')
-          .eq('user_id', userId)
-          .maybeSingle()
-
-        const requestId = crypto.randomUUID()
-        const leaseHolder = `delete-account:${requestId}`
-
-        if (tokenRow) {
-          // ----------------------------------------------------------------
-          // Case A — token row exists.
-          // Insert a pending row already-leased to block the cron from
-          // attempting a duplicate revoke while we do our inline attempt.
-          // ----------------------------------------------------------------
-          if (!tokenRow.client_id_type) {
-            console.error(JSON.stringify({
-              event: 'delete_account_token_missing_client_id_type',
-              user_hash: await hashUserId(userId),
-            }))
-            return json({ error: 'Token row corrupt', code: 'TOKEN_ROW_CORRUPT' }, 500)
-          }
-
-          const { error: insertErr, data: pendingRow } = await admin
-            .from('pending_apple_revocations')
-            .insert({
-              apple_sub: appleSub,
-              encrypted_refresh_token: tokenRow.encrypted_refresh_token,
-              key_version: tokenRow.key_version,
-              client_id_type: tokenRow.client_id_type,
-              locked_at: new Date().toISOString(),
-              locked_by: leaseHolder,
-              next_attempt_at: new Date().toISOString(),
-            })
-            .select('id')
-            .single()
-
-          if (insertErr || !pendingRow) {
-            return json({ error: 'Delete queue insert failed', code: 'DELETE_QUEUE_FAILED' }, 500)
-          }
-          pendingRowId = pendingRow.id
-
-          // Attempt inline revoke while we hold the lease.
-          try {
-            const refreshToken = await decryptRefreshToken(
-              tokenRow.encrypted_refresh_token,
-              tokenRow.key_version,
-            )
-            await revokeToken(refreshToken, tokenRow.client_id_type as 'native' | 'web')
-            inlineRevokeSucceeded = true
-            // Don't delete pendingRow yet — wait until cascade succeeds.
-            console.log(JSON.stringify({
-              event: 'apple_revoke_inline_success',
-              user_hash: await hashUserId(userId),
-            }))
-          } catch (err) {
-            console.warn(JSON.stringify({
-              event: 'apple_revoke_inline_failed',
-              user_hash: await hashUserId(userId),
-              status: err instanceof AppleApiError ? err.status : null,
-            }))
-            // Release the lease so the cron can pick this up for retry.
-            await admin
-              .from('pending_apple_revocations')
-              .update({ locked_at: null, locked_by: null })
-              .eq('id', pendingRowId)
-            // pendingRowId stays set so cascade-failure cleanup can remove it.
-          }
-        } else {
-          // ----------------------------------------------------------------
-          // Case B — no token row. The user authenticated with Apple but we
-          // never persisted a refresh token (e.g. web-only sign-in, B1 not
-          // yet deployed when they first signed in). Insert an unrevokable
-          // sentinel so the deletion audit trail is complete.
-          // ----------------------------------------------------------------
-          const { error: sentinelErr, data: sentinel } = await admin
-            .from('pending_apple_revocations')
-            .insert({
-              apple_sub: appleSub,
-              unrevokable: true,
-              encrypted_refresh_token: null,
-              key_version: null,
-              client_id_type: null,
-            })
-            .select('id')
-            .single()
-
-          if (sentinelErr || !sentinel) {
-            return json({ error: 'Sentinel insert failed', code: 'DELETE_QUEUE_FAILED' }, 500)
-          }
-          pendingRowId = sentinel.id
-          console.log(JSON.stringify({
-            event: 'apple_revoke_unrevokable',
-            user_hash: await hashUserId(userId),
-          }))
-        }
-      }
-      // Non-Apple user: pendingRowId stays null, inlineRevokeSucceeded stays false.
+    const { data: lockAcquired, error: lockErr } = await admin.rpc(
+      'try_advisory_lock_for_delete',
+      { p_user_id: userId },
+    )
+    if (lockErr) {
+      console.error(JSON.stringify({
+        event: 'delete_account_lock_failed',
+        user_hash: await hashUserId(userId),
+        error: lockErr.message,
+      }))
+      return json({ error: 'Lock acquisition failed', code: 'LOCK_FAILED' }, 500)
+    }
+    if (!lockAcquired) {
+      return json({ error: 'Deletion already in progress', code: 'DELETE_IN_PROGRESS' }, 409)
     }
 
-    // -----------------------------------------------------------------------
-    // Steps 2–7 wrapped so we can clean up the pending Apple row on failure.
-    //
-    // runCascade() returns:
-    //   null       → cascade succeeded
-    //   Response   → cascade failed; this response should be returned to client
-    //                (after Apple cleanup)
-    // -----------------------------------------------------------------------
-    const cascadeResult = await runCascade(admin, userId)
-
-    if (cascadeResult !== null) {
-      // Cascade failed — clean up the pending Apple row.
-      if (pendingRowId !== null) {
-        if (!inlineRevokeSucceeded) {
-          // We haven't revoked yet. Safe to remove the pending row — the account
-          // still exists and nothing was unrecoverably mutated on Apple's side.
-          try {
-            await admin
-              .from('pending_apple_revocations')
-              .delete()
-              .eq('id', pendingRowId)
-          } catch { /* best-effort cleanup */ }
-        } else {
-          // We successfully revoked with Apple BUT the cascade failed. The user's
-          // account still exists but Apple consent is gone. Mark dead_letter so
-          // the cron doesn't attempt a second revoke. Leave the row for audit.
-          try {
-            await admin
-              .from('pending_apple_revocations')
-              .update({ dead_letter: true, locked_at: null, locked_by: null })
-              .eq('id', pendingRowId)
-          } catch { /* best-effort */ }
-          console.error(JSON.stringify({
-            event: 'apple_revoke_cascade_mismatch',
-            user_hash: await hashUserId(userId),
-          }))
-        }
+    try {
+      return await deleteAccountWithLock(admin, userId)
+    } finally {
+      const { error: unlockErr } = await admin.rpc('release_advisory_lock_for_delete', { p_user_id: userId })
+      if (unlockErr) {
+        console.error(JSON.stringify({
+          event: 'delete_account_unlock_failed',
+          user_hash: hashUserIdSync(userId),
+          error: unlockErr.message,
+        }))
       }
-      return cascadeResult
     }
-
-    // Cascade succeeded. Clean up the pending Apple row if inline revoke worked.
-    if (pendingRowId !== null && inlineRevokeSucceeded) {
-      // Both revoke and cascade succeeded → nothing left for cron to do.
-      try {
-        await admin
-          .from('pending_apple_revocations')
-          .delete()
-          .eq('id', pendingRowId)
-      } catch { /* best-effort cleanup */ }
-    }
-    // If pendingRowId !== null && !inlineRevokeSucceeded: leave for cron retry (Case A
-    // failed inline) or leave the sentinel in place (Case B unrevokable). Both are
-    // intentional — don't delete.
-
-    console.log(`delete-account: user ${userId} successfully deleted`)
-    return json({ success: true })
   } catch (error) {
     console.error('delete-account: unexpected error:', error)
     const message = error instanceof Error ? error.message : String(error)
     return json({ error: `Internal error: ${message}` }, 500)
   }
 })
+
+// ---------------------------------------------------------------------------
+// deleteAccountWithLock — main deletion logic, called with the advisory lock
+// already held. Extracted so the outer try/finally always releases the lock.
+// ---------------------------------------------------------------------------
+
+async function deleteAccountWithLock(
+  admin: AdminClient,
+  userId: string,
+): Promise<Response> {
+  // -----------------------------------------------------------------------
+  // 1.5  Apple Revocation Pre-Cascade (B3.6 — Plan B Flow F)
+  //
+  // Goals:
+  //   Case A: Token row exists → insert pending row (already leased), attempt
+  //           inline revoke, fall through to cascade.
+  //   Case B: No token row   → insert unrevokable sentinel for audit, fall
+  //           through to cascade.
+  //   Non-Apple user          → skip entirely, no pending row inserted.
+  //
+  // Two state variables thread through the remainder of this function and
+  // control post-cascade and cascade-failure cleanup:
+  //   pendingRowId        — id of the pending_apple_revocations row we inserted,
+  //                         or null if no Apple identity was found.
+  //   inlineRevokeSucceeded — true iff we successfully called revokeToken()
+  //                           before the cascade. Used to decide what to do with
+  //                           the pending row if the cascade later fails.
+  // -----------------------------------------------------------------------
+
+  let pendingRowId: string | null = null
+  let inlineRevokeSucceeded = false
+
+  {
+    // Look up Apple identities for this user. Fail closed — don't proceed
+    // with deletion if we can't determine Apple state.
+    const { data: appleIdentities, error: appleIdErr } = await admin
+      .schema('auth')
+      .from('identities')
+      .select('provider_id')
+      .eq('user_id', userId)
+      .eq('provider', 'apple')
+
+    if (appleIdErr) {
+      return json({ error: 'Identity lookup failed', code: 'IDENTITY_LOOKUP_FAILED' }, 500)
+    }
+
+    if (appleIdentities && appleIdentities.length > 0) {
+      if (appleIdentities.length > 1) {
+        console.error(JSON.stringify({
+          event: 'delete_account_multi_apple_identity',
+          user_hash: await hashUserId(userId),
+        }))
+        return json({ error: 'Multiple Apple identities', code: 'MULTI_APPLE_IDENTITY' }, 500)
+      }
+
+      const appleSub = appleIdentities[0].provider_id
+      if (!appleSub) {
+        console.error(JSON.stringify({
+          event: 'delete_account_null_provider_id',
+          user_hash: await hashUserId(userId),
+        }))
+        return json({ error: 'Apple identity missing sub', code: 'IDENTITY_MISSING_SUB' }, 500)
+      }
+
+      // Check for existing token row (determines Case A vs Case B).
+      // Fail closed — a transient DB error here must NOT fall through to
+      // Case B: a real Apple user would be marked unrevokable. Return 500
+      // so the client can retry.
+      const { data: tokenRow, error: tokenLookupErr } = await admin
+        .from('user_apple_tokens')
+        .select('apple_sub, encrypted_refresh_token, key_version, client_id_type')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (tokenLookupErr) {
+        console.error(JSON.stringify({
+          event: 'delete_account_token_lookup_failed',
+          user_hash: await hashUserId(userId),
+          pg_code: (tokenLookupErr as { code?: string })?.code ?? null,
+        }))
+        return json({ error: 'Token lookup failed', code: 'TOKEN_LOOKUP_FAILED' }, 500)
+      }
+
+      const requestId = crypto.randomUUID()
+      const leaseHolder = `delete-account:${requestId}`
+
+      if (tokenRow) {
+        // ----------------------------------------------------------------
+        // Case A — token row exists.
+        // Insert a pending row already-leased to block the cron from
+        // attempting a duplicate revoke while we do our inline attempt.
+        // ----------------------------------------------------------------
+        if (!tokenRow.client_id_type) {
+          console.error(JSON.stringify({
+            event: 'delete_account_token_missing_client_id_type',
+            user_hash: await hashUserId(userId),
+          }))
+          return json({ error: 'Token row corrupt', code: 'TOKEN_ROW_CORRUPT' }, 500)
+        }
+
+        // Important #4 — Sub-binding guard: token row apple_sub must match
+        // the apple_sub from auth.identities. Drift here indicates data
+        // corruption or a manual edit — fail closed to avoid revoking the
+        // wrong Apple account.
+        if (tokenRow.apple_sub !== appleSub) {
+          console.error(JSON.stringify({
+            event: 'delete_account_apple_sub_drift',
+            user_hash: await hashUserId(userId),
+          }))
+          return json({ error: 'Apple sub mismatch', code: 'APPLE_SUB_DRIFT' }, 500)
+        }
+
+        const { error: insertErr, data: pendingRow } = await admin
+          .from('pending_apple_revocations')
+          .insert({
+            apple_sub: appleSub,
+            encrypted_refresh_token: tokenRow.encrypted_refresh_token,
+            key_version: tokenRow.key_version,
+            client_id_type: tokenRow.client_id_type,
+            locked_at: new Date().toISOString(),
+            locked_by: leaseHolder,
+            next_attempt_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+
+        if (insertErr || !pendingRow) {
+          return json({ error: 'Delete queue insert failed', code: 'DELETE_QUEUE_FAILED' }, 500)
+        }
+        pendingRowId = pendingRow.id
+
+        // Attempt inline revoke while we hold the lease.
+        // Critical #2: the lease is NOT released on failure here. It stays
+        // held through the cascade. This prevents the cron from picking up
+        // the row mid-cascade and revoking while we're still working.
+        // The lease is released or the row is updated in the post-cascade
+        // cleanup branches below.
+        try {
+          const refreshToken = await decryptRefreshToken(
+            tokenRow.encrypted_refresh_token,
+            tokenRow.key_version,
+          )
+          await revokeToken(refreshToken, tokenRow.client_id_type as 'native' | 'web')
+          inlineRevokeSucceeded = true
+          // Don't delete pendingRow yet — wait until cascade succeeds.
+          console.log(JSON.stringify({
+            event: 'apple_revoke_inline_success',
+            user_hash: await hashUserId(userId),
+          }))
+        } catch (err) {
+          console.warn(JSON.stringify({
+            event: 'apple_revoke_inline_failed',
+            user_hash: await hashUserId(userId),
+            status: err instanceof AppleApiError ? err.status : null,
+          }))
+          // Lease stays HELD through cascade. Released or repurposed in the
+          // post-cascade cleanup branches below — preventing cron from picking
+          // up this row mid-cascade and revoking while we're still working.
+        }
+      } else {
+        // ----------------------------------------------------------------
+        // Case B — no token row. The user authenticated with Apple but we
+        // never persisted a refresh token (e.g. web-only sign-in, B1 not
+        // yet deployed when they first signed in). Insert an unrevokable
+        // sentinel so the deletion audit trail is complete.
+        // ----------------------------------------------------------------
+        const { error: sentinelErr, data: sentinel } = await admin
+          .from('pending_apple_revocations')
+          .insert({
+            apple_sub: appleSub,
+            unrevokable: true,
+            encrypted_refresh_token: null,
+            key_version: null,
+            client_id_type: null,
+          })
+          .select('id')
+          .single()
+
+        if (sentinelErr || !sentinel) {
+          return json({ error: 'Sentinel insert failed', code: 'DELETE_QUEUE_FAILED' }, 500)
+        }
+        pendingRowId = sentinel.id
+        console.log(JSON.stringify({
+          event: 'apple_revoke_unrevokable',
+          user_hash: await hashUserId(userId),
+        }))
+      }
+    }
+    // Non-Apple user: pendingRowId stays null, inlineRevokeSucceeded stays false.
+  }
+
+  // -----------------------------------------------------------------------
+  // Steps 2–7 wrapped so we can clean up the pending Apple row on failure.
+  //
+  // runCascade() returns:
+  //   null       → cascade succeeded
+  //   Response   → cascade failed; this response should be returned to client
+  //                (after Apple cleanup)
+  // -----------------------------------------------------------------------
+  const cascadeResult = await runCascade(admin, userId)
+
+  if (cascadeResult !== null) {
+    // Cascade failed — clean up the pending Apple row.
+    // Critical #2: handle all 4 outcomes explicitly with lease release.
+    if (pendingRowId !== null) {
+      if (!inlineRevokeSucceeded) {
+        // Inline revoke didn't happen AND cascade failed → drop the queued row.
+        // The account still exists, nothing was unrecoverably mutated on Apple's
+        // side. Remove so cron doesn't attempt a revoke for a still-live account.
+        const { error: cleanupErr } = await admin
+          .from('pending_apple_revocations')
+          .delete()
+          .eq('id', pendingRowId)
+        if (cleanupErr) {
+          console.error(JSON.stringify({
+            event: 'apple_pending_cleanup_failed',
+            branch: 'cascade_failure_no_inline',
+            user_hash: await hashUserId(userId),
+            error: cleanupErr.message,
+          }))
+        }
+      } else {
+        // Apple revoked but cascade failed → mark dead_letter, release lease,
+        // audit. Account still exists but Apple consent is gone.
+        const { error: cleanupErr } = await admin
+          .from('pending_apple_revocations')
+          .update({ dead_letter: true, locked_at: null, locked_by: null })
+          .eq('id', pendingRowId)
+        if (cleanupErr) {
+          console.error(JSON.stringify({
+            event: 'apple_pending_cleanup_failed',
+            branch: 'cascade_failure_inline_succeeded',
+            user_hash: await hashUserId(userId),
+            error: cleanupErr.message,
+          }))
+        }
+        console.error(JSON.stringify({
+          event: 'apple_revoke_cascade_mismatch',
+          user_hash: await hashUserId(userId),
+        }))
+      }
+    }
+    return cascadeResult
+  }
+
+  // Cascade succeeded. Critical #2: handle all outcomes with explicit lease release.
+  if (pendingRowId !== null) {
+    if (inlineRevokeSucceeded) {
+      // Revoked AND cascade succeeded → drop the row. Nothing left for cron.
+      const { error: cleanupErr } = await admin
+        .from('pending_apple_revocations')
+        .delete()
+        .eq('id', pendingRowId)
+      if (cleanupErr) {
+        console.error(JSON.stringify({
+          event: 'apple_pending_cleanup_failed',
+          branch: 'success_inline',
+          user_hash: await hashUserId(userId),
+          error: cleanupErr.message,
+        }))
+      }
+    } else {
+      // Inline revoke failed but cascade succeeded → release lease and schedule
+      // immediate retry. Cron picks up on next tick.
+      const { error: cleanupErr } = await admin
+        .from('pending_apple_revocations')
+        .update({
+          locked_at: null,
+          locked_by: null,
+          next_attempt_at: new Date().toISOString(),
+        })
+        .eq('id', pendingRowId)
+      if (cleanupErr) {
+        console.error(JSON.stringify({
+          event: 'apple_pending_cleanup_failed',
+          branch: 'success_no_inline',
+          user_hash: await hashUserId(userId),
+          error: cleanupErr.message,
+        }))
+      }
+    }
+  }
+  // If pendingRowId === null: non-Apple user or unrevokable sentinel (Case B).
+  // Case B sentinel is intentionally left in place for audit.
+
+  console.log(`delete-account: user ${userId} successfully deleted`)
+  return json({ success: true })
+}
 
 // ---------------------------------------------------------------------------
 // runCascade — steps 2-7, extracted so cascade failures can be detected and
@@ -484,4 +603,19 @@ async function hashUserId(userId: string): Promise<string> {
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
     .slice(0, 16)
+}
+
+// ---------------------------------------------------------------------------
+// hashUserIdSync — synchronous fallback for finally blocks where we can't
+// await. Returns a truncated base64 of a djb2-style hash — not cryptographic,
+// good enough for log correlation in error paths only.
+// ---------------------------------------------------------------------------
+
+function hashUserIdSync(userId: string): string {
+  let h = 5381
+  for (let i = 0; i < userId.length; i++) {
+    h = ((h << 5) + h) ^ userId.charCodeAt(i)
+    h = h >>> 0 // keep uint32
+  }
+  return h.toString(16).padStart(8, '0')
 }

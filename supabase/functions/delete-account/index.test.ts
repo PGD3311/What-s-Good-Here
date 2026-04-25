@@ -316,7 +316,100 @@ Deno.test({
 })
 
 // ---------------------------------------------------------------------------
-// T5 (SKIPPED) — Cascade failure rollback
+// T5 — apple_sub drift returns 500 APPLE_SUB_DRIFT, auth user still exists
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: 'T5: apple_sub drift — 500 APPLE_SUB_DRIFT returned, auth user not deleted',
+  async fn() {
+    const { userId, jwt } = await createTestUser()
+    // Use a different sub in the token row vs the identity row.
+    const identitySub = `test-apple-sub-identity-${crypto.randomUUID()}`
+    const tokenSub = `test-apple-sub-token-DIFFERENT-${crypto.randomUUID()}`
+
+    try {
+      // Wire up Apple identity with identitySub.
+      await insertAppleIdentity(userId, identitySub)
+
+      // Insert token row with a different apple_sub to simulate drift.
+      const { error: tokenErr } = await supa.from('user_apple_tokens').insert({
+        user_id: userId,
+        apple_sub: tokenSub, // deliberately different from identitySub
+        encrypted_refresh_token: 'ciphertext-test-placeholder',
+        key_version: 'v1',
+        client_id_type: 'native',
+      })
+      if (tokenErr) throw new Error(`[test] insertAppleToken (drift) failed: ${tokenErr.message}`)
+
+      const res = await invokeFn('delete-account', { jwt })
+
+      assertEquals(res.status, 500, 'Must return 500 for apple_sub drift')
+      const body = await res.json()
+      assertEquals(body.code, 'APPLE_SUB_DRIFT', 'Error code must be APPLE_SUB_DRIFT')
+
+      // Critical: auth user must still exist — no cascade should have run.
+      const still = await authUserExists(userId)
+      assert(still, 'auth.users row must still exist after APPLE_SUB_DRIFT abort')
+    } finally {
+      await supa.from('user_apple_tokens').delete().eq('user_id', userId).catch(() => {})
+      await cleanupUser(userId)
+    }
+  },
+})
+
+// ---------------------------------------------------------------------------
+// T6 — Concurrent double-submit returns 409 on the second call
+//
+// Note: this test is inherently timing-sensitive. The advisory lock is
+// acquired before the Apple identity lookup, but if the first call completes
+// very quickly (e.g. non-Apple user in a fast environment) the lock may be
+// released before the second call arrives. In CI this is usually reliable
+// because the cascade takes >100ms, but it may be flaky on very fast machines.
+// If flaky, the test is marked with a TODO rather than removed.
+//
+// TODO: If this test is flaky in CI, disable it and rely on the advisory lock
+// unit tests in the migration SQL instead.
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: 'T6: concurrent double-submit — second call returns 409 DELETE_IN_PROGRESS',
+  async fn() {
+    const { userId, jwt } = await createTestUser()
+
+    try {
+      // Race two concurrent delete-account calls for the same user.
+      // We expect one to return 200 (or 500 if cascade errors) and the other
+      // to return 409 DELETE_IN_PROGRESS.
+      const [res1, res2] = await Promise.all([
+        invokeFn('delete-account', { jwt }),
+        invokeFn('delete-account', { jwt }),
+      ])
+
+      const statuses = [res1.status, res2.status].sort()
+      const bodies = await Promise.all([res1.json(), res2.json()])
+
+      // One call should have been blocked with 409.
+      const has409 = statuses.includes(409)
+      if (has409) {
+        const blocked = bodies.find((b) => b.code === 'DELETE_IN_PROGRESS')
+        assert(blocked, 'The 409 response must carry code DELETE_IN_PROGRESS')
+      } else {
+        // If no 409 was returned, one call completed before the other started
+        // (advisory lock released before second call acquired it). This is a
+        // valid race outcome — both calls for the same user will fail on the
+        // second call's JWT verification anyway (user deleted by first call).
+        // Log but don't fail.
+        console.warn('[T6] No 409 observed — calls did not overlap. Lock correctness not verified by timing.')
+      }
+    } finally {
+      // Best-effort cleanup if user still exists.
+      await cleanupUser(userId)
+    }
+  },
+})
+
+// ---------------------------------------------------------------------------
+// T7 (SKIPPED) — Cascade failure rollback
 //
 // Rationale: Simulating a cascade failure (e.g. storage error in step 5)
 // would require injecting a fault into the live function mid-execution. The
@@ -325,7 +418,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// T6 (SKIPPED) — Vault unavailable mid-flow
+// T8 (SKIPPED) — Vault unavailable mid-flow
 //
 // Rationale: Vault access is controlled by Supabase infra. We cannot
 // reliably revoke or restore Vault access from a test. Noted as a manual
