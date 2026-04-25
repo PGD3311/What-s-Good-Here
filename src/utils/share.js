@@ -1,18 +1,41 @@
+import { Capacitor } from '@capacitor/core'
+import { Share } from '@capacitor/share'
 import { logger } from './logger'
 
 /**
  * Share or copy a URL with platform-appropriate behavior.
  *
  * Fallback strategy:
- * 1. Web Share API (mobile native share sheets)
- * 2. navigator.clipboard.writeText (modern desktop)
- * 3. Synchronous textarea + execCommand (mobile Safari fallback)
+ * 1. Capacitor Share plugin (native iOS/Android — guaranteed under capacitor:// origin)
+ * 2. Web Share API (mobile browsers)
+ * 3. navigator.clipboard.writeText (modern desktop)
+ * 4. Synchronous textarea + execCommand (last-resort fallback)
+ *
+ * Never throws. Returns { method, success, error? } so callers can toast accordingly.
  *
  * @param {{ url: string, title?: string, text?: string }} options
- * @returns {Promise<{ method: string, success: boolean }>}
+ * @returns {Promise<{ method: string, success: boolean, error?: unknown }>}
  */
 export async function shareOrCopy({ url, title, text }) {
-  // 1. Web Share API (best mobile UX — native share sheet)
+  // 1. Capacitor native share (iOS / Android shell)
+  if (Capacitor?.isNativePlatform?.()) {
+    try {
+      const payload = { url }
+      if (title) payload.title = title
+      if (text) payload.text = text
+      await Share.share(payload)
+      return { method: 'native_capacitor', success: true }
+    } catch (err) {
+      // User cancellation throws too — surface as success:false but don't fall through
+      // to clipboard, otherwise dismissing native sheet would still copy the link.
+      if (err && (err.message || '').toLowerCase().includes('cancel')) {
+        return { method: 'native_capacitor', success: false, error: err }
+      }
+      logger.warn('Capacitor Share failed, falling back:', err)
+    }
+  }
+
+  // 2. Web Share API (mobile browsers)
   if (navigator.share) {
     const shareData = { url }
     if (title) shareData.title = title
@@ -21,17 +44,17 @@ export async function shareOrCopy({ url, title, text }) {
     if (!navigator.canShare || navigator.canShare(shareData)) {
       try {
         await navigator.share(shareData)
-        return { method: 'native', success: true }
+        return { method: 'web_share', success: true }
       } catch (err) {
         if (err.name === 'AbortError') {
-          return { method: 'native', success: false }
+          return { method: 'web_share', success: false }
         }
         // Fall through to clipboard
       }
     }
   }
 
-  // 2. Async clipboard API (desktop browsers)
+  // 3. Async clipboard API (desktop browsers)
   try {
     await navigator.clipboard.writeText(url)
     return { method: 'clipboard', success: true }
@@ -39,8 +62,7 @@ export async function shareOrCopy({ url, title, text }) {
     // Fall through to execCommand
   }
 
-  // 3. Synchronous textarea + execCommand (mobile Safari fallback)
-  // Proven pattern from Admin.jsx invite copy
+  // 4. Synchronous textarea + execCommand (mobile Safari fallback)
   try {
     const textarea = document.createElement('textarea')
     textarea.value = url
@@ -54,7 +76,7 @@ export async function shareOrCopy({ url, title, text }) {
     return { method: 'execCommand', success }
   } catch (err) {
     logger.warn('All share methods failed:', err)
-    return { method: 'execCommand', success: false }
+    return { method: 'execCommand', success: false, error: err }
   }
 }
 

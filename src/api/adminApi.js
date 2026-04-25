@@ -169,6 +169,21 @@ export const adminApi = {
   },
 
   /**
+   * Mint a curator invite link (admin-only RPC).
+   * @returns {Promise<{ success: boolean, token?: string, expires_at?: string, error?: string }>}
+   */
+  async createCuratorInvite() {
+    try {
+      const { data, error } = await supabase.rpc('create_curator_invite')
+      if (error) throw createClassifiedError(error)
+      return data
+    } catch (error) {
+      logger.error('Error minting curator invite:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
    * Search dishes by name
    * @param {string} query - Search query
    * @param {number} limit - Max results

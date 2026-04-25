@@ -29,6 +29,11 @@ export function Admin() {
   // Edit mode state
   const [editingDishId, setEditingDishId] = useState(null)
 
+  // Curator invite state
+  const [curatorInviteLink, setCuratorInviteLink] = useState('')
+  const [curatorInviteExpires, setCuratorInviteExpires] = useState('')
+  const [mintingCuratorInvite, setMintingCuratorInvite] = useState(false)
+
   // Restaurant manager state
   const [inviteRestaurantId, setInviteRestaurantId] = useState('')
   const [inviteLink, setInviteLink] = useState('')
@@ -234,6 +239,68 @@ export function Admin() {
       logger.error('Error deleting dish:', error)
       setMessage({ type: 'error', text: `Failed to delete: ${getUserMessage(error, 'deleting dish')}` })
     }
+  }
+
+  async function handleMintCuratorInvite() {
+    setMintingCuratorInvite(true)
+    try {
+      const result = await adminApi.createCuratorInvite()
+      if (!result?.success || !result?.token) {
+        setMessage({ type: 'error', text: result?.error || 'Failed to mint invite' })
+        return
+      }
+      const link = `${window.location.origin}/curator-invite/${result.token}`
+      setCuratorInviteLink(link)
+      setCuratorInviteExpires(result.expires_at || '')
+
+      const ta = document.createElement('textarea')
+      ta.value = link
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      let copied = false
+      try {
+        copied = document.execCommand('copy')
+      } catch {
+        copied = false
+      }
+      document.body.removeChild(ta)
+
+      const expiresText = result.expires_at
+        ? ` — expires ${new Date(result.expires_at).toLocaleDateString()}`
+        : ''
+      setMessage({
+        type: 'success',
+        text: copied
+          ? `Curator invite copied${expiresText}`
+          : `Invite minted${expiresText} — copy the link below`,
+      })
+    } catch (error) {
+      logger.error('Error minting curator invite:', error)
+      setMessage({ type: 'error', text: `Failed to mint invite: ${getUserMessage(error, 'minting curator invite')}` })
+    } finally {
+      setMintingCuratorInvite(false)
+    }
+  }
+
+  function handleCopyCuratorInvite() {
+    if (!curatorInviteLink) return
+    const ta = document.createElement('textarea')
+    ta.value = curatorInviteLink
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    try {
+      document.execCommand('copy')
+      setMessage({ type: 'success', text: 'Link copied!' })
+    } catch {
+      setMessage({ type: 'error', text: 'Copy failed — please select and copy manually' })
+    }
+    document.body.removeChild(ta)
   }
 
   async function handleGenerateInvite() {
@@ -776,6 +843,53 @@ export function Admin() {
                   No managers assigned yet
                 </p>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Local Curator Invites */}
+        <div className="mt-8 pt-8 border-t" style={{ borderColor: 'var(--color-divider)' }}>
+          <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            Local Curator Invites
+          </h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+            Mint a single-use link for someone you want to invite as a local curator (their Top 10 dishes show on the homepage).
+          </p>
+
+          <button
+            onClick={handleMintCuratorInvite}
+            disabled={mintingCuratorInvite}
+            className="px-4 py-2 rounded-lg font-medium transition-all text-sm disabled:opacity-60"
+            style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+          >
+            {mintingCuratorInvite ? 'Minting…' : 'Mint invite link'}
+          </button>
+
+          {curatorInviteLink && (
+            <div className="mt-3 p-3 rounded-lg border" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-divider)' }}>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                Invite link
+                {curatorInviteExpires && ` (expires ${new Date(curatorInviteExpires).toLocaleDateString()})`}:
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={curatorInviteLink}
+                  className="flex-1 px-2 py-1 border rounded text-xs"
+                  style={{ borderColor: 'var(--color-divider)', background: 'var(--color-surface)' }}
+                />
+                <button
+                  onClick={handleCopyCuratorInvite}
+                  className="px-3 py-1 rounded text-xs font-medium"
+                  style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="text-xs mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                Single-use — once they accept, mint a new one for the next curator.
+              </p>
             </div>
           )}
         </div>

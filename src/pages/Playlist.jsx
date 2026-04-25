@@ -9,6 +9,7 @@ import { getCategoryNeonImage, categoryEmojiFor } from '../constants/categories'
 import { AddDishSearchSheet } from '../components/playlists/AddDishSearchSheet'
 import { capture } from '../lib/analytics'
 import { shareOrCopy } from '../utils/share'
+import { toast } from 'sonner'
 
 export function Playlist() {
   const { id } = useParams()
@@ -84,13 +85,22 @@ export function Playlist() {
     }
   }
 
-  var handleShare = function () {
-    shareOrCopy({
+  var handleShare = async function () {
+    var result = await shareOrCopy({
       url: window.location.href,
       title: playlist.title,
       text: playlist.title + ' — a food playlist on What\'s Good Here',
     })
-    capture('playlist_shared', { playlist_id: id, share_target: 'native_or_clipboard' })
+    capture('playlist_shared', { playlist_id: id, share_target: result.method })
+    if (result.method === 'native_capacitor' || result.method === 'web_share') {
+      // OS share sheet is its own feedback — no toast
+      return
+    }
+    if (result.success) {
+      toast('Link copied')
+    } else {
+      toast('Could not share link')
+    }
   }
 
   return (

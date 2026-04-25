@@ -1,46 +1,112 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useLocation, useBlocker } from 'react-router-dom'
 import { useMyLocalList } from '../hooks/useMyLocalList'
 import { useDishSearch } from '../hooks/useDishSearch'
 import { getCategoryEmoji } from '../constants/categories'
 import { logger } from '../utils/logger'
 
+function snapshot(tagline, items) {
+  return JSON.stringify({
+    tagline: tagline || '',
+    items: (items || []).map(function (item) {
+      return {
+        dish_id: item.dish_id,
+        note: item.note || '',
+      }
+    }),
+  })
+}
+
 export function MyList() {
   var navigate = useNavigate()
-  var { listMeta, dishes, loading, saveList, saving } = useMyLocalList()
+  var location = useLocation()
+  var { listMeta, dishes, loading, error, saveList, saving } = useMyLocalList()
 
-  // Local state for editing
   var [tagline, setTagline] = useState('')
   var [items, setItems] = useState([])
   var [searchQuery, setSearchQuery] = useState('')
   var [showSearch, setShowSearch] = useState(false)
   var [saveMessage, setSaveMessage] = useState(null)
-  var [initialized, setInitialized] = useState(false)
+  var [hydrated, setHydrated] = useState(false)
+  var [serverSnapshot, setServerSnapshot] = useState('')
+  var [welcomeDismissed, setWelcomeDismissed] = useState(false)
 
   var { results: searchResults } = useDishSearch(searchQuery, 20)
 
-  // Initialize from server data (once)
+  // Hydrate once we have a server response — even if dishes is empty,
+  // so brand-new curators get listMeta.curatorTagline synced.
   useEffect(function () {
-    if (initialized) return
-    if (dishes.length > 0) {
-      setItems(dishes.map(function (d) {
-        return {
-          dish_id: d.dish_id,
-          dish_name: d.dish_name,
-          restaurant_name: d.restaurant_name,
-          category: d.category,
-          note: d.note || '',
-        }
-      }))
-      setInitialized(true)
-    }
-    if (listMeta && listMeta.curatorTagline) {
-      setTagline(listMeta.curatorTagline)
-    }
-  }, [dishes, listMeta, initialized])
+    if (hydrated || loading) return
+    if (!listMeta) return
+    var initialItems = dishes.map(function (d) {
+      return {
+        dish_id: d.dish_id,
+        dish_name: d.dish_name,
+        restaurant_name: d.restaurant_name,
+        category: d.category,
+        note: d.note || '',
+      }
+    })
+    var initialTagline = listMeta.curatorTagline || ''
+    setItems(initialItems)
+    setTagline(initialTagline)
+    setServerSnapshot(snapshot(initialTagline, initialItems))
+    setHydrated(true)
+  }, [hydrated, loading, listMeta, dishes])
 
-  // Not a curator — no list found
-  if (!loading && !listMeta) {
+  var currentSnapshot = useMemo(function () {
+    return snapshot(tagline, items)
+  }, [tagline, items])
+  var isDirty = hydrated && currentSnapshot !== serverSnapshot
+
+  // beforeunload — only while dirty. Removed on cleanup or when clean.
+  useEffect(function () {
+    if (!isDirty) return undefined
+    function handler(e) {
+      e.preventDefault()
+      e.returnValue = ''
+      return ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return function () { window.removeEventListener('beforeunload', handler) }
+  }, [isDirty])
+
+  // In-app navigation block while dirty.
+  var blocker = useBlocker(function (args) {
+    return isDirty && args.currentLocation.pathname !== args.nextLocation.pathname
+  })
+
+  // Loading and error states (must come before the !listMeta gate so a
+  // failed fetch doesn't masquerade as "you're not a curator").
+  if (loading && !hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--color-primary)' }} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-bg)' }}>
+        <div style={{ fontSize: 64 }}>⚠️</div>
+        <h1 style={{ fontFamily: "'Amatic SC', cursive", fontSize: 32, marginTop: 12, color: 'var(--color-text-primary)' }}>
+          Couldn't load your list
+        </h1>
+        <p style={{ color: 'var(--color-text-secondary)', marginTop: 8, textAlign: 'center' }}>
+          {error?.message || 'Please try again.'}
+        </p>
+        <button
+          onClick={function () { window.location.reload() }}
+          style={{ color: 'var(--color-accent-gold)', marginTop: 16, background: 'none', border: 'none', fontWeight: 700 }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  if (!listMeta) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
         <div className="text-center px-6">
@@ -59,14 +125,6 @@ export function MyList() {
             Go Home
           </button>
         </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--color-primary)' }} />
       </div>
     )
   }
@@ -141,6 +199,7 @@ export function MyList() {
       var result = await saveList(payload)
       if (result.success) {
         setSaveMessage('Saved! ' + (items.length > 0 ? 'Your list is live.' : 'List unpublished.'))
+        setServerSnapshot(snapshot(tagline, items))
       } else {
         setSaveMessage('Error: ' + (result.error || 'Failed to save'))
       }
@@ -156,6 +215,16 @@ export function MyList() {
   var filteredResults = searchResults.filter(function (dish) {
     return !addedIds[dish.dish_id || dish.id]
   })
+
+  var showWelcome = !welcomeDismissed
+    && location.state
+    && location.state.justAcceptedCuratorInvite
+    && items.length === 0
+
+  function dismissWelcome() {
+    setWelcomeDismissed(true)
+    navigate(location.pathname, { replace: true, state: null })
+  }
 
   return (
     <div style={{ background: 'var(--color-bg)', minHeight: '100vh', paddingBottom: '100px' }}>
@@ -173,6 +242,46 @@ export function MyList() {
           Pick up to 10 dishes visitors should try
         </p>
       </div>
+
+      {/* Welcome banner (just-accepted curator) */}
+      {showWelcome && (
+        <div
+          className="mx-4 mb-3 rounded-xl"
+          style={{
+            background: 'var(--color-surface-elevated)',
+            border: '1px solid var(--color-primary)',
+            padding: '12px 14px',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'flex-start',
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '4px' }}>
+              You&rsquo;re a Local Curator 🎉
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+              Pick up to 10 dishes visitors should try, add a tagline, and hit
+              {' '}<strong>Save &amp; Publish</strong>. Your list shows up on the homepage.
+            </p>
+          </div>
+          <button
+            onClick={dismissWelcome}
+            aria-label="Dismiss welcome"
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '18px',
+              color: 'var(--color-text-tertiary)',
+              cursor: 'pointer',
+              padding: '0 4px',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Tagline */}
       <div className="px-4 mb-4">
@@ -455,9 +564,20 @@ export function MyList() {
             {saveMessage}
           </p>
         )}
+        {isDirty && !saveMessage && (
+          <p style={{
+            fontSize: '11px',
+            color: 'var(--color-accent-gold)',
+            marginBottom: '6px',
+            textAlign: 'center',
+            fontWeight: 600,
+          }}>
+            Unsaved changes
+          </p>
+        )}
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !isDirty}
           className="w-full rounded-xl font-semibold transition-all disabled:opacity-50"
           style={{
             padding: '14px',
@@ -465,12 +585,72 @@ export function MyList() {
             background: 'var(--color-primary)',
             color: '#fff',
             border: 'none',
-            cursor: saving ? 'default' : 'pointer',
+            cursor: (saving || !isDirty) ? 'default' : 'pointer',
           }}
         >
           {saving ? 'Saving...' : items.length > 0 ? 'Save & Publish' : 'Save (Unpublished)'}
         </button>
       </div>
+
+      {/* Unsaved-changes blocker dialog */}
+      {blocker.state === 'blocked' && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={function () { blocker.reset && blocker.reset() }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="rounded-2xl"
+            style={{
+              background: 'var(--color-surface-elevated)',
+              padding: '20px',
+              maxWidth: '320px',
+              width: 'calc(100% - 32px)',
+              border: '1px solid var(--color-divider)',
+            }}
+            onClick={function (e) { e.stopPropagation() }}
+          >
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
+              Unsaved changes
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.4 }}>
+              You have unsaved edits to your list. Leave anyway?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={function () { blocker.reset && blocker.reset() }}
+                className="flex-1 rounded-lg font-semibold"
+                style={{
+                  padding: '10px',
+                  fontSize: '13px',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                  border: '1px solid var(--color-divider)',
+                  cursor: 'pointer',
+                }}
+              >
+                Stay
+              </button>
+              <button
+                onClick={function () { blocker.proceed && blocker.proceed() }}
+                className="flex-1 rounded-lg font-semibold"
+                style={{
+                  padding: '10px',
+                  fontSize: '13px',
+                  background: 'var(--color-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

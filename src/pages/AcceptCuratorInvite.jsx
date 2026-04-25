@@ -47,7 +47,7 @@ export function AcceptCuratorInvite() {
     try {
       var result = await localListsApi.acceptCuratorInvite(token)
       if (result.success) {
-        navigate('/my-list')
+        navigate('/my-list', { state: { justAcceptedCuratorInvite: true } })
       } else {
         setError(result.error || 'Failed to accept invite')
       }
