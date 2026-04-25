@@ -352,6 +352,37 @@ CREATE TABLE IF NOT EXISTS user_apple_tokens (
   revoked_at TIMESTAMPTZ
 );
 
+-- 1x. pending_apple_revocations
+-- Durable queue of Apple refresh tokens pending revocation after account
+-- deletion. Per App Store 5.1.1(v), we must eventually revoke Apple's
+-- consent on any deleted user's behalf.
+--
+-- No FK to auth.users — rows must survive user cascade delete.
+-- encrypted_refresh_token is self-contained ciphertext (not a Vault ref).
+-- locked_at / locked_by implement row leasing for concurrent workers.
+CREATE TABLE IF NOT EXISTS pending_apple_revocations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  apple_sub TEXT NOT NULL,
+  encrypted_refresh_token TEXT,
+  key_version TEXT,
+  -- client_id_type determines which Apple client_id to use for revocation.
+  -- Copied from user_apple_tokens at queue time. Required whenever a real
+  -- token is present (enforced by CHECK below).
+  client_id_type TEXT CHECK (client_id_type IN ('native', 'web')),
+  attempts INT NOT NULL DEFAULT 0,
+  last_attempt_at TIMESTAMPTZ,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  locked_at TIMESTAMPTZ,
+  locked_by TEXT,
+  unrevokable BOOLEAN NOT NULL DEFAULT FALSE,
+  dead_letter BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (
+    unrevokable
+    OR (encrypted_refresh_token IS NOT NULL AND key_version IS NOT NULL AND client_id_type IS NOT NULL)
+  )
+);
+
 -- 1v. category_median_prices (view)
 -- SECURITY INVOKER ensures this runs with the querying user's permissions, not the creator's
 CREATE OR REPLACE VIEW category_median_prices
@@ -485,6 +516,11 @@ CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 
 -- user_apple_tokens
 CREATE INDEX IF NOT EXISTS user_apple_tokens_apple_sub_idx ON user_apple_tokens (apple_sub);
+
+-- pending_apple_revocations: retry-eligible rows (not unrevokable sentinels, not dead-lettered)
+CREATE INDEX IF NOT EXISTS pending_apple_revocations_next_attempt_idx
+  ON pending_apple_revocations (next_attempt_at)
+  WHERE NOT unrevokable AND NOT dead_letter;
 
 -- jitter_samples (keep only last 30 samples per user, rolling window)
 CREATE INDEX IF NOT EXISTS idx_jitter_samples_user ON jitter_samples (user_id, collected_at DESC);
@@ -648,6 +684,9 @@ CREATE POLICY "Admin or manager delete events" ON events FOR DELETE USING (is_ad
 
 -- user_apple_tokens: service-role only. No policies for authenticated role = deny all.
 ALTER TABLE user_apple_tokens ENABLE ROW LEVEL SECURITY;
+
+-- pending_apple_revocations: service-role only. No policies for authenticated role = deny all.
+ALTER TABLE pending_apple_revocations ENABLE ROW LEVEL SECURITY;
 
 -- jitter_profiles + jitter_samples: users can read own profile, insert own samples, service role manages all
 ALTER TABLE jitter_profiles ENABLE ROW LEVEL SECURITY;
