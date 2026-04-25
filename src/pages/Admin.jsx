@@ -241,6 +241,32 @@ export function Admin() {
     }
   }
 
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch (err) {
+        logger.warn('navigator.clipboard.writeText failed, falling back:', err)
+      }
+    }
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    let ok = false
+    try {
+      ok = document.execCommand('copy')
+    } catch {
+      ok = false
+    }
+    document.body.removeChild(ta)
+    return ok
+  }
+
   async function handleMintCuratorInvite() {
     setMintingCuratorInvite(true)
     try {
@@ -253,21 +279,7 @@ export function Admin() {
       setCuratorInviteLink(link)
       setCuratorInviteExpires(result.expires_at || '')
 
-      const ta = document.createElement('textarea')
-      ta.value = link
-      ta.style.position = 'fixed'
-      ta.style.left = '-9999px'
-      document.body.appendChild(ta)
-      ta.focus()
-      ta.select()
-      let copied = false
-      try {
-        copied = document.execCommand('copy')
-      } catch {
-        copied = false
-      }
-      document.body.removeChild(ta)
-
+      const copied = await copyTextToClipboard(link)
       const expiresText = result.expires_at
         ? ` — expires ${new Date(result.expires_at).toLocaleDateString()}`
         : ''
@@ -275,7 +287,7 @@ export function Admin() {
         type: 'success',
         text: copied
           ? `Curator invite copied${expiresText}`
-          : `Invite minted${expiresText} — copy the link below`,
+          : `Invite minted${expiresText} — copy the link below manually`,
       })
     } catch (error) {
       logger.error('Error minting curator invite:', error)
@@ -285,22 +297,13 @@ export function Admin() {
     }
   }
 
-  function handleCopyCuratorInvite() {
+  async function handleCopyCuratorInvite() {
     if (!curatorInviteLink) return
-    const ta = document.createElement('textarea')
-    ta.value = curatorInviteLink
-    ta.style.position = 'fixed'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.focus()
-    ta.select()
-    try {
-      document.execCommand('copy')
-      setMessage({ type: 'success', text: 'Link copied!' })
-    } catch {
-      setMessage({ type: 'error', text: 'Copy failed — please select and copy manually' })
-    }
-    document.body.removeChild(ta)
+    const ok = await copyTextToClipboard(curatorInviteLink)
+    setMessage(ok
+      ? { type: 'success', text: 'Link copied!' }
+      : { type: 'error', text: 'Copy failed — select the link and copy manually' }
+    )
   }
 
   async function handleGenerateInvite() {
