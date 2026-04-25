@@ -67,6 +67,10 @@
   --color-success-light: #F0FFF4;
   --color-success-muted: rgba(22, 163, 74, 0.10);
   --color-success-border: rgba(22, 163, 74, 0.30);
+  /* Locals' Picks — cream-paper menu surface + ink stamp */
+  --color-paper-cream-light: #FBF5E8;
+  --color-paper-cream-dark: #F4EAD3;
+  --color-stamp-red: #B82617;
   --color-muted: #767676;
   /* Tagline — muted under headings */
   --color-text-tagline: #767676;
