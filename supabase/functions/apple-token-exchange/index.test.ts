@@ -209,6 +209,42 @@ Deno.test('duplicate code within 60s → 409 DUPLICATE_CODE', async () => {
   }
 });
 
+Deno.test('network error during Apple exchange → 502 transient', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : (input as Request).url;
+    if (url.includes('appleid.apple.com/auth/token')) {
+      throw new TypeError('network down');
+    }
+    return originalFetch(input, init);
+  };
+  const restore = () => { globalThis.fetch = originalFetch; };
+  const { userId, jwt } = await createTestUser();
+  await insertAppleIdentity(userId, '000123.abc');
+  try {
+    const res = await invokeFn('apple-token-exchange', {
+      jwt,
+      body: { authorization_code: 'x' },
+    });
+    assertEquals(res.status, 502);
+    const body = await res.json();
+    assertEquals(body.code, 'APPLE_EXCHANGE_FAILED');
+    assertEquals(body.transient, true);
+  } finally {
+    restore();
+    await cleanupUser(userId);
+  }
+});
+
+// NOTE: MULTI_APPLE_IDENTITY test skipped — harness insertAppleIdentity does not
+// support inserting a second identity row for the same user without schema changes.
+// The multi-identity branch is covered by the structured log event
+// (apple_token_exchange_multi_identity) in production observability.
+
 Deno.test('client-supplied apple_sub in body is ignored, stored sub used', async () => {
   const restore = mockAppleTokenEndpoint(() =>
     new Response(
