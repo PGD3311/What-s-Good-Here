@@ -154,8 +154,11 @@ Deno.serve(async (req) => {
   let encrypted;
   try {
     encrypted = await encryptRefreshToken(exchangeRes.refreshToken);
-  } catch (err) {
-    console.error('encrypt failed', err);
+  } catch {
+    console.error(JSON.stringify({
+      event: 'apple_token_exchange_encrypt_failed',
+      user_hash: await hashUserId(userId),
+    }));
     return json(500, { ok: false, code: 'ENCRYPT_FAILED', transient: true });
   }
 
