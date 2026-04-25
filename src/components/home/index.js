@@ -1,5 +1,4 @@
 export { CategoryIcon, hasCategoryIcon } from './CategoryIcons'
-export { LocalListsSection } from './LocalListsSection'
 export { LocalsPicksBanner } from './LocalsPicksBanner'
 export { ChampionCard } from './ChampionCard'
 export { Top10Scroll } from './Top10Scroll'

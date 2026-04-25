@@ -21,17 +21,6 @@ export const localListsApi = {
     }
   },
 
-  async getAggregate() {
-    try {
-      const { data, error } = await supabase.rpc('get_locals_aggregate')
-      if (error) throw createClassifiedError(error)
-      return data && data.length > 0 ? data[0] : null
-    } catch (error) {
-      logger.error('Failed to fetch locals aggregate:', error)
-      throw error.type ? error : createClassifiedError(error)
-    }
-  },
-
   async getConsensus() {
     try {
       const { data, error } = await supabase.rpc('get_local_picks_consensus')
