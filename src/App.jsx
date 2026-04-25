@@ -54,6 +54,8 @@ const ForRestaurants = lazyWithRetry(() => import('./pages/ForRestaurants'), 'Fo
 const JitterLanding = lazyWithRetry(() => import('./pages/JitterLanding'))
 const RestaurantReviews = lazyWithRetry(() => import('./pages/RestaurantReviews'), 'RestaurantReviews')
 const PlaylistPage = lazyWithRetry(() => import('./pages/Playlist'), 'Playlist')
+const Locals = lazyWithRetry(() => import('./pages/Locals'), 'Locals')
+const LocalsCurator = lazyWithRetry(() => import('./pages/LocalsCurator'), 'LocalsCurator')
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'), 'NotFound')
 
 // Prefetch functions for smoother navigation - call on hover/focus
@@ -135,6 +137,8 @@ function App() {
               <Route path="/for-restaurants" element={<ForRestaurants />} />
               <Route path="/playlist/:id" element={<Layout><PlaylistPage /></Layout>} />
               <Route path="/jitter" element={<Layout><JitterLanding /></Layout>} />
+              <Route path="/locals" element={<Layout><Locals /></Layout>} />
+              <Route path="/locals/:userId" element={<Layout><LocalsCurator /></Layout>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
