@@ -3658,6 +3658,59 @@ GRANT EXECUTE ON FUNCTION public.release_advisory_lock_for_delete(UUID) TO servi
 COMMENT ON FUNCTION public.release_advisory_lock_for_delete(UUID) IS
 'Releases the advisory lock acquired by try_advisory_lock_for_delete. Only callable by service_role.';
 
+-- Lease RPC for the apple-revocation-retry cron worker (B3.7).
+-- See supabase/migrations/20260421_apple_revocation_cron.sql for the full
+-- rationale. Uses FOR UPDATE SKIP LOCKED so multiple workers run concurrently
+-- without contention or double-revocation. Stale leases (>10 min) are reclaimed.
+--
+-- Column refs are fully qualified with table alias to avoid ambiguity between
+-- RETURNS TABLE output columns and source-table columns (CLAUDE.md §1.5).
+
+CREATE OR REPLACE FUNCTION public.lease_apple_revocations(
+  p_limit INT,
+  p_instance_id TEXT,
+  p_stale_lock_ms INT
+) RETURNS TABLE (
+  id UUID,
+  apple_sub TEXT,
+  encrypted_refresh_token TEXT,
+  key_version TEXT,
+  client_id_type TEXT,
+  attempts INT
+) LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE public.pending_apple_revocations p
+     SET locked_at = NOW(),
+         locked_by = p_instance_id
+    WHERE p.id IN (
+      SELECT sub.id
+        FROM public.pending_apple_revocations sub
+       WHERE sub.next_attempt_at <= NOW()
+         AND sub.attempts < 10
+         AND NOT sub.dead_letter
+         AND NOT sub.unrevokable
+         AND (sub.locked_at IS NULL OR sub.locked_at < NOW() - make_interval(secs => p_stale_lock_ms / 1000.0))
+       ORDER BY sub.next_attempt_at
+       FOR UPDATE SKIP LOCKED
+       LIMIT p_limit
+    )
+  RETURNING
+    p.id,
+    p.apple_sub,
+    p.encrypted_refresh_token,
+    p.key_version,
+    p.client_id_type,
+    p.attempts;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.lease_apple_revocations(INT, TEXT, INT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.lease_apple_revocations(INT, TEXT, INT) TO service_role;
+
+COMMENT ON FUNCTION public.lease_apple_revocations(INT, TEXT, INT) IS
+'Lease RPC for apple-revocation-retry cron worker. Atomically claims up to p_limit retry-eligible rows using FOR UPDATE SKIP LOCKED, reclaiming stale leases older than p_stale_lock_ms ms. Only callable by service_role.';
+
 
 -- =============================================
 -- USER PLAYLISTS (Spotify-style user-generated food playlists)
