@@ -45,7 +45,7 @@ Once Apple Dev account is active:
 
 - [ ] **Create a Services ID** (web-flow client ID)
   - Example: `com.whatsgoodhere.service`
-  - **Associated Domains** (domains where the SIWA button appears): `whats-good-here.vercel.app` (and any future custom domain)
+  - **Associated Domains** (domains where the SIWA button appears): `wghapp.com` (and any future custom domain)
   - **Return URL** (OAuth callback — must be Supabase): `https://vpioftosgdkyiwvhxewy.supabase.co/auth/v1/callback`
   - These are two separate fields in the Apple Services ID config.
 

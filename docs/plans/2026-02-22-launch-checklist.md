@@ -10,7 +10,7 @@
 These are blocking. Nothing else matters until these are confirmed.
 
 ### 1. Smoke Test the Live URL
-- [ ] Open https://whats-good-here.vercel.app on your phone
+- [ ] Open https://wghapp.com on your phone
 - [ ] Home page loads — map renders with CARTO tiles (CSP fix just shipped)
 - [ ] Browse page shows ranked dishes with real data
 - [ ] Tap a dish — Dish page loads with score, reviews, restaurant info

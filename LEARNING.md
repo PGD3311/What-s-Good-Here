@@ -362,7 +362,7 @@ const sorted = useMemo(() => dishes.toSorted(...), [dishes])
 
 **DOM (Document Object Model)** — The browser's representation of your page as a tree of elements. React updates the DOM for you.
 
-**URL (Uniform Resource Locator)** — A web address. `https://whats-good-here.vercel.app/browse`
+**URL (Uniform Resource Locator)** — A web address. `https://wghapp.com/browse`
 
 **HTTP** — The protocol browsers use to request web pages and data. GET requests data, POST sends data.
 

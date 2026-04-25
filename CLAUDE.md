@@ -6,7 +6,7 @@ Mobile-first food discovery app for Martha's Vineyard (expanding to Nantucket + 
 - **Frontend:** React 19, Vite 7, Tailwind CSS 3, React Router v7
 - **Maps:** Leaflet + React Leaflet (dish pins, restaurant discovery)
 - **Backend:** Supabase (PostgreSQL, Auth, Storage, Edge Functions)
-- **Hosting:** Vercel (whats-good-here.vercel.app)
+- **Hosting:** Vercel (wghapp.com)
 - **Analytics:** PostHog, Sentry
 - **Testing:** Vitest (unit), Playwright (E2E)
 - **PWA:** vite-plugin-pwa with service worker

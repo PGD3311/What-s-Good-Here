@@ -10,7 +10,7 @@
 
 What's Good Here is a mobile-first food discovery app for Martha's Vineyard. Users vote on dishes with a "Would you order this again?" binary plus a 1–10 rating scale, and the app ranks dishes by crowd-sourced consensus. The core loop is: browse/search dishes → vote → see how your taste compares. A gamification layer (badges) and social features (follows, taste compatibility) drive retention.
 
-Tech: React 19, Vite, Tailwind CSS, React Router v7, Supabase (Postgres + Auth + Storage), deployed on Vercel at `whats-good-here.vercel.app`. Analytics via PostHog + Sentry.
+Tech: React 19, Vite, Tailwind CSS, React Router v7, Supabase (Postgres + Auth + Storage), deployed on Vercel at `wghapp.com`. Analytics via PostHog + Sentry.
 
 ---
 

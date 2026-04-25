@@ -1674,7 +1674,7 @@ SELECT create_curator_invite();
 
 This returns `{"success": true, "token": "abc123...", "expires_at": "..."}`.
 
-The invite URL is: `https://whats-good-here.vercel.app/curator-invite/<token>`
+The invite URL is: `https://wghapp.com/curator-invite/<token>`
 
 Share this URL with the local via text/email. They click it, sign in (or create account), accept, and build their list.
 

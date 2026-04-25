@@ -17,13 +17,13 @@ The frontend code for Google OAuth is fully implemented. This guide covers the S
    - User Type: **External**
    - App name: **What's Good Here**
    - Support email: your email
-   - Authorized domains: add `whats-good-here.vercel.app` and your Supabase project domain (e.g., `supabase.co`)
+   - Authorized domains: add `wghapp.com` and your Supabase project domain (e.g., `supabase.co`)
    - Scopes: `email`, `profile`, `openid` (defaults)
 6. Back in Credentials, create OAuth client ID:
    - Application type: **Web application**
    - Name: **WGH Production**
    - Authorized JavaScript origins:
-     - `https://whats-good-here.vercel.app`
+     - `https://wghapp.com`
      - `http://localhost:5173` (for local dev)
    - Authorized redirect URIs:
      - `https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co/auth/v1/callback`
@@ -41,9 +41,9 @@ The frontend code for Google OAuth is fully implemented. This guide covers the S
 ## Step 3: Verify Redirect URLs
 
 In **Authentication > URL Configuration**:
-- **Site URL**: `https://whats-good-here.vercel.app`
+- **Site URL**: `https://wghapp.com`
 - **Redirect URLs** (add all):
-  - `https://whats-good-here.vercel.app/**`
+  - `https://wghapp.com/**`
   - `http://localhost:5173/**` (for local dev)
 
 ## Step 4: Run the `handle_new_user` Trigger

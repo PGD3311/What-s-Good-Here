@@ -135,7 +135,7 @@ Follow the prompts and add environment variables when asked.
 
 ### After Deployment
 
-1. Copy your Vercel deployment URL (e.g., `https://whats-good-here.vercel.app`)
+1. Copy your production URL (e.g., `https://wghapp.com`)
 2. Go back to Supabase dashboard > **Authentication > URL Configuration**
 3. Add your Vercel URL to **Site URL** and **Redirect URLs**
 4. Test authentication on your live site

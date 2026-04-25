@@ -23,7 +23,7 @@ const BOT_PATTERNS = [
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
-const BASE_URL = 'https://whats-good-here.vercel.app'
+const BASE_URL = 'https://wghapp.com'
 
 function escHtml(s: string): string {
   return s

@@ -138,9 +138,9 @@ Allowed purposes per Apple: Third-Party Advertising, Developer's Advertising or 
 
 **Primary contact:** `hello@whatsgoodhere.app`
 **Developer:** Daniel Walsh (individual enrollment)
-**Support URL:** `https://whats-good-here.vercel.app/support` (or the final custom domain once set)
-**Privacy Policy URL:** `https://whats-good-here.vercel.app/privacy`
-**Marketing URL (optional):** `https://whats-good-here.vercel.app` (homepage works as marketing)
+**Support URL:** `https://wghapp.com/support`
+**Privacy Policy URL:** `https://wghapp.com/privacy`
+**Marketing URL (optional):** `https://wghapp.com` (homepage works as marketing)
 
 ---
 

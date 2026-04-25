@@ -6,7 +6,7 @@ What's Good Here is a mobile-first food discovery app. Users rate individual dis
 
 Currently live on Martha's Vineyard, but the concept is location-agnostic and designed to expand.
 
-**Website:** whats-good-here.vercel.app
+**Website:** wghapp.com
 
 ## What We Need
 

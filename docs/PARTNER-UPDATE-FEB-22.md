@@ -1,7 +1,7 @@
 # What Changed Since the Unified Merge
 
 **Date:** Feb 22, 2026
-**Branch:** `main` (live on Vercel: whats-good-here.vercel.app)
+**Branch:** `main` (live on Vercel: wghapp.com)
 **Since:** commit `42e3275` — "unified merge — partner's polished UI + Denis's infrastructure"
 **Commits:** 22 | **Files changed:** 67 | **Lines added:** ~22,000
 

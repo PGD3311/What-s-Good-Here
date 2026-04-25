@@ -35,7 +35,7 @@ BEGIN
     INSERT INTO restaurant_invites (restaurant_id, created_by)
     VALUES (v_badmarthas_id, v_admin_id)
     RETURNING token INTO v_token_badmarthas;
-    RAISE NOTICE 'Bad Martha''s: https://whats-good-here.vercel.app/invite/%', v_token_badmarthas;
+    RAISE NOTICE 'Bad Martha''s: https://wghapp.com/invite/%', v_token_badmarthas;
   ELSE
     RAISE NOTICE 'Bad Martha''s Brewery not found in restaurants table';
   END IF;
@@ -44,7 +44,7 @@ BEGIN
     INSERT INTO restaurant_invites (restaurant_id, created_by)
     VALUES (v_nomans_id, v_admin_id)
     RETURNING token INTO v_token_nomans;
-    RAISE NOTICE 'Noman''s: https://whats-good-here.vercel.app/invite/%', v_token_nomans;
+    RAISE NOTICE 'Noman''s: https://wghapp.com/invite/%', v_token_nomans;
   ELSE
     RAISE NOTICE 'Noman''s not found in restaurants table';
   END IF;
@@ -53,7 +53,7 @@ BEGIN
     INSERT INTO restaurant_invites (restaurant_id, created_by)
     VALUES (v_nancys_id, v_admin_id)
     RETURNING token INTO v_token_nancys;
-    RAISE NOTICE 'Nancy''s: https://whats-good-here.vercel.app/invite/%', v_token_nancys;
+    RAISE NOTICE 'Nancy''s: https://wghapp.com/invite/%', v_token_nancys;
   ELSE
     RAISE NOTICE 'Nancy''s not found in restaurants table';
   END IF;
