@@ -5,6 +5,7 @@ import {
   decodeIdToken,
   decryptRefreshToken,
   encryptRefreshToken,
+  loadAppleConfig,
   signClientSecretJWT,
 } from './apple.ts';
 
@@ -68,7 +69,8 @@ Deno.test('decodeIdToken throws on missing sub', () => {
 Deno.test.ignore(
   'signClientSecretJWT produces a well-formed ES256 JWT',
   async () => {
-    const jwt = await signClientSecretJWT('native');
+    const cfg = await loadAppleConfig('native');
+    const jwt = await signClientSecretJWT(cfg);
     const parts = jwt.split('.');
     assertEquals(parts.length, 3);
     const header = JSON.parse(new TextDecoder().decode(base64UrlToBytes(parts[0])));

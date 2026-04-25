@@ -113,14 +113,28 @@ export function decodeIdToken(jwt: string): { sub: string; [k: string]: unknown 
 
 // ---- Apple Sign-in: client secret + token exchange helpers ----
 
-interface AppleConfig {
+export interface AppleConfig {
   teamId: string;
   keyId: string;
   clientId: string; // bundle id on native, services id on web
   privateKeyPem: string;
 }
 
-async function loadAppleConfig(clientIdFor: 'native' | 'web'): Promise<AppleConfig> {
+/** Typed error thrown by exchangeAuthorizationCode and revokeToken. */
+export class AppleApiError extends Error {
+  status: number;
+  body: string;
+  transient: boolean;
+  constructor(message: string, opts: { status: number; body?: string; transient: boolean }) {
+    super(message);
+    this.name = 'AppleApiError';
+    this.status = opts.status;
+    this.body = opts.body ?? '';
+    this.transient = opts.transient;
+  }
+}
+
+export async function loadAppleConfig(clientIdFor: 'native' | 'web'): Promise<AppleConfig> {
   const supa = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -167,8 +181,7 @@ async function importApplePrivateKey(pem: string): Promise<CryptoKey> {
   );
 }
 
-export async function signClientSecretJWT(clientIdFor: 'native' | 'web'): Promise<string> {
-  const cfg = await loadAppleConfig(clientIdFor);
+export async function signClientSecretJWT(cfg: AppleConfig): Promise<string> {
   const key = await importApplePrivateKey(cfg.privateKeyPem);
   const now = getNumericDate(0);
   const jwt = await jwtCreate(
@@ -196,7 +209,7 @@ export async function exchangeAuthorizationCode(
   clientIdFor: 'native' | 'web',
 ): Promise<AppleExchangeResult> {
   const cfg = await loadAppleConfig(clientIdFor);
-  const clientSecret = await signClientSecretJWT(clientIdFor);
+  const clientSecret = await signClientSecretJWT(cfg);
   const body = new URLSearchParams({
     client_id: cfg.clientId,
     client_secret: clientSecret,
@@ -210,18 +223,18 @@ export async function exchangeAuthorizationCode(
   });
   if (!res.ok) {
     const text = await res.text();
-    const isTransient = res.status >= 500;
-    const err = new Error(`Apple token exchange failed: ${res.status}`);
-    (err as any).status = res.status;
-    (err as any).body = text;
-    (err as any).transient = isTransient;
-    throw err;
+    throw new AppleApiError(`Apple token exchange failed: ${res.status}`, {
+      status: res.status,
+      body: text,
+      transient: res.status >= 500,
+    });
   }
   const json = await res.json();
   if (!json.refresh_token || !json.id_token) {
-    const err = new Error('Apple exchange response missing tokens');
-    (err as any).status = 502;
-    throw err;
+    throw new AppleApiError('Apple exchange response missing tokens', {
+      status: 502,
+      transient: false,
+    });
   }
   return {
     refreshToken: json.refresh_token,
@@ -235,7 +248,7 @@ export async function revokeToken(
   clientIdFor: 'native' | 'web' = 'native',
 ): Promise<void> {
   const cfg = await loadAppleConfig(clientIdFor);
-  const clientSecret = await signClientSecretJWT(clientIdFor);
+  const clientSecret = await signClientSecretJWT(cfg);
   const body = new URLSearchParams({
     client_id: cfg.clientId,
     client_secret: clientSecret,
@@ -249,11 +262,11 @@ export async function revokeToken(
   });
   if (!res.ok) {
     const text = await res.text();
-    const err = new Error(`Apple revoke failed: ${res.status}`);
-    (err as any).status = res.status;
-    (err as any).body = text;
-    (err as any).transient = res.status >= 500;
-    throw err;
+    throw new AppleApiError(`Apple revoke failed: ${res.status}`, {
+      status: res.status,
+      body: text,
+      transient: res.status >= 500,
+    });
   }
 }
 
