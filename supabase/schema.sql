@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   follower_count INTEGER DEFAULT 0,
   following_count INTEGER DEFAULT 0,
   is_local_curator BOOLEAN DEFAULT false,
+  can_invite_curators BOOLEAN DEFAULT false,
   avatar_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -562,8 +563,10 @@ CREATE POLICY "profiles_insert_own" ON profiles FOR INSERT WITH CHECK ((select a
 CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE
   USING ((select auth.uid()) = id)
   WITH CHECK ((select auth.uid()) = id);
--- Protected fields (is_local_curator, follower_count, following_count) are guarded by
--- protect_profile_fields_trigger (BEFORE UPDATE) — not RLS — to avoid infinite recursion.
+-- Protected fields (is_local_curator, can_invite_curators, follower_count, following_count) are
+-- meant to be guarded by protect_profile_fields_trigger (BEFORE UPDATE) — not RLS — to avoid
+-- infinite recursion. NOTE: trigger function is referenced here but is not in schema.sql; verify
+-- it exists in the live DB and includes all protected columns.
 -- No DELETE policy on profiles — users must not delete their own profile row (orphans FKs)
 
 -- favorites: users manage own only
@@ -3000,14 +3003,17 @@ AS $$
   ORDER BY li."position";
 $$;
 
--- RPC: Admin creates a curator invite link
+-- RPC: Admin (or user with profiles.can_invite_curators = true) creates a curator invite link
 CREATE OR REPLACE FUNCTION create_curator_invite()
 RETURNS JSON AS $$
 DECLARE
   v_invite RECORD;
 BEGIN
-  IF NOT is_admin() THEN
-    RETURN json_build_object('success', false, 'error', 'Admin only');
+  IF NOT (
+    is_admin()
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND can_invite_curators = true)
+  ) THEN
+    RETURN json_build_object('success', false, 'error', 'Not authorized');
   END IF;
 
   INSERT INTO curator_invites (created_by)
