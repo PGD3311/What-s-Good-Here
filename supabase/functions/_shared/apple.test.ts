@@ -1,6 +1,12 @@
 // supabase/functions/_shared/apple.test.ts
 import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { decodeIdToken, decryptRefreshToken, encryptRefreshToken } from './apple.ts';
+import {
+  base64UrlToBytes,
+  decodeIdToken,
+  decryptRefreshToken,
+  encryptRefreshToken,
+  signClientSecretJWT,
+} from './apple.ts';
 
 // NOTE: These tests require SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + the
 // apple_encryption_master_key_v1 vault secret populated. Run against a
@@ -54,3 +60,23 @@ Deno.test('decodeIdToken throws on missing sub', () => {
     assertEquals((e as Error).message, 'JWT missing sub claim');
   }
 });
+
+// B3-activate gate: this test requires the following Vault secrets to be
+// populated (deferred until Apple Developer verification is complete):
+//   apple_team_id, apple_key_id_v1, apple_bundle_id, apple_signing_key_v1
+// Once B3-activate ships, remove the .ignore and run with --allow-net --allow-env.
+Deno.test.ignore(
+  'signClientSecretJWT produces a well-formed ES256 JWT',
+  async () => {
+    const jwt = await signClientSecretJWT('native');
+    const parts = jwt.split('.');
+    assertEquals(parts.length, 3);
+    const header = JSON.parse(new TextDecoder().decode(base64UrlToBytes(parts[0])));
+    assertEquals(header.alg, 'ES256');
+    assert(header.kid);
+  },
+);
+
+// exchangeAuthorizationCode + revokeToken tests require a mock Apple endpoint.
+// These move to the apple-token-exchange integration tests, which mock via
+// fetch interceptor or test-only Apple fixture server.

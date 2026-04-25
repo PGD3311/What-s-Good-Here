@@ -9,6 +9,7 @@
 // without needing Vault access at copy time.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { create as jwtCreate, getNumericDate } from 'https://deno.land/x/djwt@v3.0.2/mod.ts';
 
 const KEY_VERSION = 'v1';
 
@@ -41,7 +42,7 @@ async function loadMasterKey(keyVersion: string): Promise<CryptoKey> {
 
   const key = await crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength) as ArrayBuffer,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt', 'decrypt'],
@@ -110,6 +111,152 @@ export function decodeIdToken(jwt: string): { sub: string; [k: string]: unknown 
   return parsed;
 }
 
+// ---- Apple Sign-in: client secret + token exchange helpers ----
+
+interface AppleConfig {
+  teamId: string;
+  keyId: string;
+  clientId: string; // bundle id on native, services id on web
+  privateKeyPem: string;
+}
+
+async function loadAppleConfig(clientIdFor: 'native' | 'web'): Promise<AppleConfig> {
+  const supa = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { auth: { persistSession: false } },
+  );
+  const { data, error } = await supa
+    .schema('vault')
+    .from('decrypted_secrets')
+    .select('name, decrypted_secret')
+    .in('name', [
+      'apple_team_id',
+      'apple_key_id_v1',
+      'apple_services_id',
+      'apple_bundle_id',
+      'apple_signing_key_v1',
+    ]);
+  if (error) throw new Error(`Vault read failed: ${error.message}`);
+  const m = new Map((data ?? []).map((r) => [r.name, r.decrypted_secret as string]));
+  const teamId = m.get('apple_team_id');
+  const keyId = m.get('apple_key_id_v1');
+  const clientId = clientIdFor === 'native'
+    ? m.get('apple_bundle_id')
+    : m.get('apple_services_id');
+  const privateKeyPem = m.get('apple_signing_key_v1');
+  if (!teamId || !keyId || !clientId || !privateKeyPem) {
+    throw new Error('Apple config missing from vault');
+  }
+  return { teamId, keyId, clientId, privateKeyPem };
+}
+
+async function importApplePrivateKey(pem: string): Promise<CryptoKey> {
+  // Strip PEM envelope, decode base64, import as ECDSA P-256 PKCS#8.
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '');
+  const der = base64ToBytes(b64);
+  return crypto.subtle.importKey(
+    'pkcs8',
+    der.buffer.slice(der.byteOffset, der.byteOffset + der.byteLength) as ArrayBuffer,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign'],
+  );
+}
+
+export async function signClientSecretJWT(clientIdFor: 'native' | 'web'): Promise<string> {
+  const cfg = await loadAppleConfig(clientIdFor);
+  const key = await importApplePrivateKey(cfg.privateKeyPem);
+  const now = getNumericDate(0);
+  const jwt = await jwtCreate(
+    { alg: 'ES256', kid: cfg.keyId, typ: 'JWT' },
+    {
+      iss: cfg.teamId,
+      iat: now,
+      exp: getNumericDate(5 * 60),
+      aud: 'https://appleid.apple.com',
+      sub: cfg.clientId,
+    },
+    key,
+  );
+  return jwt;
+}
+
+export interface AppleExchangeResult {
+  refreshToken: string;
+  idToken: string;
+  accessToken: string;
+}
+
+export async function exchangeAuthorizationCode(
+  code: string,
+  clientIdFor: 'native' | 'web',
+): Promise<AppleExchangeResult> {
+  const cfg = await loadAppleConfig(clientIdFor);
+  const clientSecret = await signClientSecretJWT(clientIdFor);
+  const body = new URLSearchParams({
+    client_id: cfg.clientId,
+    client_secret: clientSecret,
+    grant_type: 'authorization_code',
+    code,
+  });
+  const res = await fetch('https://appleid.apple.com/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const isTransient = res.status >= 500;
+    const err = new Error(`Apple token exchange failed: ${res.status}`);
+    (err as any).status = res.status;
+    (err as any).body = text;
+    (err as any).transient = isTransient;
+    throw err;
+  }
+  const json = await res.json();
+  if (!json.refresh_token || !json.id_token) {
+    const err = new Error('Apple exchange response missing tokens');
+    (err as any).status = 502;
+    throw err;
+  }
+  return {
+    refreshToken: json.refresh_token,
+    idToken: json.id_token,
+    accessToken: json.access_token,
+  };
+}
+
+export async function revokeToken(
+  refreshToken: string,
+  clientIdFor: 'native' | 'web' = 'native',
+): Promise<void> {
+  const cfg = await loadAppleConfig(clientIdFor);
+  const clientSecret = await signClientSecretJWT(clientIdFor);
+  const body = new URLSearchParams({
+    client_id: cfg.clientId,
+    client_secret: clientSecret,
+    token: refreshToken,
+    token_type_hint: 'refresh_token',
+  });
+  const res = await fetch('https://appleid.apple.com/auth/revoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(`Apple revoke failed: ${res.status}`);
+    (err as any).status = res.status;
+    (err as any).body = text;
+    (err as any).transient = res.status >= 500;
+    throw err;
+  }
+}
+
 // ---- base64 helpers (no deps) ----
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -123,7 +270,7 @@ function base64ToBytes(b64: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
-function base64UrlToBytes(b64url: string): Uint8Array {
+export function base64UrlToBytes(b64url: string): Uint8Array {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(
     b64url.length + ((4 - (b64url.length % 4)) % 4),
     '=',
