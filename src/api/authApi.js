@@ -227,10 +227,26 @@ export const authApi = {
           logger.warn('persistFirstSignInName failed', e)
         })
 
-        // B3 lands the apple-token-exchange call here for revocation compliance.
-        // For B2, authorizationCode is dropped; Flow H healing will re-capture.
         if (appleRes.authorizationCode) {
-          logger.info('authorizationCode present — exchange deferred to B3 deployment')
+          try {
+            const { data, error } = await supabase.functions.invoke('apple-token-exchange', {
+              method: 'POST',
+              body: { authorization_code: appleRes.authorizationCode },
+            })
+            if (error || !data?.ok) {
+              // Non-blocking. Flow H heals on next sign-in.
+              capture('apple_token_exchange_failed', {
+                status: error?.status,
+                code: data?.code,
+              })
+              logger.warn('apple-token-exchange failed', { status: error?.status, code: data?.code })
+            } else {
+              capture('apple_token_exchanged')
+            }
+          } catch (e) {
+            capture('apple_token_exchange_failed', { error: e?.message })
+            logger.warn('apple-token-exchange threw', e)
+          }
         }
 
         return { success: true }

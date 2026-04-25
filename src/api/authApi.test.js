@@ -410,6 +410,65 @@ describe('authApi.signInWithApple on native (B2.5)', () => {
 
     expect(r).toEqual({ success: false, cancelled: true, code: 'AUTH_USER_CANCELLED' })
   })
+
+  it('POSTs authorizationCode to apple-token-exchange after signInWithIdToken', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithAppleNative.mockResolvedValueOnce({
+      identityToken: 'a-id',
+      authorizationCode: 'code-xyz',
+      appleSub: '000.abc',
+      givenName: null,
+      familyName: null,
+      rawNonce: 'a'.repeat(64),
+    })
+    supabase.auth.signInWithIdToken.mockResolvedValueOnce({ error: null })
+    supabase.functions.invoke.mockResolvedValueOnce({ data: { ok: true }, error: null })
+
+    await authApi.signInWithApple()
+
+    expect(supabase.functions.invoke).toHaveBeenCalledWith('apple-token-exchange', {
+      method: 'POST',
+      body: { authorization_code: 'code-xyz' },
+    })
+  })
+
+  it('does not throw when apple-token-exchange returns error (Flow H)', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithAppleNative.mockResolvedValueOnce({
+      identityToken: 'a-id',
+      authorizationCode: 'code-xyz',
+      appleSub: '000.abc',
+      givenName: null,
+      familyName: null,
+      rawNonce: 'a'.repeat(64),
+    })
+    supabase.auth.signInWithIdToken.mockResolvedValueOnce({ error: null })
+    supabase.functions.invoke.mockResolvedValueOnce({
+      data: { ok: false, code: 'NO_APPLE_IDENTITY' },
+      error: { status: 409 },
+    })
+
+    // Sign-in still succeeds even though exchange failed
+    const r = await authApi.signInWithApple()
+    expect(r).toEqual({ success: true })
+  })
+
+  it('does not POST when authorizationCode is absent', async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true)
+    signInWithAppleNative.mockResolvedValueOnce({
+      identityToken: 'a-id',
+      authorizationCode: null,
+      appleSub: '000.abc',
+      givenName: null,
+      familyName: null,
+      rawNonce: 'a'.repeat(64),
+    })
+    supabase.auth.signInWithIdToken.mockResolvedValueOnce({ error: null })
+
+    await authApi.signInWithApple()
+
+    expect(supabase.functions.invoke).not.toHaveBeenCalled()
+  })
 })
 
 describe('authApi.signOutNative (B2.5)', () => {
