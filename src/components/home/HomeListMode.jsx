@@ -5,9 +5,7 @@ import { DishSearch } from '../DishSearch'
 import { DishListItem } from '../DishListItem'
 import { EmptyState } from '../EmptyState'
 import { LocationBanner } from '../LocationBanner'
-import { LocalListsSection, Top10Carousel } from './'
-import { useLocalsAggregate } from '../../hooks/useLocalsAggregate'
-
+import { LocalsPicksBanner, Top10Carousel } from './'
 export const HomeListMode = memo(function HomeListMode({
   listScrollRef,
   searchQuery,
@@ -31,8 +29,6 @@ export const HomeListMode = memo(function HomeListMode({
 }) {
   var navigate = useNavigate()
   var carouselRef = useRef(null)
-  var localsAggregateData = useLocalsAggregate()
-  var localsAggregate = localsAggregateData.aggregate
 
   var handleCategorySelect = useCallback(function (cat) {
     onExpandedCategoryChange(cat)
@@ -181,12 +177,11 @@ export const HomeListMode = memo(function HomeListMode({
               mostVotedDish={mostVotedDish}
               bestValueMeal={bestValueMeal}
               bestIceCream={bestIceCream}
-              localsAggregate={localsAggregate}
               onExpandCategory={handleCategorySelect}
             />
 
-            {/* Local Lists — horizontal scroll above the food icon tabs */}
-            <LocalListsSection onListExpanded={onLocalListExpanded} />
+            {/* Locals' Picks Banner — cream-paper entry point → /locals */}
+            <LocalsPicksBanner />
 
             {/* Top 10 carousel — swipe between Near You, Pizza, Burgers, etc. */}
             <div id="top10-carousel">
@@ -205,8 +200,6 @@ export const HomeListMode = memo(function HomeListMode({
 
 // Chalkboard styles — module-level constants (no re-creation per render)
 var BOARD_OUTER = { flexShrink: 0, width: '175px' }
-var BOARD_OUTER_WIDE = { flexShrink: 0, width: '185px' }
-var COUNT_BADGE = { fontFamily: "'Outfit', sans-serif", display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(196, 138, 18, 0.2)', color: 'var(--color-accent-gold)', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '10px', marginTop: '4px' }
 var BOARD_SURFACE = { position: 'relative', background: '#363B3F', borderRadius: '4px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }
 var BOARD_FRAME = { position: 'absolute', inset: '3px', border: '2.5px solid #1A1D1F', borderRadius: '2px', pointerEvents: 'none', zIndex: 2 }
 var BOARD_DUST = { position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 30% 40%, rgba(255,255,255,0.03) 0%, transparent 60%)', pointerEvents: 'none' }
@@ -253,31 +246,7 @@ function ChalkboardCard({ tag, title, titleSize, sub, stat, cta, onClick, icon, 
 
 var ICE_CREAM_MELTING_STYLE = { display: 'block', margin: '4px auto -2px', width: '40px', height: '40px', objectFit: 'contain' }
 
-function LocalsChalkboardCard({ tag, title, titleSize, sub, countText, cta, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="active:scale-[0.97] transition-transform"
-      style={BOARD_OUTER_WIDE}
-    >
-      <div style={BOARD_SURFACE}>
-        <div style={BOARD_FRAME} />
-        <div style={BOARD_DUST} />
-        <div style={BOARD_CONTENT}>
-          <p style={Object.assign({}, CHALK_FAINT, { fontSize: '13px', margin: 0 })}>{tag}</p>
-          <p style={Object.assign({}, CHALK_BIG, { fontSize: titleSize || '30px', fontWeight: 700, lineHeight: 0.95, margin: '2px 0 0' })}>{title}</p>
-          {sub && <p style={Object.assign({}, CHALK_MED, { fontSize: '15px', margin: 0 })}>{sub}</p>}
-          <div style={CHALK_LINE} />
-          {countText && <span style={COUNT_BADGE}>{countText}</span>}
-          {countText && <div style={{ marginTop: '4px' }} />}
-          <p style={Object.assign({}, CHALK_CTA, { fontSize: '18px', fontWeight: 700, margin: 0 })}>{cta}</p>
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIceCream, localsAggregate, onExpandCategory }) {
+function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIceCream, onExpandCategory }) {
   var navigate = useNavigate()
 
   var hour = new Date().getHours()
@@ -373,29 +342,6 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
         />
       )}
 
-      {/* Board 7: Locals Agree — most-appearing dish */}
-      {localsAggregate && localsAggregate.top_dish_id && localsAggregate.total_lists >= 2 && (
-        <LocalsChalkboardCard
-          tag={'\uD83C\uDFC6 locals agree'}
-          title={localsAggregate.top_dish_name}
-          sub={localsAggregate.top_dish_restaurant_name}
-          countText={'On ' + localsAggregate.top_dish_list_count + ' of ' + localsAggregate.total_lists + ' local lists'}
-          cta={'see why \u2192'}
-          onClick={function () { navigate('/dish/' + localsAggregate.top_dish_id) }}
-        />
-      )}
-
-      {/* Board 8: Island Favorite — most-appearing restaurant */}
-      {localsAggregate && localsAggregate.top_restaurant_id && localsAggregate.total_lists >= 2 && (
-        <LocalsChalkboardCard
-          tag={'\uD83D\uDCCD island favorite'}
-          title={localsAggregate.top_restaurant_name}
-          sub={localsAggregate.top_restaurant_town || ''}
-          countText={localsAggregate.top_restaurant_list_count >= localsAggregate.total_lists ? 'On every local list' : 'On ' + localsAggregate.top_restaurant_list_count + ' of ' + localsAggregate.total_lists + ' local lists'}
-          cta={'see the menu \u2192'}
-          onClick={function () { navigate('/restaurants/' + localsAggregate.top_restaurant_id) }}
-        />
-      )}
     </div>
   )
 }
