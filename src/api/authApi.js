@@ -227,7 +227,7 @@ export const authApi = {
           logger.warn('persistFirstSignInName failed', e)
         })
 
-        if (appleRes.authorizationCode) {
+        if (typeof appleRes.authorizationCode === 'string' && appleRes.authorizationCode.length > 0) {
           try {
             const { data, error } = await supabase.functions.invoke('apple-token-exchange', {
               method: 'POST',
@@ -235,11 +235,11 @@ export const authApi = {
             })
             if (error || !data?.ok) {
               // Non-blocking. Flow H heals on next sign-in.
-              capture('apple_token_exchange_failed', {
-                status: error?.status,
-                code: data?.code,
-              })
-              logger.warn('apple-token-exchange failed', { status: error?.status, code: data?.code })
+              // Status lives on FunctionsHttpError.context.status, not error.status.
+              const status = error?.context?.status ?? error?.status
+              const code = data?.code ?? error?.context?.code
+              capture('apple_token_exchange_failed', { status, code })
+              logger.warn('apple-token-exchange failed', { status, code })
             } else {
               capture('apple_token_exchanged')
             }

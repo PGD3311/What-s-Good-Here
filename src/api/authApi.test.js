@@ -430,6 +430,9 @@ describe('authApi.signInWithApple on native (B2.5)', () => {
       method: 'POST',
       body: { authorization_code: 'code-xyz' },
     })
+    expect(supabase.auth.signInWithIdToken.mock.invocationCallOrder[0]).toBeLessThan(
+      supabase.functions.invoke.mock.invocationCallOrder[0],
+    )
   })
 
   it('does not throw when apple-token-exchange returns error (Flow H)', async () => {
@@ -445,7 +448,7 @@ describe('authApi.signInWithApple on native (B2.5)', () => {
     supabase.auth.signInWithIdToken.mockResolvedValueOnce({ error: null })
     supabase.functions.invoke.mockResolvedValueOnce({
       data: { ok: false, code: 'NO_APPLE_IDENTITY' },
-      error: { status: 409 },
+      error: { context: { status: 409 } },
     })
 
     // Sign-in still succeeds even though exchange failed
