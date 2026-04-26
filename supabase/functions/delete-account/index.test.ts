@@ -351,62 +351,29 @@ Deno.test({
       const still = await authUserExists(userId)
       assert(still, 'auth.users row must still exist after APPLE_SUB_DRIFT abort')
     } finally {
-      await supa.from('user_apple_tokens').delete().eq('user_id', userId).catch(() => {})
+      try {
+        await supa.from('user_apple_tokens').delete().eq('user_id', userId)
+      } catch { /* swallow */ }
       await cleanupUser(userId)
     }
   },
 })
 
 // ---------------------------------------------------------------------------
-// T6 — Concurrent double-submit returns 409 on the second call
+// T6 (REMOVED) — Concurrent double-submit
 //
-// Note: this test is inherently timing-sensitive. The advisory lock is
-// acquired before the Apple identity lookup, but if the first call completes
-// very quickly (e.g. non-Apple user in a fast environment) the lock may be
-// released before the second call arrives. In CI this is usually reliable
-// because the cascade takes >100ms, but it may be flaky on very fast machines.
-// If flaky, the test is marked with a TODO rather than removed.
+// Previously asserted that a second concurrent delete-account call returned
+// 409 DELETE_IN_PROGRESS via a Postgres advisory lock. The lock was reverted
+// (Codex must-fix): pg_try_advisory_lock + pg_advisory_unlock are session-
+// scoped, but Supabase pgbouncer runs in transaction-pool mode, so the unlock
+// call lands on a different backend than the acquire — leaking the lock until
+// the original session is recycled. The test asserted behaviour that no longer
+// exists.
 //
-// TODO: If this test is flaky in CI, disable it and rely on the advisory lock
-// unit tests in the migration SQL instead.
+// The original concern (false `apple_revoke_cascade_mismatch` on concurrent
+// calls) is documented as a known limitation in delete-account/index.ts.
+// A row-based delete_account_locks table is a future fix.
 // ---------------------------------------------------------------------------
-
-Deno.test({
-  name: 'T6: concurrent double-submit — second call returns 409 DELETE_IN_PROGRESS',
-  async fn() {
-    const { userId, jwt } = await createTestUser()
-
-    try {
-      // Race two concurrent delete-account calls for the same user.
-      // We expect one to return 200 (or 500 if cascade errors) and the other
-      // to return 409 DELETE_IN_PROGRESS.
-      const [res1, res2] = await Promise.all([
-        invokeFn('delete-account', { jwt }),
-        invokeFn('delete-account', { jwt }),
-      ])
-
-      const statuses = [res1.status, res2.status].sort()
-      const bodies = await Promise.all([res1.json(), res2.json()])
-
-      // One call should have been blocked with 409.
-      const has409 = statuses.includes(409)
-      if (has409) {
-        const blocked = bodies.find((b) => b.code === 'DELETE_IN_PROGRESS')
-        assert(blocked, 'The 409 response must carry code DELETE_IN_PROGRESS')
-      } else {
-        // If no 409 was returned, one call completed before the other started
-        // (advisory lock released before second call acquired it). This is a
-        // valid race outcome — both calls for the same user will fail on the
-        // second call's JWT verification anyway (user deleted by first call).
-        // Log but don't fail.
-        console.warn('[T6] No 409 observed — calls did not overlap. Lock correctness not verified by timing.')
-      }
-    } finally {
-      // Best-effort cleanup if user still exists.
-      await cleanupUser(userId)
-    }
-  },
-})
 
 // ---------------------------------------------------------------------------
 // T7 (SKIPPED) — Cascade failure rollback
