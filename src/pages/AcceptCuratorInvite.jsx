@@ -15,8 +15,13 @@ export function AcceptCuratorInvite() {
   var [accepting, setAccepting] = useState(false)
   var [error, setError] = useState(null)
 
+  // Wait for auth to settle before fetching — get_curator_invite_details
+  // reads auth.uid() to compute is_creator, so an early call would return
+  // is_creator=false and miss the "this is your own link" UI.
   useEffect(function () {
+    if (authLoading) return undefined
     var cancelled = false
+    setLoading(true)
 
     async function fetchInvite() {
       try {
@@ -38,7 +43,7 @@ export function AcceptCuratorInvite() {
 
     fetchInvite()
     return function () { cancelled = true }
-  }, [token])
+  }, [token, authLoading, user?.id])
 
   async function handleAccept() {
     setAccepting(true)
@@ -80,7 +85,7 @@ export function AcceptCuratorInvite() {
         <div className="text-center max-w-md px-6">
           <div style={{ fontSize: '40px', marginBottom: '16px' }}>😕</div>
           <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
-            Invalid Invite
+            Can't open this invite
           </h1>
           <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
             {error?.message || error}
@@ -91,6 +96,30 @@ export function AcceptCuratorInvite() {
             style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}
           >
             Go Home
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (user && invite.is_creator) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-center max-w-md px-6">
+          <div style={{ fontSize: '40px', marginBottom: '16px' }}>🔗</div>
+          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            This is your invite link
+          </h1>
+          <p className="text-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+            Share it with the person you want to make a local curator. Clicking it yourself
+            won't burn the token — they'll still be able to accept.
+          </p>
+          <button
+            onClick={function () { navigate('/admin') }}
+            className="w-full px-6 py-3 rounded-xl font-semibold"
+            style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}
+          >
+            Back to Admin
           </button>
         </div>
       </div>

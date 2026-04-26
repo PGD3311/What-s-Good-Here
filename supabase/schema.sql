@@ -2973,17 +2973,23 @@ BEGIN
     RETURN json_build_object('valid', false, 'error', 'Invite not found');
   END IF;
   IF v_invite.used_by IS NOT NULL THEN
-    RETURN json_build_object('valid', false, 'error', 'Invite already used');
+    RETURN json_build_object('valid', false, 'error', 'This invite was already claimed. Ask the person who sent it to mint a new one.');
   END IF;
   IF v_invite.expires_at < NOW() THEN
-    RETURN json_build_object('valid', false, 'error', 'Invite has expired');
+    RETURN json_build_object('valid', false, 'error', 'This invite has expired. Ask the person who sent it to mint a new one.');
   END IF;
 
-  RETURN json_build_object('valid', true, 'expires_at', v_invite.expires_at);
+  RETURN json_build_object(
+    'valid', true,
+    'expires_at', v_invite.expires_at,
+    'is_creator', (auth.uid() IS NOT NULL AND v_invite.created_by = auth.uid())
+  );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
--- RPC: Accept curator invite — sets flag, creates empty list
+-- RPC: Accept curator invite — sets flag, creates empty list.
+-- The creator's own click is a no-op so they can safely test/preview the link
+-- without burning the single-use token.
 CREATE OR REPLACE FUNCTION accept_curator_invite(p_token TEXT)
 RETURNS JSON AS $$
 DECLARE
@@ -3003,10 +3009,19 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Invite not found');
   END IF;
   IF v_invite.used_by IS NOT NULL THEN
-    RETURN json_build_object('success', false, 'error', 'Invite already used');
+    RETURN json_build_object('success', false, 'error', 'This invite was already claimed. Ask the person who sent it to mint a new one.');
   END IF;
   IF v_invite.expires_at < NOW() THEN
-    RETURN json_build_object('success', false, 'error', 'Invite has expired');
+    RETURN json_build_object('success', false, 'error', 'This invite has expired. Ask the person who sent it to mint a new one.');
+  END IF;
+  -- Self-click guard runs AFTER used/expired checks so the creator gets the
+  -- accurate state for a dead token instead of "this is your own link".
+  IF v_invite.created_by = v_user_id THEN
+    RETURN json_build_object(
+      'success', false,
+      'is_creator', true,
+      'error', 'This is your own invite link. Share it with the person you want to invite.'
+    );
   END IF;
 
   -- Set curator flag
