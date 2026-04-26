@@ -87,19 +87,31 @@ Deno.serve(async (req) => {
         row.key_version,
       );
       await revokeToken(refreshToken, (row.client_id_type as 'native' | 'web') ?? 'native');
-      await supa.from('pending_apple_revocations').delete().eq('id', row.id);
-      succeeded++;
-      console.log(JSON.stringify({ event: 'apple_revoke_succeeded', row_id: row.id }));
+      const { error: deleteErr } = await supa
+        .from('pending_apple_revocations')
+        .delete()
+        .eq('id', row.id);
+      if (deleteErr) {
+        console.error(JSON.stringify({
+          event: 'apple_revoke_delete_failed',
+          row_id: row.id,
+          pg_code: (deleteErr as { code?: string })?.code ?? null,
+        }));
+      } else {
+        succeeded++;
+        console.log(JSON.stringify({ event: 'apple_revoke_succeeded', row_id: row.id }));
+      }
     } catch (err) {
       const isAppleErr = err instanceof AppleApiError;
       const status = isAppleErr ? err.status : null;
       const bodyText = isAppleErr ? err.body : '';
       const isInvalidGrant = bodyText.includes('invalid_grant');
-      const isClientError = isAppleErr && err.status >= 400 && err.status < 500;
+      const isRateLimit = isAppleErr && err.status === 429;
+      const isClientError = isAppleErr && err.status >= 400 && err.status < 500 && !isRateLimit;
 
       if (isInvalidGrant || isClientError) {
         // Apple says no — permanent. Dead-letter immediately.
-        await supa
+        const { error: updateErr } = await supa
           .from('pending_apple_revocations')
           .update({
             dead_letter: true,
@@ -109,16 +121,24 @@ Deno.serve(async (req) => {
             attempts: row.attempts + 1,
           })
           .eq('id', row.id);
-        deadLettered++;
-        console.error(JSON.stringify({
-          event: 'apple_revoke_failed_final',
-          row_id: row.id,
-          status,
-        }));
+        if (updateErr) {
+          console.error(JSON.stringify({
+            event: 'apple_revoke_dead_letter_update_failed',
+            row_id: row.id,
+            pg_code: (updateErr as { code?: string })?.code ?? null,
+          }));
+        } else {
+          deadLettered++;
+          console.error(JSON.stringify({
+            event: 'apple_revoke_failed_final',
+            row_id: row.id,
+            status,
+          }));
+        }
       } else {
         const newAttempts = row.attempts + 1;
         if (newAttempts >= MAX_ATTEMPTS) {
-          await supa
+          const { error: updateErr } = await supa
             .from('pending_apple_revocations')
             .update({
               dead_letter: true,
@@ -128,16 +148,24 @@ Deno.serve(async (req) => {
               attempts: newAttempts,
             })
             .eq('id', row.id);
-          deadLettered++;
-          console.error(JSON.stringify({
-            event: 'apple_revoke_failed_final',
-            row_id: row.id,
-            status,
-            reason: 'max_attempts',
-          }));
+          if (updateErr) {
+            console.error(JSON.stringify({
+              event: 'apple_revoke_max_attempts_update_failed',
+              row_id: row.id,
+              pg_code: (updateErr as { code?: string })?.code ?? null,
+            }));
+          } else {
+            deadLettered++;
+            console.error(JSON.stringify({
+              event: 'apple_revoke_failed_final',
+              row_id: row.id,
+              status,
+              reason: 'max_attempts',
+            }));
+          }
         } else {
           const nextMs = Date.now() + backoffMinutes(newAttempts) * 60_000;
-          await supa
+          const { error: updateErr } = await supa
             .from('pending_apple_revocations')
             .update({
               attempts: newAttempts,
@@ -147,7 +175,15 @@ Deno.serve(async (req) => {
               locked_by: null,
             })
             .eq('id', row.id);
-          failedTransient++;
+          if (updateErr) {
+            console.error(JSON.stringify({
+              event: 'apple_revoke_backoff_update_failed',
+              row_id: row.id,
+              pg_code: (updateErr as { code?: string })?.code ?? null,
+            }));
+          } else {
+            failedTransient++;
+          }
         }
       }
     }

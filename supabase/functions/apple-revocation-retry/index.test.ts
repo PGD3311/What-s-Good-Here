@@ -322,6 +322,43 @@ Deno.test('T6: two concurrent workers vs same row — only one revoke, row delet
 });
 
 // ---------------------------------------------------------------------------
+// T8 — Apple 429 (rate limit) → transient, not dead_letter
+//
+// 429 must be treated as transient — Apple may rate-limit during bulk account
+// deletion. Dead-lettering would silently abandon the revocation. We assert
+// the same shape as T3 (Apple 500): row preserved, attempts incremented,
+// dead_letter false, lock cleared, next_attempt_at scheduled in the future.
+// ---------------------------------------------------------------------------
+
+Deno.test('T8: Apple 429 rate limit → transient backoff, not dead-lettered', async () => {
+  const mock = mockAppleRevoke(429, 'too_many_requests');
+  const rowId = await createTestPendingRow({
+    apple_sub: `t8-${crypto.randomUUID()}`,
+    next_attempt_at: new Date(Date.now() - 1000).toISOString(),
+  });
+  try {
+    const res = await invokeFn('apple-revocation-retry', {
+      jwt: SERVICE_ROLE_KEY,
+    });
+    assertEquals(res.status, 200);
+
+    const after = await getPendingRow(rowId);
+    assert(after !== null, 'Row must still exist after 429 — not dead-lettered');
+    assertEquals(after!.dead_letter, false, '429 must be transient, not dead_letter');
+    assertEquals(after!.attempts, 1, 'attempts should be incremented to 1');
+    assertEquals(after!.locked_at, null, 'lock must be cleared after processing');
+    assertEquals(after!.locked_by, null, 'locked_by must be cleared after processing');
+    assert(
+      new Date(after!.next_attempt_at as string).getTime() > Date.now(),
+      'next_attempt_at must be scheduled in the future for backoff',
+    );
+  } finally {
+    mock.restore();
+    await cleanupPending(rowId);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // T7 — Stale lease (>10 min) is reclaimed
 //
 // Insert a row that is already locked (locked_at = 15 min ago, locked_by =
