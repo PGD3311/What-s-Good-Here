@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["<TEAMID>.com.whatsgoodhere.app"],
+        "paths": [
+          "/auth/*",
+          "/reset-password",
+          "/reset-password/*"
+        ],
+        "components": [
+          { "/": "/auth/*", "comment": "Auth callbacks — open app" },
+          { "/": "/reset-password", "comment": "Password reset — open app" },
+          { "/": "/reset-password/*", "comment": "Password reset with query — open app" }
+        ]
+      }
+    ]
+  }
+}

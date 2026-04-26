@@ -1,0 +1,27 @@
+name: AASA validation
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  aasa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch AASA from production
+        run: |
+          URL="https://wghapp.com/.well-known/apple-app-site-association"
+          HTTP_CODE=$(curl -o aasa.json -w "%{http_code}" -sL --max-redirs 0 "$URL")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::AASA returned $HTTP_CODE (expected 200, no redirects)"
+            exit 1
+          fi
+          CONTENT_TYPE=$(curl -sI "$URL" | awk -F': ' '/^Content-Type/{print tolower($2)}' | tr -d '\r\n')
+          if [[ "$CONTENT_TYPE" != "application/json"* ]]; then
+            echo "::error::AASA Content-Type is '$CONTENT_TYPE', expected application/json"
+            exit 1
+          fi
+          # Schema check
+          jq -e '.applinks.details[0].appIDs | length >= 1' aasa.json > /dev/null
+          jq -e '.applinks.details[0].paths | length >= 1' aasa.json > /dev/null
+          echo "AASA OK"
