@@ -17,7 +17,11 @@ export default defineConfig({
       // Other supabase/functions/*.test.ts files are pure vitest (import from 'vitest')
       // and stay included by default — only list the Deno-specific ones here.
       'supabase/functions/_shared/apple.test.ts',
+      'supabase/functions/_test/observability.test.ts',
+      'supabase/functions/apple-revocation-retry/index.test.ts',
+      'supabase/functions/apple-token-exchange/index.test.ts',
       'supabase/functions/apple-token-persist/index.test.ts',
+      'supabase/functions/delete-account/index.test.ts',
     ],
   },
 })
