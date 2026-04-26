@@ -99,7 +99,7 @@ RETURNS TABLE (
   avg_rating NUMERIC,
   curator_user_id UUID,
   curator_display_name TEXT,
-  position INT,
+  "position" INT,
   note TEXT
 )
 LANGUAGE SQL STABLE
@@ -112,7 +112,7 @@ AS $$
     d.avg_rating,
     ll.user_id     AS curator_user_id,
     p.display_name AS curator_display_name,
-    li.position,
+    li."position",
     li.note
   FROM local_list_items li
   JOIN local_lists ll ON ll.id = li.list_id
