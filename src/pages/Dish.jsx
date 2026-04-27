@@ -7,6 +7,8 @@ import { shareOrCopy, buildDishShareData } from '../utils/share'
 import { toast } from 'sonner'
 import { useFavorites } from '../hooks/useFavorites'
 import { useDishDetail } from '../hooks/useDishDetail'
+import { useProfile } from '../hooks/useProfile'
+import { useMyLocalList } from '../hooks/useMyLocalList'
 import { ReviewFlow } from '../components/ReviewFlow'
 import { PhotoUploadConfirmation } from '../components/PhotoUploadConfirmation'
 import { LoginModal } from '../components/Auth/LoginModal'
@@ -45,6 +47,31 @@ export function Dish() {
   const [priorVote, setPriorVote] = useState(null)
   const [existingPhoto, setExistingPhoto] = useState(null)
   const { isFavorite, toggleFavorite } = useFavorites(user?.id)
+  const { profile } = useProfile(user?.id)
+  const { dishes: myListDishes, addDish, adding: addingToMyList, loading: myListLoading } = useMyLocalList()
+  const isCurator = !!profile?.is_local_curator
+  const isOnMyList = isCurator && myListDishes.some((d) => d.dish_id === dishId)
+  const myListIsFull = isCurator && myListDishes.length >= 10
+  const myListReady = isCurator && !myListLoading
+
+  const handleAddToTop10 = async () => {
+    if (!isCurator || isOnMyList || myListIsFull || addingToMyList) return
+    try {
+      const result = await addDish(dishId)
+      if (result?.success) {
+        if (result.already_present) {
+          toast.success("Already on your Top 10", { duration: 2000 })
+        } else {
+          toast.success(`Added to your Top 10 (${result.item_count}/10)`, { duration: 2500 })
+        }
+      } else {
+        toast.error(result?.error || "Couldn't add to your Top 10")
+      }
+    } catch (err) {
+      logger.error('Add to Top 10 failed:', err)
+      toast.error(err?.message || "Couldn't add to your Top 10")
+    }
+  }
 
   // Ear icon tooltip — show once per device
   const [showEarTooltip, setShowEarTooltip] = useState(false)
@@ -374,6 +401,50 @@ export function Dish() {
                   onPhotoUploaded={handlePhotoUploaded}
                 />
               </div>
+            )}
+            {myListReady && (
+              isOnMyList ? (
+                <button
+                  type="button"
+                  onClick={() => navigate('/my-list')}
+                  className="w-full py-3 px-4 rounded-xl font-semibold transition-all active:scale-98"
+                  style={{
+                    background: 'var(--color-surface-elevated)',
+                    color: 'var(--color-text-primary)',
+                    border: '1px solid var(--color-divider)',
+                  }}
+                >
+                  ✓ On your Top 10 — manage in My List
+                </button>
+              ) : myListIsFull ? (
+                <button
+                  type="button"
+                  onClick={() => navigate('/my-list')}
+                  className="w-full py-3 px-4 rounded-xl font-semibold transition-all active:scale-98"
+                  style={{
+                    background: 'var(--color-surface-elevated)',
+                    color: 'var(--color-text-secondary)',
+                    border: '1px solid var(--color-divider)',
+                  }}
+                >
+                  Top 10 is full — remove a dish in My List first
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleAddToTop10}
+                  disabled={addingToMyList}
+                  className="w-full py-3 px-4 rounded-xl font-semibold transition-all active:scale-98 disabled:opacity-60"
+                  style={{
+                    background: 'var(--color-surface-elevated)',
+                    color: 'var(--color-primary)',
+                    border: '1.5px dashed var(--color-primary)',
+                    cursor: addingToMyList ? 'default' : 'pointer',
+                  }}
+                >
+                  {addingToMyList ? 'Adding…' : `+ Add to your Top 10 (${myListDishes.length}/10)`}
+                </button>
+              )
             )}
           </div>
 

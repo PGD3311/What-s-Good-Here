@@ -22,6 +22,17 @@ export function useMyLocalList() {
     },
   })
 
+  var addDishMutation = useMutation({
+    mutationFn: function (dishId) {
+      return localListsApi.addDishToMyList(dishId)
+    },
+    onSuccess: function () {
+      queryClient.invalidateQueries({ queryKey: ['myLocalList'] })
+      queryClient.invalidateQueries({ queryKey: ['localLists'] })
+      queryClient.invalidateQueries({ queryKey: ['localList'] })
+    },
+  })
+
   // Parse the raw RPC rows into structured data
   var items = data || []
   var listMeta = items.length > 0 ? {
@@ -45,5 +56,7 @@ export function useMyLocalList() {
     saveError: saveMutation.error
       ? { message: getUserMessage(saveMutation.error, 'saving your list') }
       : null,
+    addDish: addDishMutation.mutateAsync,
+    adding: addDishMutation.isPending,
   }
 }
