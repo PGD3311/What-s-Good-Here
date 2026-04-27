@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { capture } from '../lib/analytics'
 import { logger } from '../utils/logger'
@@ -12,12 +12,10 @@ import { useMyLocalList } from '../hooks/useMyLocalList'
 import { ReviewFlow } from '../components/ReviewFlow'
 import { PhotoUploadConfirmation } from '../components/PhotoUploadConfirmation'
 import { LoginModal } from '../components/Auth/LoginModal'
-import { HearingIcon } from '../components/HearingIcon'
-import { EarIconTooltip } from '../components/EarIconTooltip'
+import { HeartIcon } from '../components/HeartIcon'
 import { DishHero, DishEvidence } from '../components/dish'
 import { AddToPlaylistSheet } from '../components/playlists/AddToPlaylistSheet'
 import { ReportModal } from '../components/ReportModal'
-import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../lib/storage'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
@@ -73,10 +71,6 @@ export function Dish() {
     }
   }
 
-  // Ear icon tooltip — show once per device
-  const [showEarTooltip, setShowEarTooltip] = useState(false)
-  const tooltipChecked = useRef(false)
-
   // Fetch prior vote + prior photo in parallel so the CTA label and the
   // ReviewFlow photo thumbnail both reflect current state.
   useEffect(() => {
@@ -115,20 +109,6 @@ export function Dish() {
       setShowRateFlow(true)
     }
   }, [user, pendingAction])
-
-  useEffect(() => {
-    if (dish && !tooltipChecked.current) {
-      tooltipChecked.current = true
-      if (!getStorageItem(STORAGE_KEYS.HAS_SEEN_EAR_TOOLTIP)) {
-        setShowEarTooltip(true)
-      }
-    }
-  }, [dish])
-
-  function dismissEarTooltip() {
-    setShowEarTooltip(false)
-    setStorageItem(STORAGE_KEYS.HAS_SEEN_EAR_TOOLTIP, '1')
-  }
 
   const handleLoginRequired = () => setLoginModalOpen(true)
 
@@ -299,19 +279,14 @@ export function Dish() {
               <line x1="12" y1="2" x2="12" y2="15" />
             </svg>
           </button>
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                if (showEarTooltip) dismissEarTooltip()
-                handleToggleSave(e)
-              }}
-              aria-label={isFavorite?.(dishId) ? 'Remove from heard list' : 'Mark as heard it was good'}
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95"
-            >
-              <HearingIcon size={24} active={isFavorite?.(dishId)} />
-            </button>
-            <EarIconTooltip visible={showEarTooltip} onDismiss={dismissEarTooltip} />
-          </div>
+          <button
+            onClick={handleToggleSave}
+            aria-label={isFavorite?.(dishId) ? 'Remove from favorites' : 'Add to favorites'}
+            className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            <HeartIcon size={22} active={isFavorite?.(dishId)} />
+          </button>
           {/* Add to playlist */}
           <button
             onClick={() => {

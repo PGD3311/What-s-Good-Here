@@ -4,7 +4,7 @@ import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { getRatingColor } from '../utils/ranking'
 import { getCategoryNeonImage, getCategoryEmoji, getDishNameIcon } from '../constants/categories'
 import { RestaurantAvatar } from './RestaurantAvatar'
-import { HearingIcon } from './HearingIcon'
+import { HeartIcon } from './HeartIcon'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
 /**
@@ -369,7 +369,7 @@ export const DishListItem = memo(function DishListItem({
                     onClick={function (e) { e.stopPropagation(); onUnsave() }}
                     className="transition-colors"
                   >
-                    <HearingIcon size={24} active={true} />
+                    <HeartIcon size={22} active={true} />
                   </button>
                 )}
               </div>

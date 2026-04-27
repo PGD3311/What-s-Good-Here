@@ -119,7 +119,6 @@ export function clearCacheKeys(keys) {
 
 // Storage key constants
 export const STORAGE_KEYS = {
-  HAS_SEEN_EAR_TOOLTIP: 'wgh_has_seen_ear_tooltip',
   SOUND_MUTED: 'soundMuted',
   RADIUS: 'wgh_radius',
   LOCATION_PERMISSION: 'whats-good-here-location-permission',
