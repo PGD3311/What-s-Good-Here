@@ -1,4 +1,4 @@
-// "Tried & true" red ink stamp used on the banner and TOC.
+// "wgh" red ink stamp used on the banner and TOC.
 // `seed` varies the ink-jitter so two stamps on one page don't look identical.
 // SVG fills use literal hex per CLAUDE.md §1.3 (SVG illustration exception).
 export function LocalsPicksStamp({ seed = 4, includeRibbon = true, size = 72 }) {
@@ -28,8 +28,7 @@ export function LocalsPicksStamp({ seed = 4, includeRibbon = true, size = 72 }) 
             </text>
           </>
         )}
-        <text x="50" y="50" textAnchor="middle" fontFamily="'Amatic SC', cursive" fontSize="17" fontWeight="700" fill="#B82617" stroke="none">tried &amp;</text>
-        <text x="50" y="63" textAnchor="middle" fontFamily="'Amatic SC', cursive" fontSize="17" fontWeight="700" fill="#B82617" stroke="none">true</text>
+        <text x="50" y="60" textAnchor="middle" fontFamily="'Amatic SC', cursive" fontSize="32" fontWeight="700" fill="#B82617" stroke="none">wgh</text>
       </g>
     </svg>
   )
