@@ -44,6 +44,7 @@ const Terms = lazyWithRetry(() => import('./pages/Terms'), 'Terms')
 const Support = lazyWithRetry(() => import('./pages/Support'), 'Support')
 const UserProfile = lazyWithRetry(() => import('./pages/UserProfile'), 'UserProfile')
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'), 'ResetPassword')
+const CrossDevicePkce = lazyWithRetry(() => import('./pages/CrossDevicePkce'))
 const AcceptInvite = lazyWithRetry(() => import('./pages/AcceptInvite'), 'AcceptInvite')
 const AcceptCuratorInvite = lazyWithRetry(() => import('./pages/AcceptCuratorInvite'), 'AcceptCuratorInvite')
 const MyList = lazyWithRetry(() => import('./pages/MyList'), 'MyList')
@@ -125,6 +126,7 @@ function App() {
               <Route path="/user/:userId" element={<Layout><UserProfile /></Layout>} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/auth/cross-device" element={<CrossDevicePkce />} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
               <Route path="/invite/:token" element={<AcceptInvite />} />
               <Route path="/curator-invite/:token" element={<AcceptCuratorInvite />} />

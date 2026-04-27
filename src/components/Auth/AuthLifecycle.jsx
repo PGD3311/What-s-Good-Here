@@ -2,20 +2,25 @@
 // Mounted inside AuthProvider so its effects live adjacent to the auth client.
 //
 // B2: appStateChange → on foreground, reconcile session via authApi.getSession()
-// B4: appUrlOpen    → hand off to authUrl.parse → exchangeCodeForSession
+// B4: appUrlOpen    → parse universal-link, exchangeCodeForSession, route by type
 //
 // Web (non-Capacitor): effect early-returns — nothing to mount.
 
 import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { authApi } from '../../api/authApi'
+import { parse as parseAuthUrl } from '../../lib/authUrl'
 import { logger } from '../../utils/logger'
 
 export function AuthLifecycle() {
+  const navigate = useNavigate()
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return undefined
 
     let stateHandle
+    let urlHandle
     let mounted = true
 
     ;(async () => {
@@ -30,13 +35,46 @@ export function AuthLifecycle() {
           logger.warn('AuthLifecycle getSession on foreground failed', err)
         }
       })
+
+      urlHandle = await App.addListener('appUrlOpen', async ({ url }) => {
+        const parsed = parseAuthUrl(url)
+        if (!parsed) return // not an auth URL — leave it to the router / other handlers
+        const { code, type } = parsed
+        try {
+          const { error } = await authApi.exchangeCodeForSession(code)
+          if (error) {
+            const msg = String(error.message || '').toLowerCase()
+            if (msg.includes('code verifier') || msg.includes('verifier not found')) {
+              // Cross-device PKCE — user clicked link on a different device than they signed up from.
+              navigate('/auth/cross-device', { state: { type } })
+              return
+            }
+            logger.warn('AuthLifecycle exchangeCodeForSession failed', error)
+            navigate('/login', { state: { authError: 'link_expired' } })
+            return
+          }
+          // Route by type per spec Flow D:
+          //   recovery  → password reset page
+          //   confirm   → home (WelcomeModal auto-opens for new users)
+          //   magiclink → home
+          if (type === 'recovery') {
+            navigate('/reset-password')
+          } else {
+            navigate('/')
+          }
+        } catch (err) {
+          logger.warn('AuthLifecycle appUrlOpen handler threw', err)
+          navigate('/login', { state: { authError: 'link_failed' } })
+        }
+      })
     })()
 
     return () => {
       mounted = false
       stateHandle?.remove?.()
+      urlHandle?.remove?.()
     }
-  }, [])
+  }, [navigate])
 
   return null
 }

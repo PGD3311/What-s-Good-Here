@@ -113,6 +113,18 @@ export const authApi = {
   },
 
   /**
+   * Exchange an auth code (from a universal-link / deep-link return) for a
+   * Supabase session. Used by AuthLifecycle on appUrlOpen (B4).
+   *
+   * Returns Supabase's raw `{ data, error }` shape so callers can branch on
+   * cross-device PKCE failures (`error.message` containing "code verifier")
+   * without us collapsing the error into an opaque classified throw.
+   */
+  async exchangeCodeForSession(code) {
+    return supabase.auth.exchangeCodeForSession(code)
+  },
+
+  /**
    * Sign in with Google OAuth
    * @param {string|null} redirectUrl - Optional custom redirect URL (must be same-origin)
    * @returns {Promise<Object>} Auth response
