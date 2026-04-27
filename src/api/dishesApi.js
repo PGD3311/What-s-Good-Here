@@ -309,6 +309,31 @@ export const dishesApi = {
   },
 
   /**
+   * Subscribe to all changes on the dishes table via Supabase Realtime.
+   * Fires `onChange()` for every INSERT/UPDATE/DELETE row event.
+   * Returns an unsubscribe function — call it on unmount to remove the channel.
+   *
+   * Used by useAllDishes to invalidate its cache automatically — every dish
+   * write (manual creation, menu-refresh cron, admin, restaurant cascade
+   * delete) refreshes the search cache without per-call invalidation.
+   *
+   * @param {() => void} onChange - Called for every dish row change
+   * @returns {() => void} Unsubscribe — call to remove the channel
+   */
+  subscribeToChanges(onChange) {
+    const channelName = 'dishes-changes-' + Math.random().toString(36).slice(2, 10)
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dishes' },
+        onChange
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  },
+
+  /**
    * Get variants for a parent dish
    * @param {string} parentDishId - Parent dish ID
    * @returns {Promise<Array>} Array of variant dishes with vote stats

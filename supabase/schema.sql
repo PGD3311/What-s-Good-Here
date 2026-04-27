@@ -5214,3 +5214,15 @@ $$;
 -- function is too large to duplicate here. The migration runs the updated
 -- CREATE OR REPLACE that adds `AND NOT is_blocked_pair((select auth.uid()),
 -- dp.user_id)` to the best_photos CTE WHERE clause.
+
+
+-- =============================================
+-- 15. REALTIME PUBLICATIONS
+-- =============================================
+-- Tables added here broadcast row changes to subscribed Supabase Realtime
+-- clients. Subscribe in app code via dishesApi.subscribeToChanges (see
+-- src/hooks/useAllDishes.js for the search-cache invalidation use case).
+-- Migration: supabase/migrations/2026-04-27-realtime-dishes.sql
+
+ALTER PUBLICATION supabase_realtime ADD TABLE dishes;
+
