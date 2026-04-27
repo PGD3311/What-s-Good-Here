@@ -23,9 +23,6 @@ test.describe("Home — Locals' Picks banner + TOC", () => {
     await page.getByRole('tab', { name: 'Search' }).click()
     await expect(page.getByPlaceholder(/What are you looking for\?/i)).toBeVisible()
 
-    await page.getByRole('tab', { name: 'Index' }).click()
-    await expect(page.getByText(/every dish picked/i)).toBeVisible()
-
     await page.getByRole('tab', { name: 'Read' }).click()
     await expect(page.getByText(/or pick a local/i)).toBeVisible()
   })

@@ -3317,39 +3317,6 @@ AS $$
 $$;
 GRANT EXECUTE ON FUNCTION search_local_picks(TEXT) TO anon, authenticated;
 
--- 4. Index — A-Z by dish, with curator-names array
-DROP FUNCTION IF EXISTS get_local_picks_index();
-CREATE OR REPLACE FUNCTION get_local_picks_index()
-RETURNS TABLE (
-  dish_id UUID,
-  dish_name TEXT,
-  restaurant_id UUID,
-  restaurant_name TEXT,
-  avg_rating NUMERIC,
-  pick_count INT,
-  curator_names TEXT[]
-)
-LANGUAGE SQL STABLE
-AS $$
-  SELECT
-    d.id          AS dish_id,
-    d.name        AS dish_name,
-    r.id          AS restaurant_id,
-    r.name        AS restaurant_name,
-    d.avg_rating,
-    COUNT(DISTINCT ll.user_id)::INT AS pick_count,
-    ARRAY_AGG(DISTINCT p.display_name ORDER BY p.display_name) AS curator_names
-  FROM local_list_items li
-  JOIN local_lists ll ON ll.id = li.list_id
-  JOIN profiles p     ON p.id = ll.user_id
-  JOIN dishes d       ON d.id = li.dish_id
-  JOIN restaurants r  ON r.id = d.restaurant_id
-  WHERE ll.is_active = true
-  GROUP BY d.id, d.name, r.id, r.name, d.avg_rating
-  ORDER BY d.name ASC;
-$$;
-GRANT EXECUTE ON FUNCTION get_local_picks_index() TO anon, authenticated;
-
 -- =============================================
 -- 14. GRANTS
 -- =============================================

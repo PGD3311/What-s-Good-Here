@@ -56,17 +56,6 @@ export const localListsApi = {
     }
   },
 
-  async getIndex() {
-    try {
-      const { data, error } = await supabase.rpc('get_local_picks_index')
-      if (error) throw createClassifiedError(error)
-      return data || []
-    } catch (error) {
-      logger.error('Failed to fetch local picks index:', error)
-      throw error.type ? error : createClassifiedError(error)
-    }
-  },
-
   async getByUser(userId) {
     try {
       const { data, error } = await supabase.rpc('get_local_list_by_user', { target_user_id: userId })

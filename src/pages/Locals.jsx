@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLocalPicksConsensus } from '../hooks/useLocalPicksConsensus'
 import { useLocalPicksCurators } from '../hooks/useLocalPicksCurators'
 import { useLocalPicksSearch } from '../hooks/useLocalPicksSearch'
-import { useLocalPicksIndex } from '../hooks/useLocalPicksIndex'
 import { LocalsPicksStamp } from '../components/home/LocalsPicksStamp'
 
 var PAGE_OUTER = {
@@ -91,8 +90,6 @@ var SEARCH_INPUT = {
   fontFamily: 'inherit',
 }
 
-var INDEX_HEAD = { fontFamily: "'Amatic SC', cursive", fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)', margin: '14px 0 4px', lineHeight: 1 }
-
 var EMPTY = { textAlign: 'center', padding: '20px 0', fontSize: '12px', color: 'var(--color-text-tertiary)', fontWeight: 500 }
 
 export function Locals() {
@@ -115,13 +112,11 @@ export function Locals() {
 
           {activeTab === 'read' && <ReadTab />}
           {activeTab === 'search' && <SearchTab />}
-          {activeTab === 'index' && <IndexTab />}
         </div>
       </div>
       <div style={TAB_BAR} role="tablist">
         <button type="button" role="tab" aria-selected={activeTab === 'read'} style={activeTab === 'read' ? TAB_ACTIVE : TAB} onClick={function () { setActiveTab('read') }}>Read</button>
         <button type="button" role="tab" aria-selected={activeTab === 'search'} style={activeTab === 'search' ? TAB_ACTIVE : TAB} onClick={function () { setActiveTab('search') }}>Search</button>
-        <button type="button" role="tab" aria-selected={activeTab === 'index'} style={activeTab === 'index' ? TAB_ACTIVE : TAB} onClick={function () { setActiveTab('index') }}>Index</button>
       </div>
     </div>
   )
@@ -278,61 +273,3 @@ function SearchTab() {
   )
 }
 
-function IndexTab() {
-  var navigate = useNavigate()
-  var { index, loading, error } = useLocalPicksIndex(true)
-
-  var grouped = useMemo(function () {
-    var map = new Map()
-    for (var i = 0; i < index.length; i++) {
-      var row = index[i]
-      var letter = (row.dish_name || '?').charAt(0).toUpperCase()
-      if (!/[A-Z]/.test(letter)) letter = '#'
-      if (!map.has(letter)) map.set(letter, [])
-      map.get(letter).push(row)
-    }
-    var letters = []
-    map.forEach(function (rows, letter) { letters.push({ letter: letter, rows: rows }) })
-    letters.sort(function (a, b) { return a.letter < b.letter ? -1 : 1 })
-    return letters
-  }, [index])
-
-  return (
-    <>
-      <div style={HEADER}>
-        <div style={EYEBROW}>ask a local</div>
-        <div style={TITLE}>The <span style={TITLE_ACCENT}>Index</span></div>
-        <div style={SUB}>every dish picked by anyone &mdash; A to Z</div>
-      </div>
-
-      {error && <p style={EMPTY}>{error?.message || 'Could not load index.'}</p>}
-      {!error && loading && index.length === 0 && <p style={EMPTY}>Loading&hellip;</p>}
-
-      {grouped.map(function (group) {
-        return (
-          <div key={group.letter}>
-            <div style={INDEX_HEAD}>{group.letter}</div>
-            {group.rows.map(function (row) {
-              return (
-                <button
-                  key={row.dish_id}
-                  type="button"
-                  style={ROW_CARD}
-                  onClick={function () { navigate('/dish/' + row.dish_id) }}
-                  className="active:scale-[0.99] transition-transform"
-                >
-                  <div style={ROW_BODY}>
-                    <div style={DISH_NAME}>{row.dish_name}</div>
-                    <div style={ROW_REST}>{row.restaurant_name} &middot; {row.pick_count} pick{row.pick_count === 1 ? '' : 's'}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-tertiary)', marginTop: '2px' }}>{(row.curator_names || []).join(' · ')}</div>
-                  </div>
-                  <div style={RATING}>{row.avg_rating != null ? Number(row.avg_rating).toFixed(1) : '—'}</div>
-                </button>
-              )
-            })}
-          </div>
-        )
-      })}
-    </>
-  )
-}
