@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useLocation, useBlocker } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useMyLocalList } from '../hooks/useMyLocalList'
 import { useDishSearch } from '../hooks/useDishSearch'
 import { getCategoryEmoji } from '../constants/categories'
@@ -70,11 +70,6 @@ export function MyList() {
     window.addEventListener('beforeunload', handler)
     return function () { window.removeEventListener('beforeunload', handler) }
   }, [isDirty])
-
-  // In-app navigation block while dirty.
-  var blocker = useBlocker(function (args) {
-    return isDirty && args.currentLocation.pathname !== args.nextLocation.pathname
-  })
 
   // Loading and error states (must come before the !listMeta gate so a
   // failed fetch doesn't masquerade as "you're not a curator").
@@ -592,65 +587,6 @@ export function MyList() {
         </button>
       </div>
 
-      {/* Unsaved-changes blocker dialog */}
-      {blocker.state === 'blocked' && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
-          onClick={function () { blocker.reset && blocker.reset() }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="rounded-2xl"
-            style={{
-              background: 'var(--color-surface-elevated)',
-              padding: '20px',
-              maxWidth: '320px',
-              width: 'calc(100% - 32px)',
-              border: '1px solid var(--color-divider)',
-            }}
-            onClick={function (e) { e.stopPropagation() }}
-          >
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
-              Unsaved changes
-            </h2>
-            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.4 }}>
-              You have unsaved edits to your list. Leave anyway?
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={function () { blocker.reset && blocker.reset() }}
-                className="flex-1 rounded-lg font-semibold"
-                style={{
-                  padding: '10px',
-                  fontSize: '13px',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text-primary)',
-                  border: '1px solid var(--color-divider)',
-                  cursor: 'pointer',
-                }}
-              >
-                Stay
-              </button>
-              <button
-                onClick={function () { blocker.proceed && blocker.proceed() }}
-                className="flex-1 rounded-lg font-semibold"
-                style={{
-                  padding: '10px',
-                  fontSize: '13px',
-                  background: 'var(--color-primary)',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                Leave
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
