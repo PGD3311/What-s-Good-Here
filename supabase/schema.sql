@@ -599,10 +599,27 @@ CREATE POLICY "profiles_insert_own" ON profiles FOR INSERT WITH CHECK ((select a
 CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE
   USING ((select auth.uid()) = id)
   WITH CHECK ((select auth.uid()) = id);
--- Protected fields (is_local_curator, can_invite_curators, follower_count, following_count) are
--- meant to be guarded by protect_profile_fields_trigger (BEFORE UPDATE) — not RLS — to avoid
--- infinite recursion. NOTE: trigger function is referenced here but is not in schema.sql; verify
--- it exists in the live DB and includes all protected columns.
+-- Protected fields (is_local_curator, follower_count, following_count) are guarded by
+-- protect_profile_fields_trigger (BEFORE UPDATE) instead of RLS to avoid infinite recursion.
+-- accept_curator_invite opts in via set_config('app.allow_curator_grant', 'true', true) so
+-- its is_local_curator update isn't reverted; direct client UPDATEs don't set it, so users
+-- can't self-grant.
+CREATE OR REPLACE FUNCTION protect_profile_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.follower_count := OLD.follower_count;
+  NEW.following_count := OLD.following_count;
+  IF current_setting('app.allow_curator_grant', true) IS DISTINCT FROM 'true' THEN
+    NEW.is_local_curator := OLD.is_local_curator;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS protect_profile_fields_trigger ON profiles;
+CREATE TRIGGER protect_profile_fields_trigger
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION protect_profile_fields();
 -- No DELETE policy on profiles — users must not delete their own profile row (orphans FKs)
 
 -- favorites: users manage own only
@@ -3063,7 +3080,9 @@ BEGIN
     );
   END IF;
 
-  -- Set curator flag
+  -- Opt in to bypass protect_profile_fields_trigger for THIS transaction
+  -- only. SET LOCAL clears at COMMIT/ROLLBACK; no leak to other RPCs.
+  PERFORM set_config('app.allow_curator_grant', 'true', true);
   UPDATE profiles SET is_local_curator = true WHERE id = v_user_id;
 
   -- Get display name for default title
