@@ -22,6 +22,11 @@ export function AuthLifecycle() {
     let stateHandle
     let urlHandle
     let mounted = true
+    // Idempotency guard: dedupe concurrent appUrlOpen events for the same code.
+    // Capacitor can fire the URL more than once (cold-launch + foreground), and
+    // exchangeCodeForSession is one-time-use — a duplicate exchange returns
+    // an error and would overwrite navigation with /login.
+    const inFlightCodes = new Set()
 
     ;(async () => {
       const { App } = await import('@capacitor/app')
@@ -40,12 +45,20 @@ export function AuthLifecycle() {
         const parsed = parseAuthUrl(url)
         if (!parsed) return // not an auth URL — leave it to the router / other handlers
         const { code, type } = parsed
+        if (inFlightCodes.has(code)) return // duplicate event for the same code
+        inFlightCodes.add(code)
         try {
           const { error } = await authApi.exchangeCodeForSession(code)
           if (error) {
+            // Cross-device PKCE detection: when a user opens a link on a
+            // device different from the one that initiated the auth flow,
+            // the local code_verifier is missing. Supabase surfaces this
+            // through error.message wording — brittle against SDK changes,
+            // but error.code isn't yet exposed for this case. Re-check on
+            // SDK upgrades. Falling through to /login if the heuristic
+            // misses is the safe degrade (user retries from there).
             const msg = String(error.message || '').toLowerCase()
             if (msg.includes('code verifier') || msg.includes('verifier not found')) {
-              // Cross-device PKCE — user clicked link on a different device than they signed up from.
               navigate('/auth/cross-device', { state: { type } })
               return
             }
