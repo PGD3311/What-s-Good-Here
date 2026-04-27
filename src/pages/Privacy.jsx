@@ -227,6 +227,12 @@ export function Privacy() {
               included your votes will be recalculated without them. Deletion happens in-app —
               you do not need to email us to close your account.
             </p>
+            <p className="leading-relaxed mt-3" style={{ color: 'var(--color-text-secondary)' }}>
+              If you signed in with Apple, deleting your account also revokes the
+              authorization Apple granted us to share your information. After deletion,
+              Apple will treat any future sign-in with the same Apple ID as a fresh first-time
+              connection.
+            </p>
           </section>
 
           <section>
