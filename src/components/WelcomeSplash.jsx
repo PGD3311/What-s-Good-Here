@@ -60,7 +60,7 @@ export function WelcomeSplash() {
       />
       <div className="wgh-splash__wordmark">
         <span className="wgh-splash__line">What&rsquo;s</span>
-        <span className="wgh-splash__line wgh-splash__line--accent">Good</span>
+        <span className="wgh-splash__line">Good</span>
         <span className="wgh-splash__line">Here</span>
       </div>
     </div>
