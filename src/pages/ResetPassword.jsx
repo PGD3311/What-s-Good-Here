@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/authApi'
-import { SmileyPin } from '../components/SmileyPin'
+import { Seal } from '../components/Seal'
 
 export function ResetPassword() {
   const navigate = useNavigate()
@@ -98,7 +98,7 @@ export function ResetPassword() {
     >
       {/* Logo */}
       <div className="mb-6">
-        <SmileyPin size={96} />
+        <Seal size={96} ariaLabel="What's Good Here" />
       </div>
 
       {/* Heading */}

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { SmileyPin } from './SmileyPin'
+import { Seal } from './Seal'
 
-// Total visible time before fade-out starts. CSS choreography lands by ~0.8s;
-// we hold until 1.2s, then fade out 0.3s — total 1.5s splash.
-const SPLASH_DURATION_MS = 1200
+// Total visible time before fade-out starts. Stamp lands ~0.9s,
+// wordmark settles ~1.25s, hold a beat, then fade out.
+const SPLASH_DURATION_MS = 1500
 const FADE_OUT_MS = 300
 
 // Module-level flag — persists across re-renders within a session so
@@ -50,19 +50,20 @@ export function WelcomeSplash() {
       tabIndex={0}
       aria-label="Welcome splash screen. Press Enter or tap to skip."
     >
-      <SmileyPin size={186} animated />
+      <Seal
+        className="wgh-splash__seal"
+        size={160}
+        plateColor="var(--color-surface)"
+        monoColor="var(--color-primary)"
+        ringColor="var(--color-surface)"
+        borderColor="var(--color-surface)"
+      />
       <div className="wgh-splash__wordmark">
-        <div className="wgh-splash__rule" />
-        <div className="wgh-splash__text">
-          <span className="wgh-splash__b1" style={{ display: 'inline-block' }}>
-            <span className="wgh-splash__line wgh-splash__letter">what&rsquo;s</span>
-            <span className="wgh-splash__line wgh-splash__letter">good</span>
-            <span className="wgh-splash__line wgh-splash__letter">
-              here<span className="wgh-splash__period">.</span>
-            </span>
-          </span>
-        </div>
-        <div className="wgh-splash__rule" />
+        <span className="wgh-splash__line">what&rsquo;s</span>
+        <span className="wgh-splash__line">good</span>
+        <span className="wgh-splash__line">
+          here<span className="wgh-splash__period">.</span>
+        </span>
       </div>
     </div>
   )

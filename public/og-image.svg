@@ -1,43 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <!-- Warm Appetite palette: stone bg, near-black ink, amber accent -->
-  <rect width="1200" height="630" fill="#F0ECE8"/>
+  <!-- Coral full-bleed, cream seal anchored center-left, italic wordmark right -->
+  <rect width="1200" height="630" fill="#E4440A"/>
 
-  <!-- Top accent strip -->
-  <rect x="0" y="0" width="1200" height="8" fill="#E4440A"/>
-  <!-- Bottom accent strip -->
-  <rect x="0" y="622" width="1200" height="8" fill="#C48A12"/>
+  <!-- Seal — cream plate w/ inverted color treatment -->
+  <g transform="translate(220, 315)">
+    <!-- Plate (radius 144 in 1200×630 framing) -->
+    <circle cx="0" cy="0" r="170" fill="none" stroke="#F7F4F1" stroke-width="3"/>
+    <circle cx="0" cy="0" r="118" fill="#F7F4F1"/>
+    <!-- Ring text — repeating mono on the cream ring -->
+    <defs>
+      <path id="ogRing" d="M 0,0 m -144,0 a 144,144 0 1,1 288,0 a 144,144 0 1,1 -288,0"/>
+    </defs>
+    <text font-family="JetBrains Mono, Menlo, monospace" font-size="22"
+          fill="#1A1A1A" letter-spacing="6" font-weight="600">
+      <textPath href="#ogRing" startOffset="0">WHAT'S GOOD HERE · WHAT'S GOOD HERE · WHAT'S GOOD HERE · </textPath>
+    </text>
+    <!-- wgh monogram inside the cream plate -->
+    <text x="0" y="32" text-anchor="middle"
+          font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
+          font-size="120" fill="#E4440A" letter-spacing="-2">wgh</text>
+  </g>
 
-  <!-- Brand wordmark (sans-serif for reliable cairosvg rendering) -->
-  <text x="600" y="270" text-anchor="middle"
-        font-family="Helvetica, Arial, sans-serif"
-        font-weight="800" font-size="72" fill="#1A1A1A" letter-spacing="-1">What's <tspan fill="#C48A12">Good</tspan> Here</text>
+  <!-- Wordmark — italic stacked, right-side -->
+  <text x="540" y="240"
+        font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
+        font-size="140" fill="#F7F4F1" letter-spacing="-5">what's</text>
+  <text x="540" y="370"
+        font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
+        font-size="140" fill="#F7F4F1" letter-spacing="-5">good</text>
+  <text x="540" y="500"
+        font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
+        font-size="140" fill="#F7F4F1" letter-spacing="-5">here<tspan fill="#1A1A1A">.</tspan></text>
 
-  <!-- Tagline -->
-  <text x="600" y="340" text-anchor="middle"
-        font-family="Helvetica, Arial, sans-serif"
-        font-weight="500" font-size="30" fill="#555555" letter-spacing="0.3">
-    The best dishes, ranked by locals
-  </text>
-
-  <!-- Location pill -->
-  <rect x="395" y="400" width="410" height="56" rx="28" fill="#FFFFFF" stroke="#E4440A" stroke-width="2"/>
-  <text x="600" y="436" text-anchor="middle"
-        font-family="Helvetica, Arial, sans-serif"
-        font-weight="700" font-size="21" fill="#E4440A" letter-spacing="2">
-    MARTHA'S VINEYARD &amp; BEYOND
-  </text>
-
-  <!-- Accent dots -->
-  <circle cx="555" cy="530" r="6" fill="#E4440A"/>
-  <circle cx="580" cy="530" r="6" fill="#C48A12"/>
-  <circle cx="605" cy="530" r="6" fill="#1A1A1A"/>
-  <circle cx="630" cy="530" r="6" fill="#C48A12"/>
-  <circle cx="655" cy="530" r="6" fill="#E4440A"/>
-
-  <!-- Domain -->
-  <text x="600" y="590" text-anchor="middle"
-        font-family="Helvetica, Arial, sans-serif"
-        font-weight="700" font-size="18" fill="#999999" letter-spacing="3">
-    WGHAPP.COM
+  <!-- Footer mono tagline -->
+  <text x="540" y="568"
+        font-family="JetBrains Mono, Menlo, monospace" font-weight="600"
+        font-size="18" fill="#F7F4F1" opacity="0.7" letter-spacing="6">
+    · RATE EVERY DISH · WGHAPP.COM ·
   </text>
 </svg>

@@ -223,9 +223,10 @@
   }
 
   /* ===========================
-     WelcomeSplash — SmileyPin pierce animation
-     Pin drops from above, pierces through stacked Amatic SC wordmark,
-     letters form a V, plate + eyes + smile reveal, right eye winks.
+     WelcomeSplash — Seal stamp choreography
+     Coral full-bleed, cream seal anchored upper third, big stacked italic
+     wordmark anchored lower third. Seal stamps in (scale + tilt), wordmark
+     fades up after.
      =========================== */
 
   .wgh-splash {
@@ -233,83 +234,64 @@
     inset: 0;
     z-index: 99999;
     display: flex;
-    align-items: center;
-    justify-content: center;
     flex-direction: column;
-    gap: 22px;
-    padding: 40px;
+    align-items: center;
+    justify-content: space-between;
+    padding: max(env(safe-area-inset-top, 0px), 20px) 28px max(env(safe-area-inset-bottom, 0px), 36px);
     box-sizing: border-box;
-    background: var(--color-surface);
+    background: var(--color-primary);
     cursor: pointer;
     transition: opacity 300ms ease-out;
-    animation: fadeIn 0.25s ease-out both;
+  }
+
+  .wgh-splash__seal {
+    margin-top: 18vh;
+    animation: sealStampIn 0.9s cubic-bezier(.2, .7, .3, 1.2) both;
   }
 
   .wgh-splash__wordmark {
+    margin-bottom: 10vh;
+    width: 100%;
     text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .wgh-splash__rule {
-    height: 1px;
-    width: 140px;
-    background: var(--color-text-primary);
-    opacity: 0.18;
-    transform: scaleX(0);
-    animation: ruleGrow 0.35s 0.5s cubic-bezier(.3, .8, .3, 1) forwards;
-  }
-
-  .wgh-splash__text {
-    font-family: 'Amatic SC', cursive;
-    font-weight: 700;
-    font-size: 104px;
-    letter-spacing: 0.02em;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 900;
+    font-size: clamp(56px, 18vw, 88px);
     line-height: 0.82;
-    color: var(--color-text-primary);
+    letter-spacing: -0.04em;
+    color: var(--color-surface);
+    animation: sealFadeUp 0.6s 0.85s both;
   }
 
-  .wgh-splash__b1 { animation: fadeIn 0.25s 0.25s both; }
-  .wgh-splash__line { display: block; }
-
-  /* Amatic SC tops out at weight 700 — text-stroke fakes heavier weight. */
-  .wgh-splash__letter {
-    display: inline-block;
-    -webkit-text-stroke: 1px currentColor;
+  .wgh-splash__line {
+    display: block;
   }
 
   .wgh-splash__period {
-    display: inline-block;
-    color: var(--color-primary);
+    color: var(--color-text-primary);
   }
 
-  .wgh-splash .pin-drop {
-    animation: pinPop 0.4s cubic-bezier(.34, 1.4, .5, 1) both;
-  }
-  .wgh-splash .smile-draw {
-    stroke-dasharray: 80;
-    stroke-dashoffset: 0;
-  }
-
-  @keyframes pinPop {
-    0%   { opacity: 0; transform: scale(0.88); }
-    60%  { opacity: 1; transform: scale(1.04); }
-    100% { transform: scale(1); }
+  @keyframes sealStampIn {
+    0%   { transform: scale(2.4) rotate(-8deg); opacity: 0; filter: blur(8px); }
+    60%  { transform: scale(0.92) rotate(1deg); opacity: 1; filter: blur(0); }
+    75%  { transform: scale(1.04) rotate(-0.5deg); }
+    100% { transform: scale(1) rotate(0); }
   }
 
-  @keyframes ruleGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes sealFadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 
-  /* Reduced motion — render the final state without the pop. */
+  /* Reduced motion — render the final state without the stamp. */
   @media (prefers-reduced-motion: reduce) {
-    .wgh-splash,
-    .wgh-splash .pin-drop,
-    .wgh-splash__rule,
-    .wgh-splash__b1 {
+    .wgh-splash__seal,
+    .wgh-splash__wordmark {
       animation: none;
+      opacity: 1;
+      transform: none;
+      filter: none;
     }
-    .wgh-splash__rule { transform: scaleX(1); }
   }
 }
 
