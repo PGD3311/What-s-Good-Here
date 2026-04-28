@@ -71,13 +71,10 @@ export function Login() {
     return () => clearTimeout(timer)
   }, [username, mode])
 
-  const buildOAuthRedirect = () => {
+  const getReturnPath = () => {
     const fromLocation = location.state?.from
     return fromLocation
-      ? new URL(
-          fromLocation.pathname + (fromLocation.search || '') + (fromLocation.hash || ''),
-          window.location.origin
-        ).toString()
+      ? fromLocation.pathname + (fromLocation.search || '') + (fromLocation.hash || '')
       : null
   }
 
@@ -87,7 +84,7 @@ export function Login() {
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
-      const result = await authApi.signInWithGoogle(buildOAuthRedirect())
+      const result = await authApi.signInWithGoogle({ returnPath: getReturnPath() })
       if (result?.cancelled) {
         setLoading(false)
       }
@@ -100,7 +97,7 @@ export function Login() {
   const handleAppleSignIn = async () => {
     try {
       setLoading(true)
-      const result = await authApi.signInWithApple(buildOAuthRedirect())
+      const result = await authApi.signInWithApple({ returnPath: getReturnPath() })
       if (result?.cancelled) {
         setLoading(false)
       }

@@ -55,13 +55,17 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
 
   if (!isOpen) return null
 
-  const buildOAuthRedirect = () => {
-    const redirectUrl = new URL(window.location.href)
+  // Stay on current page after web OAuth, plus carry the pending vote target
+  // so Browse.jsx can auto-open the dish detail (reads ?votingDish on mount).
+  // Path-only — authApi resolves it to a same-origin absolute URL on web and
+  // ignores it on native (modal unmounts on success either way).
+  const getReturnPath = () => {
+    const url = new URL(window.location.href)
     const pending = getPendingVoteFromStorage()
     if (pending?.dishId) {
-      redirectUrl.searchParams.set('votingDish', pending.dishId)
+      url.searchParams.set('votingDish', pending.dishId)
     }
-    return redirectUrl.toString()
+    return url.pathname + url.search + url.hash
   }
 
   // Native flow resolves in-place (no browser redirect). Close modal on
@@ -70,7 +74,7 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
-      const result = await authApi.signInWithGoogle(buildOAuthRedirect())
+      const result = await authApi.signInWithGoogle({ returnPath: getReturnPath() })
       if (result?.cancelled) {
         setLoading(false)
         return
@@ -88,7 +92,7 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
   const handleAppleSignIn = async () => {
     try {
       setLoading(true)
-      const result = await authApi.signInWithApple(buildOAuthRedirect())
+      const result = await authApi.signInWithApple({ returnPath: getReturnPath() })
       if (result?.cancelled) {
         setLoading(false)
         return
