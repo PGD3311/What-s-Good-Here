@@ -56,19 +56,18 @@ export const HomeListMode = memo(function HomeListMode({
     >
       {/* Fixed header: brand + search + chips */}
       <div style={{ flexShrink: 0, background: 'var(--color-bg)', zIndex: 10, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        {/* Brand header — Fraunces italic, matches splash + login + welcome modal */}
+        {/* Brand header */}
         <div className="text-center pt-4 pb-1">
           <h2 style={{
-            fontFamily: "'Fraunces', serif",
-            fontStyle: 'italic',
-            fontWeight: 900,
-            fontSize: '44px',
+            fontFamily: "'Amatic SC', cursive",
+            fontSize: '42px',
+            fontWeight: 700,
             color: 'var(--color-text-primary)',
-            letterSpacing: '-0.02em',
-            lineHeight: 0.95,
+            letterSpacing: '0.04em',
+            lineHeight: 1,
             margin: 0,
           }}>
-            what&rsquo;s <span style={{ color: 'var(--color-primary)' }}>good</span> here<span style={{ color: 'var(--color-primary)' }}>.</span>
+            What's <span style={{ color: 'var(--color-primary)' }}>Good</span> Here
           </h2>
           <p style={{
             fontSize: '10px',
