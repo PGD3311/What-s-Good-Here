@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Seal } from './Seal'
 
-// 1.6s total = standard splash length (industry-typical 1.5-2s).
-// Stamp lands at 0.9s; wordmark fadeUp (0.5s w/ 0.55s delay) lands at 1.05s.
-// Hold ~0.25s, then fade out 0.3s. Both keyframes complete before fade starts.
-const SPLASH_DURATION_MS = 1300
+// 1.8s total. Stamp lands at 0.9s; wordmark fadeUp (0.5s w/ 0.55s delay)
+// lands at 1.05s. Hold ~0.45s, then fade out 0.3s.
+const SPLASH_DURATION_MS = 1500
 const FADE_OUT_MS = 300
 
 // Module-level flag — persists across re-renders within a session so

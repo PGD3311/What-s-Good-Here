@@ -1,30 +1,18 @@
 import { NotificationBell } from './NotificationBell'
 import { SettingsDropdown } from './SettingsDropdown'
+import { Seal } from './Seal'
 
 /**
- * TopBar - Brand anchor with WGH wordmark, settings gear, and notification bell
+ * TopBar - Brand anchor with Seal mark, settings gear, and notification bell
  */
 export function TopBar() {
   return (
     <div className="top-bar">
       <div className="top-bar-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '0 12px' }}>
-        {/* Spacer for symmetry */}
+        {/* Spacer for symmetry — keeps Seal optically centered */}
         <div style={{ width: '60px' }} />
 
-        {/* WGH wordmark — centered, Amatic SC */}
-        <span
-          style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontSize: '24px',
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
-            letterSpacing: '0.04em',
-            lineHeight: 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          What's <span style={{ color: 'var(--color-primary)' }}>Good</span> Here
-        </span>
+        <Seal size={36} showRing={false} ariaLabel="What's Good Here" />
 
         {/* Settings + Notifications grouped right */}
         <div className="flex items-center">

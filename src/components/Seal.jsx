@@ -29,9 +29,13 @@ export function Seal({
     ? { role: 'img', 'aria-label': ariaLabel }
     : { 'aria-hidden': true }
 
+  // When the ring is hidden, crop the viewBox to the inner plate so the
+  // mark fills the icon area instead of leaving the ring padding empty.
+  const viewBox = showRing ? '0 0 200 200' : '40 40 120 120'
+
   return (
     <svg
-      viewBox="0 0 200 200"
+      viewBox={viewBox}
       width={size}
       height={size}
       className={className}
