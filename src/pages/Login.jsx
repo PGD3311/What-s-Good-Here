@@ -229,18 +229,17 @@ export function Login() {
               </div>
               <h1
                 style={{
-                  fontFamily: "'Fraunces', serif",
-                  fontStyle: 'italic',
-                  fontWeight: 900,
-                  fontSize: '44px',
+                  fontFamily: "'Amatic SC', cursive",
+                  fontSize: '42px',
+                  fontWeight: 700,
                   color: 'var(--color-text-primary)',
-                  lineHeight: 0.95,
-                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                  letterSpacing: '0.04em',
                   position: 'relative',
                   zIndex: 1,
                 }}
               >
-                what&rsquo;s <span style={{ color: 'var(--color-primary)' }}>good</span> here<span style={{ color: 'var(--color-primary)' }}>.</span>
+                What&rsquo;s <span style={{ color: 'var(--color-primary)' }}>Good</span> Here
               </h1>
               <p
                 style={{

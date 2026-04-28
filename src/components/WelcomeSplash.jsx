@@ -59,11 +59,9 @@ export function WelcomeSplash() {
         borderColor="var(--color-surface)"
       />
       <div className="wgh-splash__wordmark">
-        <span className="wgh-splash__line">what&rsquo;s</span>
-        <span className="wgh-splash__line">good</span>
-        <span className="wgh-splash__line">
-          here<span className="wgh-splash__period">.</span>
-        </span>
+        <span className="wgh-splash__line">What&rsquo;s</span>
+        <span className="wgh-splash__line wgh-splash__line--accent">Good</span>
+        <span className="wgh-splash__line">Here</span>
       </div>
     </div>
   )

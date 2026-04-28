@@ -253,12 +253,11 @@
   .wgh-splash__wordmark {
     margin-bottom: 6vh;
     text-align: left;
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-weight: 900;
-    font-size: clamp(56px, 18vw, 88px);
-    line-height: 0.82;
-    letter-spacing: -0.04em;
+    font-family: 'Amatic SC', cursive;
+    font-weight: 700;
+    font-size: clamp(80px, 24vw, 132px);
+    line-height: 0.92;
+    letter-spacing: 0.04em;
     color: var(--color-surface);
     animation: sealFadeUp 0.5s 0.55s both;
   }
@@ -267,7 +266,7 @@
     display: block;
   }
 
-  .wgh-splash__period {
+  .wgh-splash__line--accent {
     color: var(--color-text-primary);
   }
 
