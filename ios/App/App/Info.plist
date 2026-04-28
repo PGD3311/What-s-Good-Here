@@ -68,5 +68,9 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>What's Good Here uses your location to show the best dishes and restaurants near you.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>What's Good Here lets you take a photo of a dish to add it to the community gallery and share what's good.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>What's Good Here lets you choose a photo of a dish from your library to add it to the community gallery.</string>
 </dict>
 </plist>
