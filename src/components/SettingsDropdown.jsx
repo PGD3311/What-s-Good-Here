@@ -73,7 +73,7 @@ export function SettingsDropdown() {
         ref={gearButtonRef}
         onClick={() => setShowDropdown(!showDropdown)}
         className="relative p-2 rounded-full transition-all duration-150 active:scale-95 active:opacity-80"
-        style={{ color: 'var(--color-text-secondary)' }}
+        style={{ color: 'var(--color-surface)' }}
         aria-label="Settings"
         aria-expanded={showDropdown}
         aria-haspopup="true"

@@ -195,13 +195,13 @@
     transform: scale(1.05);
   }
 
-  /* TopBar - Subtle brand anchor in safe-area region */
+  /* TopBar - Coral brand band — inverted Seal sits on coral, controls in cream */
   .top-bar {
     position: relative;
     width: 100%;
-    background: #FFFFFF;
+    background: var(--color-primary);
     padding-top: env(safe-area-inset-top, 0px);
-    border-bottom: 1px solid var(--color-divider);
+    border-bottom: none;
     box-shadow: none;
   }
 
@@ -235,7 +235,7 @@
     z-index: 99999;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     justify-content: space-between;
     padding: max(env(safe-area-inset-top, 0px), 20px) 28px max(env(safe-area-inset-bottom, 0px), 36px);
     box-sizing: border-box;
@@ -245,14 +245,14 @@
   }
 
   .wgh-splash__seal {
-    margin-top: 18vh;
+    margin-top: 8vh;
+    align-self: flex-end;
     animation: sealStampIn 0.9s cubic-bezier(.2, .7, .3, 1.2) both;
   }
 
   .wgh-splash__wordmark {
-    margin-bottom: 10vh;
-    width: 100%;
-    text-align: center;
+    margin-bottom: 6vh;
+    text-align: left;
     font-family: 'Fraunces', serif;
     font-style: italic;
     font-weight: 900;

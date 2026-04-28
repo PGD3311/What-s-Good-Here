@@ -12,7 +12,13 @@ export function TopBar() {
         {/* Spacer for symmetry — keeps Seal optically centered */}
         <div style={{ width: '60px' }} />
 
-        <Seal size={36} showRing={false} ariaLabel="What's Good Here" />
+        <Seal
+          size={36}
+          showRing={false}
+          plateColor="var(--color-surface)"
+          monoColor="var(--color-primary)"
+          ariaLabel="What's Good Here"
+        />
 
         {/* Settings + Notifications grouped right */}
         <div className="flex items-center">

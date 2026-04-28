@@ -123,7 +123,7 @@ export function NotificationBell() {
       <button
         onClick={handleBellClick}
         className="relative p-2 rounded-full transition-all duration-150 active:scale-95 active:opacity-80"
-        style={{ color: 'var(--color-text-secondary)' }}
+        style={{ color: 'var(--color-surface)' }}
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         aria-expanded={showDropdown}
         aria-haspopup="true"
