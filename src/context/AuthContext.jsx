@@ -6,7 +6,6 @@ import { authApi } from '../api/authApi'
 import { capture, identify, reset } from '../lib/analytics'
 import { clearPendingVoteStorage, clearCache, removeStorageItem, removeSessionItem, STORAGE_KEYS } from '../lib/storage'
 import { logger } from '../utils/logger'
-import { AuthLifecycle } from '../components/Auth/AuthLifecycle'
 
 const AuthContext = createContext(null)
 
@@ -111,7 +110,6 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      <AuthLifecycle />
       {children}
     </AuthContext.Provider>
   )

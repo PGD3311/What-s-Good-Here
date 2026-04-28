@@ -1,5 +1,8 @@
 // Owns Capacitor App lifecycle listeners that affect auth state.
-// Mounted inside AuthProvider so its effects live adjacent to the auth client.
+// Must be rendered inside <BrowserRouter> — uses useNavigate() for B4
+// deep-link routing. Provider order is AuthProvider > LocationProvider >
+// BrowserRouter, so this is mounted in App.jsx alongside the Routes,
+// not inside AuthProvider.
 //
 // B2: appStateChange → on foreground, reconcile session via authApi.getSession()
 // B4: appUrlOpen    → parse universal-link, exchangeCodeForSession, route by type

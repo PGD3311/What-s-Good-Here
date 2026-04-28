@@ -9,6 +9,7 @@ import { Layout } from './components/Layout'
 import { BottomNav } from './components/BottomNav'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { WelcomeModal } from './components/Auth/WelcomeModal'
+import { AuthLifecycle } from './components/Auth/AuthLifecycle'
 import { RouteProgress } from './components/RouteProgress'
 import { preloadSounds } from './lib/sounds'
 import { preloadCategoryImages } from './constants/categories'
@@ -110,6 +111,7 @@ function App() {
       <AuthProvider>
       <LocationProvider>
         <BrowserRouter>
+          <AuthLifecycle />
           <RouteProgress />
           <WelcomeModal />
           <Suspense fallback={<PageLoader />}>
