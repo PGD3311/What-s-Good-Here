@@ -34,3 +34,16 @@ verify_jwt = false
 
 [functions.places-nearby-search]
 verify_jwt = false
+
+# scraper-dispatcher and restaurant-scraper are invoked by pg_cron with
+# `Bearer ${CRON_SECRET}` (a non-JWT shared secret stored in vault and the
+# Edge Functions env). The gateway rejects non-JWT bearers as
+# UNAUTHORIZED_INVALID_JWT_FORMAT, so disable the gateway check. Both
+# functions enforce dual-path auth in code: CRON_SECRET match OR an admin
+# user JWT (auth.getUser + admins row), so manual admin invocation still
+# works.
+[functions.scraper-dispatcher]
+verify_jwt = false
+
+[functions.restaurant-scraper]
+verify_jwt = false
