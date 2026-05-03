@@ -257,7 +257,14 @@ export const dishesApi = {
   /**
    * Get all dishes with search-relevant fields for client-side caching.
    * Returns a flat array (restaurant data denormalized into each dish).
-   * ~300 rows, ~50KB. Cached by React Query in useAllDishes hook.
+   *
+   * Range explicit to override PostgREST's default 1000-row cap. As of
+   * 2026-05-03 the dishes table has ~6k rows; without this, dishes with
+   * low/null avg_rating fall past the silent cutoff and disappear from
+   * homepage search (every menu-imported dish starts at 0 votes / 0.0
+   * rating, so this affects most of the catalog). Post-launch this should
+   * move to a server-side FTS RPC — fetching the whole table won't scale.
+   *
    * @returns {Promise<Array>} All dishes with restaurant metadata
    */
   async getAllSearchable() {
@@ -273,6 +280,7 @@ export const dishesApi = {
           )
         `)
         .order('avg_rating', { ascending: false, nullsFirst: false })
+        .range(0, 19999)
 
       if (error) throw createClassifiedError(error)
 
