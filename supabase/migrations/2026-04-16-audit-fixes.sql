@@ -348,3 +348,29 @@ COMMIT;
 --
 --   EXPLAIN (ANALYZE, BUFFERS)
 --   SELECT * FROM get_open_reports(50, 0);
+
+-- ROLLBACK:
+-- Indexes (idx_votes_dish_source_rating, idx_votes_user_dish_created,
+-- idx_votes_source_created, reports_target_status_idx) and the partial
+-- best_photos rewrite are pure-additive performance work — drop indexes
+-- below if needed, the function and policy are CREATE OR REPLACE so prior
+-- bodies overwrite cleanly.
+--
+-- The one rewrite that needs explicit restoration is the
+-- follows_select_not_blocked policy:
+--
+--   DROP POLICY IF EXISTS "follows_select_not_blocked" ON follows;
+--   -- Then re-paste the prior policy body from the commit before this
+--   -- migration. Source: `git show <prev>:supabase/schema.sql` and grep
+--   -- for follows_select_not_blocked.
+--
+-- Drop the new indexes if they're causing issues:
+--   DROP INDEX IF EXISTS idx_votes_dish_source_rating;
+--   DROP INDEX IF EXISTS idx_votes_user_dish_created;
+--   DROP INDEX IF EXISTS idx_votes_source_created;
+--   DROP INDEX IF EXISTS reports_target_status_idx;
+--
+-- For the get_ranked_dishes / get_open_reports rewrites, restore from
+-- git history (paste the prior CREATE OR REPLACE FUNCTION block).
+--
+-- No data destruction; rollback affects schema definitions only.

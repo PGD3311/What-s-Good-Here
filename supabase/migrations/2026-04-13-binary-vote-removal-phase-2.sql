@@ -476,3 +476,24 @@ LANGUAGE SQL STABLE SET search_path = public AS $$
   WHERE f.follower_id = p_user_id
   ORDER BY d.name, v.created_at DESC;
 $$;
+
+-- ROLLBACK:
+-- This migration drops + recreates submit_vote_atomic (8→7 args), the
+-- public_votes view, and four read RPCs (get_ranked_dishes,
+-- get_restaurant_dishes, get_dish_variants, get_friends_votes_for_dish,
+-- get_friends_votes_for_restaurant). Data is preserved —
+-- votes.would_order_again was kept in the table, just stopped being read
+-- and written.
+--
+-- Schema rollback path (no data destruction):
+--   1. `git show <commit-before-this-migration>:supabase/schema.sql`
+--      to retrieve the previous CREATE OR REPLACE FUNCTION bodies and
+--      the prior public_votes view definition.
+--   2. Paste each prior block into the Supabase SQL editor.
+--   3. Verify the previous client release works end-to-end before
+--      switching traffic back.
+--
+-- Inline rollback SQL is omitted intentionally — the previous bodies
+-- total ~300 lines of PL/pgSQL across five functions, and pasting a
+-- divergent best-guess version here would be more dangerous than
+-- pulling the exact prior text from git history.

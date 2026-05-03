@@ -163,3 +163,29 @@ COMMIT;
 --     'idx_events_created_by',
 --     'idx_dish_photos_featured_community'
 --   );
+
+-- ROLLBACK:
+-- The two new indexes are pure-additive — drop if needed:
+--   DROP INDEX IF EXISTS idx_dish_photos_featured_community;
+--   DROP INDEX IF EXISTS idx_events_created_by;
+--
+-- get_open_reports signature change (offset → keyset cursors): restore
+-- the prior 2-arg signature from git history:
+--   `git show <commit-before-this-migration>:supabase/schema.sql` →
+--   paste the prior CREATE OR REPLACE FUNCTION get_open_reports body.
+-- No client callers existed at migration time so this is safe to revert
+-- without coordinated client deploy.
+--
+-- dishes.total_votes BIGINT → INT is technically reversible IF every row
+-- still satisfies INT range:
+--   1. SELECT MAX(total_votes) FROM dishes;
+--      Confirm result < 2147483647. Cancel rollback if not — the dish
+--      with overflow value will lose data on the type narrow.
+--   2. DROP TRIGGER IF EXISTS trigger_compute_value_score ON dishes;
+--      DROP VIEW IF EXISTS category_median_prices;
+--      ALTER TABLE dishes ALTER COLUMN total_votes TYPE INTEGER USING total_votes::INTEGER;
+--   3. Recreate category_median_prices view + trigger_compute_value_score
+--      trigger from git history (their bodies are unchanged by this
+--      migration — drop+recreate was needed only to allow the ALTER).
+--
+-- No data destruction in the rollback path provided the MAX check passes.
