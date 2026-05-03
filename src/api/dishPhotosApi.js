@@ -3,6 +3,7 @@ import { checkPhotoUploadRateLimit } from '../lib/rateLimiter'
 import { extractSafeFilename } from '../utils/sanitize'
 import { logger } from '../utils/logger'
 import { createClassifiedError } from '../utils/errorHandler'
+import { stripExifAndReencode } from '../utils/imageAnalysis'
 
 // Upload constraints - enforced client-side and in Supabase Storage policies
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
@@ -60,16 +61,26 @@ export const dishPhotosApi = {
         throw new Error(serverRateLimit.message || 'Too many uploads. Please wait.')
       }
 
-      // Generate unique filename with validated extension from MIME type (not user-provided filename)
-      const mimeToExt = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic' }
-      const fileExt = mimeToExt[file.type] || 'jpg'
-      const fileName = `${user.id}/${dishId}.${fileExt}`
+      // Re-encode to strip EXIF metadata (GPS, timestamps, device info).
+      // The browser applies EXIF orientation when drawing to canvas, so
+      // portrait photos stay correctly oriented after the strip. Output is
+      // always JPEG, so the stored filename always uses .jpg.
+      let uploadFile
+      try {
+        uploadFile = await stripExifAndReencode(file)
+      } catch (err) {
+        logger.warn('EXIF strip / re-encode failed', { type: file.type, err })
+        throw new Error("Couldn't process this image. Please try a different photo.")
+      }
+
+      const fileName = `${user.id}/${dishId}.jpg`
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('dish-photos')
-        .upload(fileName, file, {
+        .upload(fileName, uploadFile, {
           upsert: true, // Replace if exists
+          contentType: 'image/jpeg',
         })
 
       if (uploadError) {

@@ -18,6 +18,14 @@ vi.mock('../lib/supabase', () => ({
   },
 }))
 
+// stripExifAndReencode runs canvas/Image decoding on real bytes; the test
+// fixtures here are synthetic File objects with non-image content, so mock
+// it to identity. The unit tests that exercise the EXIF strip itself live
+// alongside imageAnalysis.
+vi.mock('../utils/imageAnalysis', () => ({
+  stripExifAndReencode: vi.fn((file) => Promise.resolve(file)),
+}))
+
 import { supabase } from '../lib/supabase'
 
 describe('Dish Photos API', () => {

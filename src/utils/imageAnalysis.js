@@ -5,6 +5,39 @@
 import { PHOTO_QUALITY, REJECTION_MESSAGES } from '../constants/photoQuality'
 
 /**
+ * Re-encode an image file to JPEG to strip EXIF metadata (GPS coordinates,
+ * timestamps, device info). Browsers automatically apply EXIF orientation
+ * when drawing to canvas, so portrait photos won't end up rotated.
+ *
+ * Throws on decode failure (e.g. HEIC on a browser without HEIC support);
+ * the caller is expected to surface a friendly error rather than silently
+ * uploading the original with metadata intact.
+ *
+ * @param {File} file
+ * @param {Object} [options]
+ * @param {number} [options.quality=0.92] - JPEG quality, 0..1
+ * @returns {Promise<File>} New File with .jpg extension and image/jpeg type
+ */
+export async function stripExifAndReencode(file, { quality = 0.92 } = {}) {
+  const img = await loadImageFromFile(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = img.naturalWidth || img.width
+  canvas.height = img.naturalHeight || img.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D context unavailable')
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+  const blob = await new Promise(resolve =>
+    canvas.toBlob(resolve, 'image/jpeg', quality)
+  )
+  if (!blob) throw new Error('Image re-encoding failed')
+  const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo'
+  return new File([blob], `${baseName}.jpg`, {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  })
+}
+
+/**
  * Load an image file into an HTMLImageElement
  */
 function loadImageFromFile(file) {
