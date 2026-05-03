@@ -84,10 +84,10 @@ describe('Auth API', () => {
       })
     })
 
-    it('should use same-origin redirect URL if provided', async () => {
+    it('should use same-origin redirect URL if returnPath is absolute same-origin', async () => {
       supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
 
-      await authApi.signInWithGoogle(`${window.location.origin}/callback`)
+      await authApi.signInWithGoogle({ returnPath: `${window.location.origin}/callback` })
 
       expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
         provider: 'google',
@@ -97,10 +97,23 @@ describe('Auth API', () => {
       })
     })
 
+    it('should resolve relative returnPath against current origin', async () => {
+      supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
+
+      await authApi.signInWithGoogle({ returnPath: '/browse?q=ramen#top' })
+
+      expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/browse?q=ramen#top`,
+        },
+      })
+    })
+
     it('should block external redirect URLs', async () => {
       supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
 
-      await authApi.signInWithGoogle('https://evil-site.com')
+      await authApi.signInWithGoogle({ returnPath: 'https://evil-site.com' })
 
       expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
         provider: 'google',
@@ -115,6 +128,67 @@ describe('Auth API', () => {
       supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error })
 
       await expect(authApi.signInWithGoogle()).rejects.toThrow('OAuth error')
+    })
+  })
+
+  describe('signInWithApple (web)', () => {
+    it('should call signInWithOAuth with correct params and no returnPath', async () => {
+      supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
+
+      await authApi.signInWithApple()
+
+      expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'apple',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      })
+    })
+
+    it('should use same-origin redirect URL if returnPath is absolute same-origin', async () => {
+      supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
+
+      await authApi.signInWithApple({ returnPath: `${window.location.origin}/callback` })
+
+      expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'apple',
+        options: {
+          redirectTo: `${window.location.origin}/callback`,
+        },
+      })
+    })
+
+    it('should resolve relative returnPath against current origin', async () => {
+      supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
+
+      await authApi.signInWithApple({ returnPath: '/dish/abc?votingDish=xyz' })
+
+      expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'apple',
+        options: {
+          redirectTo: `${window.location.origin}/dish/abc?votingDish=xyz`,
+        },
+      })
+    })
+
+    it('should block external redirect URLs', async () => {
+      supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
+
+      await authApi.signInWithApple({ returnPath: 'https://evil-site.com' })
+
+      expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'apple',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      })
+    })
+
+    it('should throw error if OAuth fails', async () => {
+      const error = new Error('Apple OAuth error')
+      supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error })
+
+      await expect(authApi.signInWithApple()).rejects.toThrow('Apple OAuth error')
     })
   })
 

@@ -72,5 +72,14 @@
 	<string>What's Good Here lets you take a photo of a dish to add it to the community gallery and share what's good.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>What's Good Here lets you choose a photo of a dish from your library to add it to the community gallery.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.959822716440-vrio6ig6sj0dkg63v2d8k0a3o0h05vip</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -16,26 +16,28 @@ const APPLE_PERSIST_TRANSIENT_STATUSES = new Set([500, 502, 503, 504])
 const APPLE_PERSIST_RETRY_DELAY_MS = 1000
 
 /**
- * Validate redirect URL against allowlist to prevent open redirect attacks
- * Only allows same-origin URLs
- * @param {string|null} redirectUrl - URL to validate
- * @returns {string} Safe redirect URL (defaults to origin if invalid)
+ * Resolve a caller-supplied return path (relative path or absolute URL) into a
+ * same-origin absolute URL safe to hand Supabase as `redirectTo`. Strips any
+ * cross-origin override to prevent open-redirect attacks. Web-only — native
+ * (Capacitor) flows skip this entirely.
+ *
+ * @param {string|null} returnPath - Path like `/dish/123?q=foo#bar`, an absolute
+ *   same-origin URL, or null. Cross-origin URLs are rejected and fall back to origin.
+ * @returns {string} Same-origin absolute URL.
  */
-function getSafeRedirectUrl(redirectUrl) {
-  if (!redirectUrl) {
+function buildWebRedirectUrl(returnPath) {
+  if (!returnPath) {
     return window.location.origin
   }
 
   try {
-    const url = new URL(redirectUrl, window.location.origin)
-    // Only allow same-origin redirects
+    const url = new URL(returnPath, window.location.origin)
     if (url.origin === window.location.origin) {
       return url.toString()
     }
     logger.warn('Blocked redirect to external origin:', url.origin)
     return window.location.origin
   } catch {
-    // Invalid URL, fall back to origin
     return window.location.origin
   }
 }
@@ -125,11 +127,18 @@ export const authApi = {
   },
 
   /**
-   * Sign in with Google OAuth
-   * @param {string|null} redirectUrl - Optional custom redirect URL (must be same-origin)
+   * Sign in with Google. On web, performs an OAuth redirect dance and returns
+   * the user to `returnPath` after auth. On native (Capacitor), uses the Capgo
+   * plugin's ID-token flow — no browser redirect, no `returnPath` needed
+   * (React Router state survives the in-WKWebView sign-in).
+   *
+   * @param {{ returnPath?: string|null }} [options]
+   * @param {string|null} [options.returnPath] - Web only: path to return to
+   *   post-auth (e.g. `/dish/123?votingDish=abc`). Cross-origin values are rejected.
+   *   Ignored on native.
    * @returns {Promise<Object>} Auth response
    */
-  async signInWithGoogle(redirectUrl = null) {
+  async signInWithGoogle({ returnPath = null } = {}) {
     try {
       const rateLimit = checkRateLimit('auth', RATE_LIMITS.auth)
       if (!rateLimit.allowed) {
@@ -142,6 +151,9 @@ export const authApi = {
       })
 
       if (Capacitor.isNativePlatform()) {
+        // Native: Capgo plugin → Google ID token → Supabase. No redirect dance,
+        // no `returnPath` needed — the WKWebView keeps the same JS context, so
+        // React Router state set by the caller survives sign-in.
         const { signInWithGoogleNative } = await import('../lib/nativeAuth')
         let tokens
         try {
@@ -155,7 +167,6 @@ export const authApi = {
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: tokens.idToken,
-          access_token: tokens.accessToken,
         })
         if (error) {
           capture('login_failed', { method: 'google', error: error.message })
@@ -166,7 +177,7 @@ export const authApi = {
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: getSafeRedirectUrl(redirectUrl) },
+        options: { redirectTo: buildWebRedirectUrl(returnPath) },
       })
       if (error) {
         capture('login_failed', { method: 'google', error: error.message })
@@ -188,17 +199,19 @@ export const authApi = {
    * Supabase Apple provider is configured.
    *
    * Web flow uses signInWithOAuth → full-page redirect to Apple → Supabase
-   * validates the ID token on the callback. Native (Capacitor) flow using
-   * signInWithIdToken is deferred — see the H2 plan.
+   * validates the ID token on the callback. Native (Capacitor) flow uses the
+   * Capgo plugin's ID-token flow — no redirect dance.
    *
    * Note: Apple's identity token does NOT include the user's name (unlike
    * Google), so display_name will be null on first sign-in via web. The
    * WelcomeModal handles that case by opening when display_name is missing.
    *
-   * @param {string|null} redirectUrl - Optional custom redirect URL (must be same-origin)
+   * @param {{ returnPath?: string|null }} [options]
+   * @param {string|null} [options.returnPath] - Web only: path to return to
+   *   post-auth. Cross-origin values are rejected. Ignored on native.
    * @returns {Promise<Object>} Auth response
    */
-  async signInWithApple(redirectUrl = null) {
+  async signInWithApple({ returnPath = null } = {}) {
     try {
       const rateLimit = checkRateLimit('auth', RATE_LIMITS.auth)
       if (!rateLimit.allowed) {
@@ -211,6 +224,8 @@ export const authApi = {
       })
 
       if (Capacitor.isNativePlatform()) {
+        // Native: Capgo plugin → Apple identity token → Supabase. No redirect
+        // dance, no `returnPath` needed — same WKWebView JS context survives.
         const { signInWithAppleNative } = await import('../lib/nativeAuth')
         let appleRes
         try {
@@ -266,7 +281,7 @@ export const authApi = {
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
-        options: { redirectTo: getSafeRedirectUrl(redirectUrl) },
+        options: { redirectTo: buildWebRedirectUrl(returnPath) },
       })
       if (error) {
         capture('login_failed', { method: 'apple', error: error.message })
@@ -297,7 +312,7 @@ export const authApi = {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: getSafeRedirectUrl(redirectUrl),
+          emailRedirectTo: buildWebRedirectUrl(redirectUrl),
         },
       })
       if (error) {

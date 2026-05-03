@@ -2,69 +2,80 @@
 
 *Dan (or any Claude session starting work) updates this file at session start. Every other Claude session reads it first to avoid collisions.*
 
-**Last updated:** 2026-04-20 (end of night)
+**Last updated:** 2026-05-03 (afternoon)
 
 ---
 
 ## Active handoff
 
-**No active sessions.** Xcode-simulator phase wrapped tonight. Dan is stopping here.
+**Dan + Claude session active — App Store crunch.** 22 days to Memorial Day, Apple call tomorrow.
+
+**Just shipped (2026-05-03):**
+- ✅ **PR #122 admin-merged** — iOS camera/photo permission strings + PrivacyInfo.xcprivacy in main at `2e46e47`. **Pending Dan: drag `PrivacyInfo.xcprivacy` into Xcode App group on next Xcode open** (without this, file is in repo but not bundled).
+
+**Still open:**
+- **#117** — `refactor(auth): pass returnPath intent, not OAuth callback URLs` — held; refactor not launch-blocking, hold for post-launch.
 
 ---
 
 ## Where we are
 
-Went from Capacitor scaffold → working native iOS app in one session. Six PRs merged to main (#67–#72), all on simulator:
+**App Store final push — see `docs/superpowers/plans/2026-04-27-app-store-final-push.md`.**
 
-- #67 `places-details` — disable gateway JWT verify so new anon key works
-- #68 `add-restaurant` — surface real error (catch block was swallowing it)
-- #69 `BottomNav` — don't crush icons under iOS home-indicator safe area
-- #70 `edge-fns` — allowlist Capacitor origins so native iOS reaches Places + parse-menu
-- #71 `ios` — radius sheet bottom clipping + `NSLocationWhenInUseUsageDescription`
-- #72 `useRestaurantManager` — Rules of Hooks fix (early return after `useEffect`); ErrorBoundary + logger now surface real errors
+**Plan B (OAuth + Apple revocation):** 4 of 6 PRs merged.
+- ✅ B1 (PR #79), B2 (#85), B3-code (#99), B4 (#106)
+- ⏳ B3-activate, B5 — both gated on Apple Dev verification
 
-What works on simulator: app boot, Add Restaurant end-to-end, sign-in (email), location permission, safe-area handling everywhere, clean icons, real error reporting.
+**Tonight's progress (2026-04-27):**
+- ✅ **PR #117 — `refactor(auth): pass returnPath intent, not OAuth callback URLs`.** Root fix for the wrong-layer abstraction in Login/LoginModal that was building `capacitor://localhost/...` redirect URLs on native. Codex-reviewed. 445/445 tests pass. Branched from clean `origin/main` to avoid the brand-refresh session. Worktree at `/tmp/wgh-auth-fix` until merge.
+- Apple Dev enrollment **submitted** but no response yet — Dan checking inbox + portal status.
 
-## Next session — real-device testing
+---
 
-Plug in a real iPhone, pick it from Xcode's device selector, run. Simulator ≠ device for:
+## What Dan needs to do (not blocked by anything)
 
-- Haptics
-- Push notifications
-- Deep links / universal links
-- Real network conditions
-- Actual GPS (not simulated Cupertino)
-- Camera / photo picker
+These move in parallel with Apple Dev verification. Knock them off whenever:
 
-Fix anything that breaks on device that didn't break in simulator.
+- [ ] **Apple Dev portal status check** — confirm "Pending Review" vs "Action Required". Search inbox for `from:apple.com developer`.
+- [ ] **Provision `VITE_GOOGLE_IOS_CLIENT_ID`** — Google Cloud Console → Credentials → iOS OAuth client ID → Bundle `com.whatsgoodhere.app` → paste into Vercel preview + prod env. Without this, native Google sign-in fails on real device.
+- [ ] **Real-device run** — Xcode free provisioning works without paid Apple Dev. Find device-only bugs now, not after TestFlight.
+- [ ] **Virtual business address** — Stable / Anytime Mailbox, ~$10–30/mo. Privacy/Terms blocker.
+- [ ] **App Store Connect listing draft** (drafted offline, paste into ASC when Apple Dev clears) — name, subtitle, description, keywords, screenshots, demo account, reviewer notes.
+
+## What Claude can drive solo (engineering, not blocked)
+
+- [ ] **Google Places TOS Issue #2** (`attributions` field) — known submission rejection risk per `project_google_places_compliance`. ~30 min.
+- [ ] **Verify menu-refresh actually fixed** — memory says yes (PRs #58/#82/#83/#84), plan says no. Reconcile. ~5 min.
+- [ ] **LAUNCH-READINESS.md audit** — match against actual repo state so we know what's truly green.
+
+## The 2026-04-30 decision (3 days)
+
+Don't let it sneak up. Original contingency: no TestFlight + no account deletion → flip to PWA-primary for Memorial Day.
+
+- Account deletion ✅ shipped
+- TestFlight gated on Apple Dev verification
+
+Decision criteria locked in plan Section 7:
+- Clears by 2026-05-04 → stay native, B3-activate + B5 in week of May 4, submit by 2026-05-12
+- Clears 2026-05-04 to 2026-05-11 → still native, tight, submit by 2026-05-15
+- Not clear by 2026-05-11 → PWA-primary for Memorial Day, native ships for July 4
 
 ## Known launch risks (not tonight)
 
-- **OAuth on native is probably broken.** `LoginModal.buildOAuthRedirect()` uses `window.location.href`, which in Capacitor is `capacitor://localhost/...`. Google won't redirect back to a custom scheme. Fix is `@capacitor/browser` + deep-link return, or native Google Sign-In plugin. Dan signed in with email tonight — verify Google path before launch.
-- **Google Places TOS deferrals** (per memory `project_google_places_compliance`): Leaflet map showing Places pins, and missing `attributions` field from Places Details. Both flagged for pre-submission.
-- **Virtual business address** not set up yet — Privacy/Terms ship with email-only for now.
-- **2026-04-30 checkpoint:** if no TestFlight build + account deletion live by then, flip to PWA-primary per the App Store launch memory.
-
-## App Store path (rough order)
-
-1. Confirm certs + provisioning profiles in Xcode Signing & Capabilities
-2. Real-device run
-3. Fix OAuth-on-native
-4. Resolve Google Places deferrals
-5. App Store Connect setup (screenshots, description, privacy, age rating)
-6. TestFlight build + internal testers
-7. Submit
+- **iOS Google OAuth client ID** not yet provisioned — TestFlight-day blocker. (Architecture is solved per PR #117; just needs the env var.)
+- **Google Places TOS** — Leaflet showing Places pins (Issue #1, deferred decision); missing attributions (Issue #2, ~30 min).
+- **Virtual business address** — Privacy/Terms ship email-only without it.
 
 ## Not this session
 
-- Menu-refresh 401 fix (still open per memory)
-- Post-launch features deferred: scoring history, Ask WGH, FriendsFeed, TastePersonalityCard
+- Post-launch features: scoring history, Ask WGH, FriendsFeed, TastePersonalityCard
+- Specials/events/hub (Launch 2.0+ per memory)
 
 ---
 
 ## Protocol
 
 - **Update BEFORE touching files.** If you skip the update, you are the collision.
-- **Clear the "Active handoff" block when the session ends.** Stale handoff is worse than none.
+- **Clear the "Active handoff" block when the brand session ends.** Stale handoff is worse than none.
 - **If `Last updated` is >24h old, treat the file as stale** — ask Dan what's current.
 - **One active handoff per surface.** Parallel sessions OK if scopes don't overlap; append a second handoff block.
