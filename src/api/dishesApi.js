@@ -258,33 +258,54 @@ export const dishesApi = {
    * Get all dishes with search-relevant fields for client-side caching.
    * Returns a flat array (restaurant data denormalized into each dish).
    *
-   * Range explicit to override PostgREST's default 1000-row cap. As of
-   * 2026-05-03 the dishes table has ~6k rows; without this, dishes with
-   * low/null avg_rating fall past the silent cutoff and disappear from
-   * homepage search (every menu-imported dish starts at 0 votes / 0.0
-   * rating, so this affects most of the catalog). Post-launch this should
-   * move to a server-side FTS RPC — fetching the whole table won't scale.
+   * Pagination is mandatory: Supabase enforces a server-side `db-max-rows`
+   * cap of 1000 that overrides any client `.range()` / `.limit()`. With
+   * ~6k dishes in DB (verified 2026-05-03), a single request silently
+   * returns the top 1000 by avg_rating, dropping every menu-imported dish
+   * that hasn't received votes yet. Empirical verification:
+   * `curl …/dishes?limit=20000` → response header `content-range: 0-999/5983`.
+   *
+   * Solution: page through in chunks of 1000 until a short page (< pageSize)
+   * signals the end. Sequential not parallel — keeps logic simple, ~6 round
+   * trips for current row count is fine on a 5-minute staleTime cache. Post
+   * launch this should move to a server-side FTS RPC (Postgres tsvector +
+   * pg_trgm) so we stop fetching the whole table to the client.
    *
    * @returns {Promise<Array>} All dishes with restaurant metadata
    */
   async getAllSearchable() {
+    const PAGE_SIZE = 1000
+    const SAFETY_CAP_ROWS = 50000
+
+    const selectFields = `
+      id, name, category, tags, photo_url, price,
+      avg_rating, total_votes, value_score, value_percentile,
+      restaurants!inner (
+        id, name, is_open, cuisine, town, lat, lng,
+        address, phone, website_url, toast_slug, order_url
+      )
+    `
+
     try {
-      const { data, error } = await supabase
-        .from('dishes')
-        .select(`
-          id, name, category, tags, photo_url, price,
-          avg_rating, total_votes, value_score, value_percentile,
-          restaurants!inner (
-            id, name, is_open, cuisine, town, lat, lng,
-            address, phone, website_url, toast_slug, order_url
-          )
-        `)
-        .order('avg_rating', { ascending: false, nullsFirst: false })
-        .range(0, 19999)
+      const all = []
+      let from = 0
 
-      if (error) throw createClassifiedError(error)
+      while (from < SAFETY_CAP_ROWS) {
+        const { data, error } = await supabase
+          .from('dishes')
+          .select(selectFields)
+          .order('avg_rating', { ascending: false, nullsFirst: false })
+          .range(from, from + PAGE_SIZE - 1)
 
-      return (data || [])
+        if (error) throw createClassifiedError(error)
+        if (!data || data.length === 0) break
+
+        all.push(...data)
+        if (data.length < PAGE_SIZE) break
+        from += PAGE_SIZE
+      }
+
+      return all
         .filter(d => d.restaurants)
         .map(d => ({
           id: d.id,
