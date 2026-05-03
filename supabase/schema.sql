@@ -284,6 +284,20 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- IP-keyed companion to rate_limits, used by browser-facing Edge Functions
+-- (places-* proxies) to throttle anonymous traffic that auth.uid()-based
+-- limiting cannot reach. RLS-enabled with no public policies; the
+-- check_and_record_ip_rate_limit RPC is the only entry point.
+CREATE TABLE IF NOT EXISTS ip_rate_limits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ip_address INET NOT NULL,
+  action TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ip_rate_limits_lookup_idx
+  ON ip_rate_limits (ip_address, action, created_at DESC);
+
 
 -- 1s. jitter_profiles (Jitter Protocol: behavioral biometrics for human verification)
 CREATE TABLE IF NOT EXISTS jitter_profiles (
@@ -549,6 +563,7 @@ ALTER TABLE specials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE restaurant_managers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE restaurant_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ip_rate_limits ENABLE ROW LEVEL SECURITY;
 
 -- restaurants: public read, admin + manager write (column-level protection via trigger)
 CREATE POLICY "Public read access" ON restaurants FOR SELECT USING (true);
@@ -1963,6 +1978,53 @@ $$;
 CREATE OR REPLACE FUNCTION check_vote_rate_limit()
 RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   SELECT check_and_record_rate_limit('vote', 10, 60);
+$$;
+
+-- IP-keyed rate limiter for unauthenticated callers (used by Places proxy
+-- functions). The Edge Function passes the caller IP from
+-- cf-connecting-ip / x-forwarded-for. Fail-open on missing/invalid IP
+-- (defense-in-depth alongside the Google quota and Cloudflare WAF).
+CREATE OR REPLACE FUNCTION check_and_record_ip_rate_limit(
+  p_ip TEXT, p_action TEXT, p_max_attempts INT DEFAULT 30, p_window_seconds INT DEFAULT 60
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_ip INET;
+  v_count INT;
+  v_oldest TIMESTAMPTZ;
+  v_cutoff TIMESTAMPTZ;
+  v_retry_after INT;
+BEGIN
+  IF p_ip IS NULL OR length(trim(p_ip)) = 0 THEN
+    RETURN jsonb_build_object('allowed', true);
+  END IF;
+
+  BEGIN
+    v_ip := p_ip::INET;
+  EXCEPTION WHEN others THEN
+    RETURN jsonb_build_object('allowed', true);
+  END;
+
+  v_cutoff := NOW() - (p_window_seconds || ' seconds')::INTERVAL;
+
+  SELECT COUNT(*), MIN(created_at) INTO v_count, v_oldest
+  FROM ip_rate_limits
+  WHERE ip_address = v_ip AND action = p_action AND created_at > v_cutoff;
+
+  IF v_count >= p_max_attempts THEN
+    v_retry_after := EXTRACT(EPOCH FROM (v_oldest + (p_window_seconds || ' seconds')::INTERVAL - NOW()))::INT;
+    IF v_retry_after < 0 THEN v_retry_after := 0; END IF;
+    RETURN jsonb_build_object(
+      'allowed', false,
+      'retry_after_seconds', v_retry_after,
+      'message', 'Too many requests. Please wait ' || v_retry_after || ' seconds.'
+    );
+  END IF;
+
+  INSERT INTO ip_rate_limits (ip_address, action) VALUES (v_ip, p_action);
+
+  RETURN jsonb_build_object('allowed', true);
+END;
 $$;
 
 -- Atomic user vote upsert. Targets the partial unique index:
@@ -3401,6 +3463,7 @@ GRANT SELECT ON public_votes TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_smart_snippet(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_smart_snippet(UUID) TO anon;
 GRANT EXECUTE ON FUNCTION check_and_record_rate_limit TO authenticated;
+GRANT EXECUTE ON FUNCTION check_and_record_ip_rate_limit(TEXT, TEXT, INT, INT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION check_vote_rate_limit TO authenticated;
 GRANT EXECUTE ON FUNCTION submit_vote_atomic(UUID, UUID, DECIMAL, TEXT, DECIMAL, DECIMAL, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION check_photo_upload_rate_limit TO authenticated;

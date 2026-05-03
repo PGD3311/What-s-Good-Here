@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { getClientIp } from '../_shared/clientIp.ts'
 
 const GOOGLE_API_KEY = Deno.env.get('GOOGLE_PLACES_API_KEY')
 
@@ -11,23 +12,27 @@ serve(async (req) => {
   }
 
   try {
-    // Auth is fully optional — guests can search without a session.
-    // If an auth header is present, try to identify the user for per-account rate limiting.
+    // Two-tier rate limiting:
+    //   - Authenticated users hit `check_and_record_rate_limit` keyed on
+    //     auth.uid() — 20/min.
+    //   - Anonymous callers (and authenticated users who failed the user
+    //     check) fall through to `check_and_record_ip_rate_limit` keyed on
+    //     cf-connecting-ip / x-forwarded-for — 30/min.
+    // Without the IP tier, guests can drain the Google Places quota.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const authHeader = req.headers.get('Authorization')
-    let user = null
 
+    let userLimited = false
     if (authHeader) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
         const supabase = createClient(supabaseUrl, supabaseAnonKey, {
           global: { headers: { Authorization: authHeader } },
         })
         const { data } = await supabase.auth.getUser()
-        user = data?.user ?? null
+        const user = data?.user ?? null
 
         if (user) {
-          // Rate limit authed users: 20 requests/min
           const { data: rateCheck } = await supabase.rpc('check_and_record_rate_limit', {
             p_action: 'places_autocomplete',
             p_max_attempts: 20,
@@ -39,9 +44,27 @@ serve(async (req) => {
               headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             })
           }
+          userLimited = true
         }
       } catch (_) {
-        // Auth check failed — continue as guest
+        // Auth check failed — fall through to IP limiter.
+      }
+    }
+
+    if (!userLimited) {
+      const ip = getClientIp(req)
+      const supabase = createClient(supabaseUrl, supabaseAnonKey)
+      const { data: ipCheck } = await supabase.rpc('check_and_record_ip_rate_limit', {
+        p_ip: ip,
+        p_action: 'places_autocomplete',
+        p_max_attempts: 30,
+        p_window_seconds: 60,
+      })
+      if (ipCheck && !ipCheck.allowed) {
+        return new Response(JSON.stringify({ error: 'Rate limit exceeded', retry_after: ipCheck.retry_after_seconds }), {
+          status: 429,
+          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+        })
       }
     }
 
