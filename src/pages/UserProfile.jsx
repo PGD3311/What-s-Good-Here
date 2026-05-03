@@ -304,29 +304,34 @@ export function UserProfile() {
       return
     }
 
+    // Snapshot pre-state for clean rollback. Reading from React state at
+    // catch-time is stale (in the previous version, setIsFollowing happened
+    // *after* the await, so a thrown request never mutated state — yet the
+    // catch tried to invert it, leaving the UI inverted from the truth).
+    const wasFollowing = isFollowing
+    const prevFollowerCount = profile?.follower_count ?? 0
+
+    // Optimistic update.
+    setIsFollowing(!wasFollowing)
+    setProfile(prev => prev ? {
+      ...prev,
+      follower_count: Math.max(0, prevFollowerCount + (wasFollowing ? -1 : 1)),
+    } : prev)
+
     setFollowLoading(true)
     try {
-      if (isFollowing) {
+      if (wasFollowing) {
         await followsApi.unfollow(userId)
-        setIsFollowing(false)
-        setProfile(prev => ({
-          ...prev,
-          follower_count: Math.max(0, (prev.follower_count || 0) - 1)
-        }))
       } else {
         await followsApi.follow(userId)
-        setIsFollowing(true)
-        setProfile(prev => ({
-          ...prev,
-          follower_count: (prev.follower_count || 0) + 1
-        }))
       }
     } catch (error) {
       logger.error('Failed to toggle follow:', error)
-      setIsFollowing(prev => !prev)
+      // Restore exactly to snapshot — no math, no inversion of stale state.
+      setIsFollowing(wasFollowing)
       setProfile(prev => prev ? {
         ...prev,
-        follower_count: (prev.follower_count || 0) + (isFollowing ? 1 : -1)
+        follower_count: prevFollowerCount,
       } : prev)
     } finally {
       setFollowLoading(false)
