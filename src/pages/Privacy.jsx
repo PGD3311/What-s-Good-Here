@@ -47,7 +47,7 @@ export function Privacy() {
               >
                 hello@wghapp.com
               </a>
-              . A mailing address is available on request for formal data access requests.
+              . Mailing address: Daniel Walsh, 134 Franklin Ter, Vineyard Haven, MA 02568.
             </p>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here ("we", "our", or "the app") is a community-driven food discovery
@@ -326,7 +326,7 @@ export function Privacy() {
             <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>
               Contact Us
             </h2>
-            <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+            <p className="leading-relaxed mb-2" style={{ color: 'var(--color-text-secondary)' }}>
               If you have questions about this Privacy Policy, please contact us at:{' '}
               <a
                 href="mailto:hello@wghapp.com"
@@ -336,6 +336,11 @@ export function Privacy() {
                 hello@wghapp.com
               </a>
             </p>
+            <address className="not-italic leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+              Daniel Walsh<br />
+              134 Franklin Ter<br />
+              Vineyard Haven, MA 02568
+            </address>
           </section>
         </div>
       </div>
