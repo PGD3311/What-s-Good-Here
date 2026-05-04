@@ -87,17 +87,17 @@ async function upsertVoteRecord({ userId, dishId, rating10, reviewText, purityDa
 
   if (jitterData) {
     try {
-      var sampleRow = {
-        user_id: userId,
-        sample_data: jitterData,
-      }
-
-      if (jitterScore) {
-        sampleRow.liveness_score = jitterScore.score
-        sampleRow.flags = jitterScore.flags
-      }
-
-      await supabase.from('jitter_samples').insert(sampleRow)
+      // Server-side ingest only (since 2026-05-04). The RPC validates
+      // plausibility bounds and rate-limits the caller; direct INSERT
+      // into jitter_samples is no longer allowed by RLS.
+      // Note: liveness_score/flags from jitterScore are dropped here —
+      // jitter_samples never had columns for them and the prior code
+      // was silently shedding them at PostgREST. They live in jitter
+      // logic on the client only until/unless the table grows columns.
+      const { error: jitterErr } = await supabase.rpc('submit_jitter_sample', {
+        p_sample_data: jitterData,
+      })
+      if (jitterErr) throw jitterErr
     } catch (jitterErr) {
       logger.warn('Jitter sample submission failed:', jitterErr)
     }

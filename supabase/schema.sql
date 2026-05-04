@@ -762,8 +762,12 @@ RETURNS TABLE (
   WHERE jp.user_id = ANY(p_user_ids);
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;
 
-CREATE POLICY "Users can insert own jitter samples" ON jitter_samples
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- jitter_samples direct INSERT for clients was removed 2026-05-04 — see
+-- migrations/2026-05-04-jitter-server-side-ingest.sql. All sample writes
+-- now go through the submit_jitter_sample() SECURITY DEFINER RPC which
+-- validates plausibility bounds + applies a per-user rate limit. The
+-- service_role policy below remains so the function and any backfill
+-- scripts can still write directly.
 
 CREATE POLICY "Service role manages jitter" ON jitter_profiles
   FOR ALL USING (auth.role() = 'service_role');
@@ -2733,6 +2737,83 @@ CREATE TRIGGER jitter_sample_merge
   FOR EACH ROW
   EXECUTE FUNCTION merge_jitter_sample();
 
+-- Server-side ingest gate for jitter samples. Clients no longer INSERT
+-- into jitter_samples directly (the RLS policy that allowed that was
+-- dropped 2026-05-04 — see migrations/2026-05-04-jitter-server-side-ingest.sql).
+-- This RPC validates plausibility bounds, rate-limits the caller, and
+-- inserts on their behalf so trust badges can't be forged from
+-- fabricated sample_data.
+CREATE OR REPLACE FUNCTION submit_jitter_sample(p_sample_data jsonb)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_sample_id UUID;
+  v_mean_inter_key DECIMAL;
+  v_std_inter_key DECIMAL;
+  v_mean_dwell DECIMAL;
+  v_std_dwell DECIMAL;
+  v_total_keystrokes INT;
+  v_recent_count INT;
+BEGIN
+  v_user_id := (SELECT auth.uid());
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  IF p_sample_data IS NULL OR jsonb_typeof(p_sample_data) <> 'object' THEN
+    RAISE EXCEPTION 'sample_data must be a JSON object';
+  END IF;
+
+  v_mean_inter_key := NULLIF(p_sample_data->>'mean_inter_key', '')::DECIMAL;
+  v_std_inter_key  := NULLIF(p_sample_data->>'std_inter_key', '')::DECIMAL;
+  v_total_keystrokes := NULLIF(p_sample_data->>'total_keystrokes', '')::INT;
+
+  IF v_mean_inter_key IS NULL OR v_std_inter_key IS NULL OR v_total_keystrokes IS NULL THEN
+    RAISE EXCEPTION 'sample_data missing required keys (mean_inter_key, std_inter_key, total_keystrokes)';
+  END IF;
+
+  IF v_mean_inter_key < 30 OR v_mean_inter_key > 5000 THEN
+    RAISE EXCEPTION 'mean_inter_key out of plausible range (30..5000)';
+  END IF;
+  IF v_std_inter_key < 5 OR v_std_inter_key > 2000 THEN
+    RAISE EXCEPTION 'std_inter_key out of plausible range (5..2000)';
+  END IF;
+  IF v_total_keystrokes < 1 OR v_total_keystrokes > 100000 THEN
+    RAISE EXCEPTION 'total_keystrokes out of plausible range (1..100000)';
+  END IF;
+
+  IF p_sample_data ? 'mean_dwell' AND p_sample_data->>'mean_dwell' IS NOT NULL THEN
+    v_mean_dwell := (p_sample_data->>'mean_dwell')::DECIMAL;
+    IF v_mean_dwell < 10 OR v_mean_dwell > 1000 THEN
+      RAISE EXCEPTION 'mean_dwell out of plausible range (10..1000)';
+    END IF;
+  END IF;
+  IF p_sample_data ? 'std_dwell' AND p_sample_data->>'std_dwell' IS NOT NULL THEN
+    v_std_dwell := (p_sample_data->>'std_dwell')::DECIMAL;
+    IF v_std_dwell < 1 OR v_std_dwell > 500 THEN
+      RAISE EXCEPTION 'std_dwell out of plausible range (1..500)';
+    END IF;
+  END IF;
+
+  SELECT COUNT(*) INTO v_recent_count
+  FROM jitter_samples
+  WHERE user_id = v_user_id AND collected_at > NOW() - INTERVAL '1 minute';
+  IF v_recent_count >= 30 THEN
+    RAISE EXCEPTION 'Too many jitter samples in the last minute';
+  END IF;
+
+  INSERT INTO jitter_samples (user_id, sample_data)
+  VALUES (v_user_id, p_sample_data)
+  RETURNING id INTO v_sample_id;
+
+  RETURN v_sample_id;
+END;
+$$;
+
 -- Convenience: restaurant creation rate limiting (5 per hour)
 CREATE OR REPLACE FUNCTION check_restaurant_create_rate_limit()
 RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
@@ -3464,6 +3545,7 @@ GRANT EXECUTE ON FUNCTION get_smart_snippet(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_smart_snippet(UUID) TO anon;
 GRANT EXECUTE ON FUNCTION check_and_record_rate_limit TO authenticated;
 GRANT EXECUTE ON FUNCTION check_and_record_ip_rate_limit(TEXT, TEXT, INT, INT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION submit_jitter_sample(jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION check_vote_rate_limit TO authenticated;
 GRANT EXECUTE ON FUNCTION submit_vote_atomic(UUID, UUID, DECIMAL, TEXT, DECIMAL, DECIMAL, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION check_photo_upload_rate_limit TO authenticated;
