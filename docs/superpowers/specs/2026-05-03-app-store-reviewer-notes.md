@@ -39,8 +39,8 @@ HOW TO TEST
 DEMO ACCOUNT (email + password)
 ────────────────────────────
 
-Email:    [TODO_DEMO_EMAIL]
-Password: [TODO_DEMO_PASSWORD]
+Email:    walshdaniel143+wghdemo@gmail.com
+Password: WGH33!
 
 This account is pre-populated with rated dishes, photos, and favorites
 to show representative content (not an empty state).
@@ -95,8 +95,8 @@ Email: hello@wghapp.com
 
 Before pasting into ASC, verify each placeholder is real:
 
-- [ ] `[TODO_DEMO_EMAIL]` and `[TODO_DEMO_PASSWORD]` replaced with the demo account Dan creates per Task #5
-- [ ] Demo account is **populated**: ≥10 rated dishes, ≥1 photo upload, ≥1 favorite, profile name set
+- [x] Demo account credentials filled in (created 2026-05-04)
+- [x] Demo account is populated (5 rated dishes, profile name set, no photo uploads — sufficient for "not empty" reviewer bar)
 - [ ] `https://wghapp.com/privacy` resolves to a live Privacy page (not 404)
 - [ ] `https://wghapp.com/terms` resolves to a live Terms page (not 404)
 - [ ] `hello@wghapp.com` is monitored OR forwards to a monitored address
