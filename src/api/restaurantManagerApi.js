@@ -599,12 +599,13 @@ export const restaurantManagerApi = {
    * Parse menu text using AI Edge Function
    * @param {string} text - Raw menu text (pasted or extracted from PDF)
    * @param {string} restaurantName - Restaurant name for context
+   * @param {string} restaurantId - Restaurant ID — required for authz scoping
    * @returns {Promise<Array<{name: string, category: string, price: number|null}>>}
    */
-  async parseMenuText(text, restaurantName) {
+  async parseMenuText(text, restaurantName, restaurantId) {
     try {
       const { data, error } = await supabase.functions.invoke('parse-menu', {
-        body: { text, restaurant_name: restaurantName },
+        body: { text, restaurant_name: restaurantName, restaurant_id: restaurantId },
       })
 
       if (error) {

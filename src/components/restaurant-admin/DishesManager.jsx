@@ -82,6 +82,7 @@ export function DishesManager({ restaurantId, dishes, onAdd, onUpdate, onDelete,
     return (
       <div>
         <MenuImportWizard
+          restaurantId={restaurantId}
           restaurantName={restaurantName}
           onBulkAdd={onBulkAdd}
           onClose={() => setShowImport(false)}

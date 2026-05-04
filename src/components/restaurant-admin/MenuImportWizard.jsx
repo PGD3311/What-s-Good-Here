@@ -4,7 +4,7 @@ import { restaurantManagerApi } from '../../api/restaurantManagerApi'
 import { logger } from '../../utils/logger'
 import { getUserMessage } from '../../utils/errorHandler'
 
-export function MenuImportWizard({ restaurantName, onBulkAdd, onClose }) {
+export function MenuImportWizard({ restaurantId, restaurantName, onBulkAdd, onClose }) {
   const [step, setStep] = useState(1)
   const [menuText, setMenuText] = useState('')
   const [parsedDishes, setParsedDishes] = useState([])
@@ -45,7 +45,7 @@ export function MenuImportWizard({ restaurantName, onBulkAdd, onClose }) {
     setStep(2)
     setError(null)
     try {
-      const dishes = await restaurantManagerApi.parseMenuText(menuText, restaurantName)
+      const dishes = await restaurantManagerApi.parseMenuText(menuText, restaurantName, restaurantId)
       if (!dishes.length) { setError('No dishes found. Try pasting more of the menu.'); setStep(1); return }
       setParsedDishes(dishes)
       const sel = {}

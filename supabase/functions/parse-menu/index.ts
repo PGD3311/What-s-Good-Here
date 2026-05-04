@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
@@ -93,12 +94,77 @@ serve(async (req) => {
       })
     }
 
-    const { text, restaurant_name } = await req.json()
+    // Auth gate. parse-menu burns Anthropic Sonnet/Haiku tokens per call —
+    // require an authenticated caller who is either an admin or an active
+    // manager for the restaurant being parsed. Restaurant context lives in
+    // the request body so the manager check can be scoped.
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user: authUser } } = await authClient.auth.getUser()
+    if (!authUser) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+
+    const body = await req.json()
+    const { text, restaurant_name, restaurant_id } = body || {}
 
     if (!text || typeof text !== 'string' || text.trim().length < 10) {
       return new Response(JSON.stringify({ error: 'Menu text is too short or missing' }), {
         status: 400,
         headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+    if (!restaurant_id || typeof restaurant_id !== 'string') {
+      return new Response(JSON.stringify({ error: 'restaurant_id is required' }), {
+        status: 400,
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Admin OR active manager for this restaurant_id. The RLS policy
+    // "Managers read own rows" + "Admins read all managers" lets a user-
+    // context client see only the row(s) authorising the caller.
+    let isAuthorized = false
+    const { data: adminRow } = await authClient
+      .from('admins').select('user_id').eq('user_id', authUser.id).maybeSingle()
+    if (adminRow) {
+      isAuthorized = true
+    } else {
+      const { data: managerRow } = await authClient
+        .from('restaurant_managers')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .eq('restaurant_id', restaurant_id)
+        .maybeSingle()
+      if (managerRow) isAuthorized = true
+    }
+    if (!isAuthorized) {
+      return new Response(JSON.stringify({ error: 'Not authorized for this restaurant' }), {
+        status: 403, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Per-user rate limit. Sonnet/Haiku menu parses cost ~$0.005-0.02 each;
+    // 10/min caps worst case at ~$0.20/min/user.
+    const { data: rateCheck } = await authClient.rpc('check_and_record_rate_limit', {
+      p_action: 'parse_menu',
+      p_max_attempts: 10,
+      p_window_seconds: 60,
+    })
+    if (rateCheck && !rateCheck.allowed) {
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }), {
+        status: 429, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
