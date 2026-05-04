@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 /**
@@ -132,6 +133,26 @@ serve(async (req) => {
     })
   }
 
+  // Auth gate: require an authenticated caller. Without auth, any anonymous
+  // visitor could burn Anthropic tokens by hitting this endpoint.
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
+  const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  })
+  const { data: { user: authUser } } = await authClient.auth.getUser()
+  if (!authUser) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -157,15 +178,39 @@ serve(async (req) => {
     })
   }
   // Allowlist: only URLs from THIS project's dish-photos bucket. Without this,
-  // any authenticated user could burn the Anthropic budget asking us to moderate
-  // arbitrary internet images. JWT auth alone scopes WHO can call; this scopes
-  // WHAT they can ask us to moderate.
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  // any authenticated user could ask us to moderate arbitrary internet images.
   const allowedPrefix = supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/dish-photos/` : ''
   if (!allowedPrefix || !photoUrl.startsWith(allowedPrefix)) {
     return new Response(JSON.stringify({ error: 'photo_url must point to the dish-photos bucket' }), {
       status: 400,
       headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Ownership check. Upload paths are `{user_id}/{dish_id}.jpg`, so the
+  // first path segment after the bucket prefix is the owner's UUID.
+  // Reject mismatches — without this, any authenticated user could ask us
+  // to moderate any other user's photo (still bucket-scoped, but they
+  // could enumerate URLs and burn tokens at someone else's expense, plus
+  // it leaks no-cost photo existence checks).
+  const tail = photoUrl.slice(allowedPrefix.length)
+  const ownerSegment = tail.split('/')[0]
+  if (ownerSegment !== authUser.id) {
+    return new Response(JSON.stringify({ error: 'Photo does not belong to caller' }), {
+      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Per-user rate limit. 30/min — well above any legitimate per-upload
+  // moderation flow; bounds Anthropic spend per user.
+  const { data: rateCheck } = await authClient.rpc('check_and_record_rate_limit', {
+    p_action: 'photo_moderate',
+    p_max_attempts: 30,
+    p_window_seconds: 60,
+  })
+  if (rateCheck && !rateCheck.allowed) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }), {
+      status: 429, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
