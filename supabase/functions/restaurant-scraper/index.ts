@@ -247,18 +247,17 @@ serve(async (req) => {
       }
     }
 
-    // Deactivate old auto_scrape entries for this restaurant
-    await supabase
-      .from('events')
-      .update({ is_active: false })
-      .eq('restaurant_id', restaurant_id)
-      .eq('source', 'auto_scrape')
-
-    await supabase
-      .from('specials')
-      .update({ is_active: false })
-      .eq('restaurant_id', restaurant_id)
-      .eq('source', 'auto_scrape')
+    // Stage-then-swap: insert new auto_scrape rows FIRST, then deactivate
+    // the prior auto_scrape rows. Previously the order was reversed, so a
+    // failed extraction or partial insert error left the restaurant with
+    // zero active rows until the next successful run. With this order:
+    //   - Total extraction failure (allEvents/allSpecials empty) → old
+    //     rows stay live, deactivate is skipped per the guards below.
+    //   - Partial insert failure → whatever new rows landed survive, old
+    //     rows go inactive. Brief overlap during the insert window.
+    // No SQL transaction is available from the Supabase JS client; the
+    // soft-promote pattern below is the closest practical equivalent.
+    const runStartedAt = new Date().toISOString()
 
     // Insert new events
     let eventsInserted = 0
@@ -300,6 +299,34 @@ serve(async (req) => {
         source: 'auto_scrape',
       })
       if (!error) specialsInserted++
+    }
+
+    // Deactivate prior auto_scrape rows (those created before this run
+    // started). Independent guards: only deactivate the table whose new
+    // set landed at least one row, to protect against catastrophic
+    // extraction failure. The `created_at < runStartedAt` filter ensures
+    // the rows we just inserted aren't caught.
+    if (eventsInserted > 0) {
+      const { error: eventsDeactivateErr } = await supabase
+        .from('events')
+        .update({ is_active: false })
+        .eq('restaurant_id', restaurant_id)
+        .eq('source', 'auto_scrape')
+        .lt('created_at', runStartedAt)
+      if (eventsDeactivateErr) {
+        console.error('restaurant-scraper: events deactivate failed', eventsDeactivateErr)
+      }
+    }
+    if (specialsInserted > 0) {
+      const { error: specialsDeactivateErr } = await supabase
+        .from('specials')
+        .update({ is_active: false })
+        .eq('restaurant_id', restaurant_id)
+        .eq('source', 'auto_scrape')
+        .lt('created_at', runStartedAt)
+      if (specialsDeactivateErr) {
+        console.error('restaurant-scraper: specials deactivate failed', specialsDeactivateErr)
+      }
     }
 
     return new Response(JSON.stringify({
