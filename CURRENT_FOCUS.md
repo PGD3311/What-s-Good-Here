@@ -2,80 +2,100 @@
 
 *Dan (or any Claude session starting work) updates this file at session start. Every other Claude session reads it first to avoid collisions.*
 
-**Last updated:** 2026-05-03 (afternoon)
+**Last updated:** 2026-05-06
 
 ---
 
 ## Active handoff
 
-**Dan + Claude session active — App Store crunch.** 22 days to Memorial Day, Apple call tomorrow.
+**Dan + Claude session active — Apple Dev wait + parallel work.** 19 days to Memorial Day. Apple Dev case 102886008678 hits SLA boundary today (no response yet).
 
-**Just shipped (2026-05-03):**
-- ✅ **PR #122 admin-merged** — iOS camera/photo permission strings + PrivacyInfo.xcprivacy in main at `2e46e47`. **Pending Dan: drag `PrivacyInfo.xcprivacy` into Xcode App group on next Xcode open** (without this, file is in repo but not bundled).
-
-**Still open:**
-- **#117** — `refactor(auth): pass returnPath intent, not OAuth callback URLs` — held; refactor not launch-blocking, hold for post-launch.
+**Known parallel session:** another terminal is working on `fix/codex-hardening-wave-2` (Denis's branch, security/scraper hardening). Don't touch that branch or its files.
 
 ---
 
 ## Where we are
 
-**App Store final push — see `docs/superpowers/plans/2026-04-27-app-store-final-push.md`.**
+**Apple Dev verification is THE wall.** Submission package is 100% paste-ready otherwise.
 
-**Plan B (OAuth + Apple revocation):** 4 of 6 PRs merged.
+- Case 102886008678 — submitted 2026-05-04, SLA today, no response yet
+- See `docs/superpowers/plans/2026-05-06-apple-dev-wait-plan.md` for the full wait + contingency playbook
+- Decision tree: clears by 2026-05-11 → still native iOS for Memorial Day; otherwise → PWA-primary launch, native iOS for July 4
+
+**Plan B (Sign in with Apple):** 4 of 6 PRs merged.
 - ✅ B1 (PR #79), B2 (#85), B3-code (#99), B4 (#106)
 - ⏳ B3-activate, B5 — both gated on Apple Dev verification
 
-**Tonight's progress (2026-04-27):**
-- ✅ **PR #117 — `refactor(auth): pass returnPath intent, not OAuth callback URLs`.** Root fix for the wrong-layer abstraction in Login/LoginModal that was building `capacitor://localhost/...` redirect URLs on native. Codex-reviewed. 445/445 tests pass. Branched from clean `origin/main` to avoid the brand-refresh session. Worktree at `/tmp/wgh-auth-fix` until merge.
-- Apple Dev enrollment **submitted** but no response yet — Dan checking inbox + portal status.
+**What's done as of 2026-05-06 (the 70%):**
+- ✅ All native iOS code shipped + tested in simulator end-to-end
+- ✅ Native Google sign-in working (PR #127 + GCP setup + Supabase audience config)
+- ✅ Search row-cap bug fixed via pagination (PR #129) — caught Leo Burger / Mo's Lunch issue
+- ✅ App icon (Seal at 1024x1024) shipped (PR #131)
+- ✅ Privacy + Terms with operator address shipped (PR #134)
+- ✅ Reviewer notes finalized + Codex-reviewed, demo creds embedded (PR #135)
+- ✅ Description final (lobster-roll hook, geo-agnostic body) (PR #136)
+- ✅ Apple Dev wait + contingency plan documented (PR #137)
+- ✅ 5 App Store screenshots captured at iPhone 17 Pro Max native res (1290×2796), saved to ~/Desktop
+- ✅ Demo account live: walshdaniel143+wghdemo@gmail.com / WGH33! (5 ratings + name set)
+
+**What's left after Apple clears (the 30%) — see Plan B doc for details:**
+- B3-activate (4–6h): upload Apple credentials to Supabase, configure Apple provider, replace TEAMID placeholder, flip feature flag
+- B5 (4–7h): add Sign in with Apple capability in Xcode, real-device smoke, TestFlight upload
+- Submission (~30 min): paste reviewer notes + description into App Store Connect, upload screenshots, click submit
+- Apple review (1–3 days, possibly + rejection cycle)
 
 ---
 
-## What Dan needs to do (not blocked by anything)
+## What's tackleable RIGHT NOW (Apple-independent)
 
-These move in parallel with Apple Dev verification. Knock them off whenever:
+The full prioritized list lives in TaskList. Highest-leverage subset:
 
-- [ ] **Apple Dev portal status check** — confirm "Pending Review" vs "Action Required". Search inbox for `from:apple.com developer`.
-- [ ] **Provision `VITE_GOOGLE_IOS_CLIENT_ID`** — Google Cloud Console → Credentials → iOS OAuth client ID → Bundle `com.whatsgoodhere.app` → paste into Vercel preview + prod env. Without this, native Google sign-in fails on real device.
-- [ ] **Real-device run** — Xcode free provisioning works without paid Apple Dev. Find device-only bugs now, not after TestFlight.
-- [ ] **Virtual business address** — Stable / Anytime Mailbox, ~$10–30/mo. Privacy/Terms blocker.
-- [ ] **App Store Connect listing draft** (drafted offline, paste into ASC when Apple Dev clears) — name, subtitle, description, keywords, screenshots, demo account, reviewer notes.
+**P0 — do these even if Apple clears tomorrow:**
+- **Task #14 [Dan only]** — Real-device smoke on physical iPhone (free provisioning, ~30 min). Catches device-only bugs invisible to simulator BEFORE TestFlight.
+- **Task #15 [Dan thinking]** — First 100 users plan, ~60 min. Names, channels, sequencing for launch day.
 
-## What Claude can drive solo (engineering, not blocked)
+**P1 — quality bumps + risk mitigation:**
+- **Task #16 [Claude-driven]** — Pre-launch waitlist landing on wghapp.com (~60–90 min). Captures interest while Apple drags.
+- **Task #17 [Dan only]** — Enrich demo account to 15 ratings + 1 photo + 3 favorites (~20 min). Reduces Apple rejection risk.
+- **Task #18 [SQL + Dan]** — Audit + flip seasonal `is_open` flags. Memorial Day = restaurants opening; many still stuck on winter false.
+- **Task #19 [Claude-driven]** — Sentry alerting policy verify + configure 5xx + unhandled-error rules.
+- **Task #23 [Claude-driven]** — Write PWA-primary contingency plan BEFORE 5/11 deadline (~60 min).
 
-- [ ] **Google Places TOS Issue #2** (`attributions` field) — known submission rejection risk per `project_google_places_compliance`. ~30 min.
-- [ ] **Verify menu-refresh actually fixed** — memory says yes (PRs #58/#82/#83/#84), plan says no. Reconcile. ~5 min.
-- [ ] **LAUNCH-READINESS.md audit** — match against actual repo state so we know what's truly green.
+**P2 — useful but not launch-blocking:**
+- Task #20 — PostHog dashboards
+- Task #21 — Launch post drafts (Twitter/Insta/Vineyard Gazette/FB)
+- Task #22 — OG image render verification
 
-## The 2026-04-30 decision (3 days)
+**Deferred bugs:**
+- Task #11 — Post-launch FTS migration (search architecture)
+- Task #13 — Signup duplicate-name bug fix
 
-Don't let it sneak up. Original contingency: no TestFlight + no account deletion → flip to PWA-primary for Memorial Day.
+---
 
-- Account deletion ✅ shipped
-- TestFlight gated on Apple Dev verification
+## Daily ritual until Apple responds
 
-Decision criteria locked in plan Section 7:
-- Clears by 2026-05-04 → stay native, B3-activate + B5 in week of May 4, submit by 2026-05-12
-- Clears 2026-05-04 to 2026-05-11 → still native, tight, submit by 2026-05-15
-- Not clear by 2026-05-11 → PWA-primary for Memorial Day, native ships for July 4
+Per `2026-05-06-apple-dev-wait-plan.md` §5:
+1. Check inbox for case 102886008678 reply
+2. Check developer.apple.com → Account for status changes
+3. If >24h since last touch with no movement: send ONE polite nudge on the case
+4. No spam — one nudge per day max
 
-## Known launch risks (not tonight)
+**Today (2026-05-06):** SLA hits EOD. Plan recommends parallel email follow-up + phone escalation (1-800-633-2152 → 4 → 1) with case number ready.
 
-- **iOS Google OAuth client ID** not yet provisioned — TestFlight-day blocker. (Architecture is solved per PR #117; just needs the env var.)
-- **Google Places TOS** — Leaflet showing Places pins (Issue #1, deferred decision); missing attributions (Issue #2, ~30 min).
-- **Virtual business address** — Privacy/Terms ship email-only without it.
+---
 
 ## Not this session
 
 - Post-launch features: scoring history, Ask WGH, FriendsFeed, TastePersonalityCard
 - Specials/events/hub (Launch 2.0+ per memory)
+- Anything that touches `fix/codex-hardening-wave-2` (other terminal's scope)
 
 ---
 
 ## Protocol
 
 - **Update BEFORE touching files.** If you skip the update, you are the collision.
-- **Clear the "Active handoff" block when the brand session ends.** Stale handoff is worse than none.
+- **Read the active handoff block.** If another session is on a surface you want to touch, STOP and ask.
 - **If `Last updated` is >24h old, treat the file as stale** — ask Dan what's current.
 - **One active handoff per surface.** Parallel sessions OK if scopes don't overlap; append a second handoff block.
+- **Tasks are the canonical to-do.** TaskList is the source of truth for what's pending. CURRENT_FOCUS.md summarizes; TaskList tracks per-item progress with owner/state.
