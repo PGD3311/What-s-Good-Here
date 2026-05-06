@@ -50,8 +50,9 @@ export function Terms() {
             </h2>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here is a community-driven platform that helps people discover great
-              dishes on Martha's Vineyard. Users rate dishes, write reviews, upload photos, and
-              we aggregate those signals to create rankings that help others find the best food.
+              dishes, currently focused on Martha's Vineyard with coverage extending to nearby
+              coastal Massachusetts. Users rate dishes, write reviews, upload photos, and we
+              aggregate those signals to create rankings that help others find the best food.
             </p>
           </section>
 
@@ -213,11 +214,11 @@ export function Terms() {
                 <li>You represent that you are not located in a country subject to U.S. government embargo or designated as a "terrorist supporting" country, and you are not on any U.S. government list of prohibited or restricted parties.</li>
                 <li>Any questions or complaints about the app should be directed to{' '}
                   <a
-                    href="mailto:hello@wghapp.com"
+                    href="mailto:wghapp@wghapp.com"
                     className="font-medium"
                     style={{ color: 'var(--color-primary)' }}
                   >
-                    hello@wghapp.com
+                    wghapp@wghapp.com
                   </a>
                   .
                 </li>
@@ -266,11 +267,11 @@ export function Terms() {
             <p className="leading-relaxed mb-2" style={{ color: 'var(--color-text-secondary)' }}>
               Questions about these Terms? Contact us at:{' '}
               <a
-                href="mailto:hello@wghapp.com"
+                href="mailto:wghapp@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@wghapp.com
+                wghapp@wghapp.com
               </a>
             </p>
             <address className="not-italic leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>

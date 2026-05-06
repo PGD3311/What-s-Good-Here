@@ -64,12 +64,14 @@ confirm step.
 USER-GENERATED CONTENT (Guideline 1.2)
 ────────────────────────────
 
-- All user reviews and photos pass a content-safety filter before
-  display.
-- Reviewers can report inappropriate content via the report button on
-  any review or photo.
-- Reviewers can block other users; blocked users' content is hidden.
-- Reports are reviewed by our admin moderation queue.
+- Dish photos pass an automated content-safety check (Anthropic Claude
+  vision) before display.
+- Review text is filtered against a profanity/slur/spam blocklist on
+  submission.
+- Users can report inappropriate content via the report button on any
+  review, photo, dish, or profile.
+- Users can block other users; blocked users' content is hidden.
+- Reports are reviewed by our admin moderation queue (48h SLA).
 
 ────────────────────────────
 PRIVACY
@@ -86,7 +88,7 @@ PRIVACY
 SUPPORT
 ────────────────────────────
 
-Email: hello@wghapp.com
+Email: wghapp@wghapp.com
 ```
 
 ---
@@ -96,10 +98,10 @@ Email: hello@wghapp.com
 Before pasting into ASC, verify each placeholder is real:
 
 - [x] Demo account credentials filled in (created 2026-05-04)
-- [x] Demo account is populated (5 rated dishes, profile name set, no photo uploads — sufficient for "not empty" reviewer bar)
+- [x] Demo account is populated (5 rated dishes, profile name set — sufficient for "not empty" reviewer bar). Note: §1 above describes the account as pre-populated with "rated dishes, photos, and favorites" — Dan to enrich with at least 1 photo + 1 favorite before submission to match that description, OR edit §1 to omit "photos and favorites" if leaving as-is. **Do not let §1 and the actual account contradict each other.**
 - [ ] `https://wghapp.com/privacy` resolves to a live Privacy page (not 404)
 - [ ] `https://wghapp.com/terms` resolves to a live Terms page (not 404)
-- [ ] `hello@wghapp.com` is monitored OR forwards to a monitored address
+- [ ] `wghapp@wghapp.com` is monitored OR forwards to a monitored address
 - [ ] Account deletion path actually works on a fresh test account (smoke test)
 - [ ] The submitted build can sign in with the demo email + password (do this on TestFlight before promoting to App Store review)
 
@@ -114,7 +116,7 @@ Before pasting into ASC, verify each placeholder is real:
 - **Replaced "people who actually ate them"** (unverifiable) with "community-submitted 1–10 ratings."
 - **Added UGC-safety block** citing Guideline 1.2: report/block flows + photo moderation. H3 reporting/blocking is shipped per memory.
 - **Removed internal file-path references** (PrivacyInfo.xcprivacy, Info.plist) — reviewers can't verify those, only binary behavior.
-- **Email unified to `hello@wghapp.com`** (matches Privacy.jsx and Terms.jsx).
+- **Email unified to `wghapp@wghapp.com`** (matches Privacy.jsx and Terms.jsx).
 - **Cut 30–40% length** per Codex — reviewer notes should read like test instructions, not internal rationale.
 
 ## 4. What NOT to add

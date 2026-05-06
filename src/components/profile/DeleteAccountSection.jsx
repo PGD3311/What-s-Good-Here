@@ -34,8 +34,8 @@ export function DeleteAccountSection() {
           className="leading-relaxed"
           style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '16px' }}
         >
-          This permanently removes your votes, reviews, photos, favorites, and profile.
-          This can't be undone.
+          This permanently removes your votes, reviews, photos, favorites, playlists, follows,
+          and profile. This can't be undone.
         </p>
         <button
           type="button"
@@ -127,9 +127,9 @@ export function DeleteAccountModal({ onClose }) {
             className="text-sm leading-relaxed mb-5"
             style={{ color: 'var(--color-text-secondary)' }}
           >
-            This is permanent. We'll remove your votes, reviews, photos, favorites, and profile
-            from What's Good Here. Dish rankings that included your votes will be recalculated
-            without them.
+            This is permanent. We'll remove your votes, reviews, photos, favorites, playlists,
+            follows, and profile from What's Good Here. Dish rankings that included your votes
+            will be recalculated without them.
           </p>
 
           <label

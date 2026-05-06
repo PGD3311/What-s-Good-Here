@@ -41,18 +41,19 @@ export function Privacy() {
               What's Good Here is operated by Daniel Walsh (Martha's Vineyard, Massachusetts).
               Contact:{' '}
               <a
-                href="mailto:hello@wghapp.com"
+                href="mailto:wghapp@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@wghapp.com
+                wghapp@wghapp.com
               </a>
               . Mailing address: Daniel Walsh, 134 Franklin Ter, Vineyard Haven, MA 02568.
             </p>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here ("we", "our", or "the app") is a community-driven food discovery
-              platform for Martha's Vineyard. This Privacy Policy explains what we collect, what
-              we do with it, and what choices you have.
+              platform, currently focused on Martha's Vineyard with coverage extending to nearby
+              coastal Massachusetts as the data quality is earned. This Privacy Policy explains
+              what we collect, what we do with it, and what choices you have.
             </p>
           </section>
 
@@ -86,9 +87,11 @@ export function Privacy() {
                 <h3 className="font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>Dish Photos</h3>
                 <p>
                   When you upload a photo of a dish, we store the image, the dish it's attached
-                  to, and a timestamp. We don't use your photos for anything other than displaying
-                  them on the dish page and in your profile. You can delete a photo you uploaded
-                  at any time.
+                  to, and a timestamp. Before a photo is shown on the dish page, we send it to
+                  Anthropic's Claude vision model for an automated content-safety check (to
+                  catch inappropriate images). We don't use your photos for anything other than
+                  this safety check and displaying them on the dish page and in your profile.
+                  You can delete a photo you uploaded at any time.
                 </p>
               </div>
               <div>
@@ -182,8 +185,10 @@ export function Privacy() {
               <li><strong>Vercel</strong> — our hosting provider</li>
               <li><strong>Google</strong> — Sign in with Google, and the Google Places API for restaurant discovery (we send location queries to Google to find nearby places)</li>
               <li><strong>Apple</strong> — Sign in with Apple on iOS and web (subject to Apple's privacy policy)</li>
+              <li><strong>Anthropic</strong> — Claude vision model for automated dish-photo content-safety checks before display</li>
               <li><strong>PostHog</strong> — product analytics</li>
               <li><strong>Sentry</strong> — error tracking</li>
+              <li><strong>Jitter Protocol</strong> — third-party trust-scoring service for review-cadence attestation (see "Typing Cadence" above)</li>
             </ul>
           </section>
 
@@ -295,11 +300,11 @@ export function Privacy() {
               If you believe a dish photo or review on the app infringes your copyright, send
               a written notice to{' '}
               <a
-                href="mailto:hello@wghapp.com"
+                href="mailto:wghapp@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@wghapp.com
+                wghapp@wghapp.com
               </a>
               {' '}that includes: (1) an identification of the copyrighted work you claim has
               been infringed; (2) the URL or description of the infringing content; (3) your
@@ -329,11 +334,11 @@ export function Privacy() {
             <p className="leading-relaxed mb-2" style={{ color: 'var(--color-text-secondary)' }}>
               If you have questions about this Privacy Policy, please contact us at:{' '}
               <a
-                href="mailto:hello@wghapp.com"
+                href="mailto:wghapp@wghapp.com"
                 className="font-medium"
                 style={{ color: 'var(--color-primary)' }}
               >
-                hello@wghapp.com
+                wghapp@wghapp.com
               </a>
             </p>
             <address className="not-italic leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
