@@ -54,6 +54,7 @@ const MapPage = lazyWithRetry(() => import('./pages/Map'), 'Map')
 const HowReviewsWork = lazyWithRetry(() => import('./pages/HowReviewsWork'), 'HowReviewsWork')
 const ForRestaurants = lazyWithRetry(() => import('./pages/ForRestaurants'), 'ForRestaurants')
 const JitterLanding = lazyWithRetry(() => import('./pages/JitterLanding'))
+const Waitlist = lazyWithRetry(() => import('./pages/Waitlist'))
 const RestaurantReviews = lazyWithRetry(() => import('./pages/RestaurantReviews'), 'RestaurantReviews')
 const PlaylistPage = lazyWithRetry(() => import('./pages/Playlist'), 'Playlist')
 const Locals = lazyWithRetry(() => import('./pages/Locals'), 'Locals')
@@ -141,6 +142,7 @@ function App() {
               <Route path="/for-restaurants" element={<ForRestaurants />} />
               <Route path="/playlist/:id" element={<Layout><PlaylistPage /></Layout>} />
               <Route path="/jitter" element={<Layout><JitterLanding /></Layout>} />
+              <Route path="/waitlist" element={<Waitlist />} />
               <Route path="/locals" element={<Layout><Locals /></Layout>} />
               <Route path="/locals/:userId" element={<Layout><LocalsCurator /></Layout>} />
               <Route path="*" element={<NotFound />} />
