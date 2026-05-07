@@ -15,7 +15,7 @@ If the source docs and this doc disagree, **trust this doc** — it's the latest
 
 - [ ] Apple Developer enrollment cleared (Account screen shows "Apple Developer Program" active, not pending)
 - [ ] **SIWA path decided** (Codex 4.8 finding): either (A) ship SIWA end-to-end via B3-activate + B5 + Xcode capability, OR (B) hide Google sign-in button in the review build to avoid 4.8 violation. Cannot ship Google-without-Apple.
-- [ ] **iPad path decided** (Codex finding): either drop `TARGETED_DEVICE_FAMILY` in `ios/App/App.xcodeproj/project.pbxproj` from `"1,2"` to `"1"` (iPhone only — recommended), OR shoot + upload iPad screenshots at 13" / 12.9" tiers.
+- [x] **iPad path decided 2026-05-07**: dropped `TARGETED_DEVICE_FAMILY` to `"1"` (iPhone only) at `ios/App/App.xcodeproj/project.pbxproj:321,343`. UI is mobile-designed; iPad would look stretched. No iPad screenshots needed. `UISupportedInterfaceOrientations~ipad` in `Info.plist` is left in place — inert when binary doesn't target iPad. Requires fresh archive + TestFlight build for the binary Apple reviews to reflect the change.
 - [ ] **PrivacyInfo.xcprivacy rebuilt into TestFlight build** — updated 2026-05-06 to add SearchHistory/UserID/DeviceID/OtherDataTypes (Jitter)/OtherDiagnosticData and remove PreciseLocation. Must be in the binary Apple scans, not just on disk.
 - [ ] **Phone field has a real number** (not the placeholder in §8 below).
 - [ ] B3-activate complete (if path A): Apple credentials in Supabase Vault, Auth provider configured, AASA Team ID replaced, `VITE_FEATURES_APPLE_SIGNIN=true` in prod
