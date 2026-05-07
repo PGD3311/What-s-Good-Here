@@ -94,7 +94,7 @@ export default function Waitlist() {
             lineHeight: 1.3,
           }}
         >
-          The lobster roll question, finally answered.
+          Launching soon.
         </p>
 
         <p
@@ -106,8 +106,7 @@ export default function Waitlist() {
             maxWidth: '440px',
           }}
         >
-          Coming soon to Martha's Vineyard. The local guide to what to actually
-          order — a ranked dish list, built from real community ratings.
+          Get on the list — we'll email you the moment the app lands.
         </p>
 
         {status === 'success' ? (
