@@ -349,19 +349,21 @@ ACCOUNT DELETION (Guideline 5.1.1(v))
 Path: Profile tab → tap the gear icon (top-right) → Delete Account.
 
 Deletion is permanent and irreversible: votes, reviews, photos,
-profile, and follows are removed. The action requires an explicit
-confirm step.
+favorites, playlists, follows, and profile are removed. The action
+requires an explicit confirm step.
 
 ────────────────────────────
 USER-GENERATED CONTENT (Guideline 1.2)
 ────────────────────────────
 
-- All user reviews and photos pass a content-safety filter before
-  display.
-- Reviewers can report inappropriate content via the report button on
-  any review or photo.
-- Reviewers can block other users; blocked users' content is hidden.
-- Reports are reviewed by our admin moderation queue.
+- Dish photos pass an automated content-safety check (Anthropic Claude
+  vision) before display.
+- Review text is filtered against a profanity/slur/spam blocklist on
+  submission.
+- Users can report inappropriate content via the report button on any
+  review, photo, dish, or profile.
+- Users can block other users; blocked users' content is hidden.
+- Reports are reviewed by our admin moderation queue (48h SLA).
 
 ────────────────────────────
 PRIVACY

@@ -228,9 +228,9 @@ export function Privacy() {
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               You can delete your account from the in-app settings menu (tap the gear icon,
               then <strong>Delete Account</strong>). Deletion is permanent and removes your
-              votes, reviews, photos, favorites, playlists, and profile. Dish rankings that
-              included your votes will be recalculated without them. Deletion happens in-app —
-              you do not need to email us to close your account.
+              votes, reviews, photos, favorites, playlists, follows, and profile. Dish
+              rankings that included your votes will be recalculated without them. Deletion
+              happens in-app — you do not need to email us to close your account.
             </p>
             <p className="leading-relaxed mt-3" style={{ color: 'var(--color-text-secondary)' }}>
               If you signed in with Apple, deleting your account also revokes the

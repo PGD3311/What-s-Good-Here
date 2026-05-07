@@ -36,7 +36,7 @@ Apple requires **6.7"/6.9" iPhone** screenshots (e.g. iPhone 16 Pro Max — 1290
 
 ### Shot 4 — Profile / journal (the identity)
 **Story:** "this is your food life" — your ratings, your shelves, your taste fingerprint.
-**Setup:** sign in as a test user with 10+ rated dishes + at least one favorite. Shelf filter visible. Journal feed showing recent activity.
+**Setup:** sign in as a test user with 5+ rated dishes (the demo account walshdaniel143+wghdemo@gmail.com works). Journal feed showing recent activity. Favorites/photos optional — populated screens look richer but the empty-state for those tabs is acceptable.
 **Caption (≤30 chars):** `Your food life, organized`
 **Why this shot:** the "social" without saying social. Hooks foodies who care about tracking.
 
@@ -83,7 +83,7 @@ expansion is planned post-launch — geofencing is intentional (data
 quality over breadth).
 ```
 
-**Action:** create the demo account before submission. Use a real-but-disposable email Dan controls. Make sure the account has rated dishes, photos uploaded, and at least one favorite — reviewers test "empty state" if you give them an empty profile.
+**Action:** demo account already created (`walshdaniel143+wghdemo@gmail.com` / `WGH33!`) with 5 rated dishes + name set. Reviewer notes (canonical: `2026-05-03-app-store-reviewer-notes.md`) describe it as "pre-populated with rated dishes" — no photo or favorite claim, matches actual state. Don't recreate the contradiction.
 
 ---
 

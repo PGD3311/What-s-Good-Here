@@ -154,7 +154,7 @@ Allowed purposes per Apple: Third-Party Advertising, Developer's Advertising or 
 
 - [x] All Privacy URLs resolve — verified 2026-05-06: `/privacy`, `/terms`, `/` all return 200
 - [x] Test account created and documented in reviewer notes — walshdaniel143+wghdemo@gmail.com / WGH33!
-- [x] Apple Sign-In wired on the login modal — verified 2026-05-06: `LoginModal.jsx:287`, behind `VITE_FEATURES_APPLE_SIGNIN` flag (gated on B3-activate)
+- [~] Apple Sign-In code wired on the login modal — verified 2026-05-06: `LoginModal.jsx:287`, behind `VITE_FEATURES_APPLE_SIGNIN` flag. **NOT yet shippable**: `ios/App/App/App.entitlements` is missing `com.apple.developer.applesignin`; B3-activate (Apple credentials) and B5 (Xcode capability) both gated on Apple Dev clearance. Don't claim "wired" to reviewers until both ship.
 - [x] Places `attributions` field rendering — verified 2026-05-06: `PlaceAttributions` in `RestaurantDetail.jsx:344`; `PoweredByGoogle` in `DishSearch.jsx`, `AddRestaurantModal.jsx`, `SearchAutocomplete.jsx`
 - [ ] Privacy policy physical address — see `project_business_address` memory (virtual address pending)
 - [ ] `wghapp@wghapp.com` mailbox monitored or forwards to monitored address

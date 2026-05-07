@@ -1,7 +1,7 @@
 # App Store Connect — Reviewer Notes (final form)
 
-**Date:** 2026-05-03
-**Status:** Final-form copy ready to paste into App Store Connect → "App Review Information" → "Notes". Only blank: demo account credentials (created at submission time).
+**Date:** 2026-05-03 (last touched 2026-05-06)
+**Status:** Final-form copy ready to paste into App Store Connect → "App Review Information" → "Notes". Demo credentials filled in; no remaining blanks.
 
 This replaces the §2 stub in `docs/superpowers/specs/2026-04-27-app-store-listing-assets.md`. Codex (gpt-5.4 / high) reviewed the prior draft 2026-05-03 — this version applies its findings.
 
@@ -57,8 +57,8 @@ ACCOUNT DELETION (Guideline 5.1.1(v))
 Path: Profile tab → tap the gear icon (top-right) → Delete Account.
 
 Deletion is permanent and irreversible: votes, reviews, photos,
-profile, and follows are removed. The action requires an explicit
-confirm step.
+favorites, playlists, follows, and profile are removed. The action
+requires an explicit confirm step.
 
 ────────────────────────────
 USER-GENERATED CONTENT (Guideline 1.2)
