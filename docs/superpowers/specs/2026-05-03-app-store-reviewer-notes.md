@@ -42,8 +42,8 @@ DEMO ACCOUNT (email + password)
 Email:    walshdaniel143+wghdemo@gmail.com
 Password: WGH33!
 
-This account is pre-populated with rated dishes, photos, and favorites
-to show representative content (not an empty state).
+This account is pre-populated with rated dishes to show representative
+content (not an empty state).
 
 PLEASE DO NOT DELETE THIS ACCOUNT — it is shared across all reviewers.
 If you wish to test the account-deletion flow (Guideline 5.1.1(v)),
@@ -98,7 +98,7 @@ Email: wghapp@wghapp.com
 Before pasting into ASC, verify each placeholder is real:
 
 - [x] Demo account credentials filled in (created 2026-05-04)
-- [x] Demo account is populated (5 rated dishes, profile name set — sufficient for "not empty" reviewer bar). Note: §1 above describes the account as pre-populated with "rated dishes, photos, and favorites" — Dan to enrich with at least 1 photo + 1 favorite before submission to match that description, OR edit §1 to omit "photos and favorites" if leaving as-is. **Do not let §1 and the actual account contradict each other.**
+- [x] Demo account is populated (5 rated dishes, profile name set — sufficient for "not empty" reviewer bar). §1 wording softened 2026-05-06 to match actual account state (no photo claim, no favorites claim).
 - [ ] `https://wghapp.com/privacy` resolves to a live Privacy page (not 404)
 - [ ] `https://wghapp.com/terms` resolves to a live Terms page (not 404)
 - [ ] `wghapp@wghapp.com` is monitored OR forwards to a monitored address

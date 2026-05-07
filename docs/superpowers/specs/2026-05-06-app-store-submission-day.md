@@ -22,7 +22,7 @@ If the source docs and this doc disagree, **trust this doc** — it's the latest
 - [ ] B5 complete (if path A): Sign in with Apple capability added in Xcode (`App.entitlements` currently has NO `com.apple.developer.applesignin` key — verified 2026-05-06), real-device smoke passed
 - [ ] TestFlight build uploaded and at least one internal tester has signed in successfully
 - [ ] Demo account verified working in TestFlight build: `walshdaniel143+wghdemo@gmail.com` / `WGH33!`
-- [ ] **Demo account enriched** to match reviewer-notes claim of "rated dishes, photos, and favorites" — currently has 5 rated dishes + name set; needs at least 1 photo + 1 favorite OR reviewer-notes wording softened to match. Don't let the doc and the account contradict each other.
+- [x] **Demo account matches reviewer-notes wording** — reviewer-notes softened 2026-05-06 to claim only "rated dishes" (no photos, no favorites). Account has 5 ratings + name set, which matches. No enrichment needed.
 - [ ] `https://wghapp.com/privacy` returns 200 (verified 2026-05-06 ✅) — and includes Anthropic + Jitter in third-party list (added 2026-05-06)
 - [ ] `https://wghapp.com/terms` returns 200 (verified 2026-05-06 ✅)
 - [ ] `https://wghapp.com/support` returns 200 (verified 2026-05-06 ✅)
@@ -334,8 +334,8 @@ DEMO ACCOUNT (email + password)
 Email:    walshdaniel143+wghdemo@gmail.com
 Password: WGH33!
 
-This account is pre-populated with rated dishes, photos, and favorites
-to show representative content (not an empty state).
+This account is pre-populated with rated dishes to show representative
+content (not an empty state).
 
 PLEASE DO NOT DELETE THIS ACCOUNT — it is shared across all reviewers.
 If you wish to test the account-deletion flow (Guideline 5.1.1(v)),
