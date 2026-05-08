@@ -2,15 +2,17 @@
 
 *Dan (or any Claude session starting work) updates this file at session start. Every other Claude session reads it first to avoid collisions.*
 
-**Last updated:** 2026-05-07
+**Last updated:** 2026-05-08
 
 ---
 
 ## Active handoff
 
-**Dan + Claude session active — Apple Dev verification finally moving.** Dan got Apple support on the phone today (after the email + phone-escalation push). Case 102886008678 is now in **ID verification phase** — no longer a black-box wait. Once Dan completes whatever ID verification Apple requests, enrollment clears and the SIWA pipeline unblocks.
+**B3-activate paused mid-execution. Dan stepped away to focus.** Apple Dev verification cleared 2026-05-08. Phase A (credential acquisition on developer.apple.com) is **complete**. Phase B (Vault + Supabase config) is **paused at B.1.5** — the encryption master key step. Resume here when Dan returns.
 
-**18 days to Memorial Day.** The 5/11 PWA-contingency wall is still 4 days away. ID verification typically resolves in hours, not days, once Apple is engaged. Plan A (ship SIWA properly) is now the likely path.
+**Resume point:** open Supabase SQL Editor → generate `openssl rand -base64 32` locally → `vault.create_secret(<key>, 'apple_encryption_master_key_v1', '...')` → verify → then move to the 5 Apple secrets (B.1). Detailed steps in `docs/superpowers/specs/2026-05-07-b3-activate-execution-prep.md` §2.B.
+
+**17 days to Memorial Day.** Plan A (ship SIWA) is the path.
 
 **Known parallel session:** another terminal may still be on `fix/codex-hardening-wave-2` (Denis's branch). Don't touch that branch or its files.
 
@@ -18,16 +20,28 @@
 
 ## Where we are
 
-**Apple Dev:** ID verification step pending. Dan to complete whatever Apple asks for (typically: government ID photo).
+**Apple Dev:** ✅ cleared 2026-05-08. Welcome email received.
 
-**The path forward when ID clears (~hours):**
-1. Get Apple credentials: Team ID, Services ID, .p8 SIWA Key (see `2026-05-07-b3-activate-execution-prep.md` for step-by-step)
-2. B3-activate (~4–6h): Vault upload, Supabase provider config, AASA Team ID replace, pg_cron activation, prod flag flip
-3. B5 (~4–7h): Xcode SIWA capability, real-device smoke, TestFlight upload
-4. App Store Connect submission (~30 min): paste from `2026-05-06-app-store-submission-day.md`
-5. Apple review (1–3 days, possibly + rejection cycle)
+**Phase A — credential acquisition (DONE 2026-05-08):**
+- ✅ Team ID captured (in Dan's notes/1Password)
+- ✅ App ID `com.whatsgoodhere.app` registered with **Sign In with Apple** + **Associated Domains** capabilities
+- ✅ Services ID `com.whatsgoodhere.service` registered + configured (Primary App ID = com.whatsgoodhere.app, domain = wghapp.com, return URL = https://vpioftosgdkyiwvhxewy.supabase.co/auth/v1/callback)
+- ✅ Sign in with Apple Key created — Key ID captured, .p8 file stashed in 1Password
 
-**Realistic submission window:** 2026-05-09 to 2026-05-13 if ID verification clears today/tomorrow. Comfortable buffer for Memorial Day.
+**Phase B — B3-activate (IN PROGRESS, paused at B.1.5):**
+- ⏳ B.1.5 Encryption master key (`apple_encryption_master_key_v1`) — verified MISSING from Vault (must create before B.1)
+- ⏳ B.1 Vault upload — 5 Apple secrets (signing key, team ID, key ID, services ID, bundle ID)
+- ⏳ B.2 Supabase Apple provider config (dashboard)
+- ⏳ B.3 AASA Team ID replace in `public/.well-known/apple-app-site-association`
+- ⏳ B.4 pg_cron `apple-revocation-retry` activation
+- ⏳ B.5 Prod env `VITE_FEATURES_APPLE_SIGNIN=true` flip
+- ⏳ B.6 Smoke tests (web Apple sign-in, account deletion revocation, cron retry)
+
+**After Phase B → Phase C (B5):** Xcode SIWA capability, Info.plist URL-scheme fallback, PrivacyInfo verify, real-device smoke, TestFlight upload (~6–8h).
+
+**Then:** App Store Connect submission (~30 min, paste from `2026-05-06-app-store-submission-day.md`) → Apple review 1–3 days.
+
+**Realistic submission window:** 2026-05-10 to 2026-05-13. Comfortable buffer for Memorial Day.
 
 **What's done as of 2026-05-07 (the 75%):**
 - ✅ All native iOS code shipped + tested in simulator end-to-end
