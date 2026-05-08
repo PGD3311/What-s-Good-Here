@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["<TEAMID>.com.whatsgoodhere.app"],
+        "appIDs": ["K447QTHBR9.com.whatsgoodhere.app"],
         "paths": [
           "/auth/*",
           "/reset-password",
