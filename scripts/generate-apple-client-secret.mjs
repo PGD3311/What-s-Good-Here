@@ -19,7 +19,10 @@ import { readFileSync } from 'node:fs'
 import { createSign } from 'node:crypto'
 
 const TEAM_ID = 'K447QTHBR9'
-const KEY_ID = 'JXT4ZZQW67'
+// Key ID rotated 2026-05-08 from JXT4ZZQW67 (revoked due to chat exposure)
+// to 9LL6V25287. The old key is dead in Apple's system; old JWTs signed
+// with it return invalid_client.
+const KEY_ID = '9LL6V25287'
 const SERVICES_ID = 'com.whatsgoodhere.service'
 const TTL_SECONDS = 180 * 24 * 3600 // 180 days — Apple's max JWT lifetime
 
