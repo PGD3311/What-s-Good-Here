@@ -47,3 +47,14 @@ verify_jwt = false
 
 [functions.restaurant-scraper]
 verify_jwt = false
+
+# apple-revocation-retry is invoked every 15 min by pg_cron with the
+# shared CRON_SECRET pulled from vault.decrypted_secrets WHERE name='cron_secret'.
+# Same gateway situation as menu-refresh — the gateway rejects non-JWT
+# bearers with 401 before the function runs. The function itself
+# authenticates the caller in code (timing-safe compare of Bearer against
+# CRON_SECRET env, matching the menu-refresh + scraper-dispatcher pattern
+# on this project). Disabling the gateway check lets cron reach the
+# function; the function's own check still requires a valid CRON_SECRET.
+[functions.apple-revocation-retry]
+verify_jwt = false

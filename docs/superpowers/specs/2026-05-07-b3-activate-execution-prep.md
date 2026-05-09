@@ -128,11 +128,9 @@ SELECT name FROM vault.secrets WHERE name = 'apple_encryption_master_key_v1';
 Supabase dashboard → **Authentication** → **Providers** → **Apple** → click to expand:
 
 - **Enabled:** ON
-- **Client IDs:** `com.whatsgoodhere.app,com.whatsgoodhere.service` (comma-separated, NO spaces)
-- **Secret Key:** leave blank (using .p8 flow)
-- **Team ID:** paste from §1.A.1
-- **Key ID:** paste from §1.A.4
-- **.p8 file:** paste contents (or upload depending on dashboard UI)
+- **Client IDs:** `com.whatsgoodhere.service,com.whatsgoodhere.app` (comma-separated, NO spaces — **Services ID FIRST, Bundle ID second**). Supabase uses the first entry as the `client_id` when initiating the web OAuth flow. Bundle-ID-first yields `invalid_request — Invalid client id or web redirect url` from Apple (verified 2026-05-08).
+- **Secret Key (for OAuth):** ⚠️ NOT blank — Supabase's current dashboard requires a pre-generated client-secret JWT here for the WEB OAuth flow. Generate via `node scripts/generate-apple-client-secret.mjs <path-to-.p8> | pbcopy`, paste the output. Apple caps these JWTs at 180 days; regenerate before expiry (see `project_apple_jwt_renewal` memory).
+- **Team ID, Key ID, .p8 file:** depending on dashboard version, these may not have separate fields — only the Secret Key JWT is required, and the JWT was signed with these values via the script. If the dashboard does ask for them separately, paste from §1.A.1 / §1.A.4 / .p8 file contents respectively.
 
 Save.
 
@@ -158,32 +156,19 @@ Commit this change. Vercel will redeploy; verify the live AASA file at `https://
 
 ### B.4 Activate pg_cron schedule (~5 min)
 
-Supabase SQL Editor → run:
+**Updated 2026-05-08 (root-fix pass):** uses `cron_secret` from Vault (matching menu-refresh + scraper-dispatcher pattern), NOT `service_role_key` from `app.service_role_key`. The original `ALTER DATABASE` approach is blocked by Supabase's hosted-postgres permissions, AND `SUPABASE_SERVICE_ROLE_KEY` env var has been silently swapping between legacy JWT and `sb_secret_*` formats during Supabase's key migration. CRON_SECRET (project-set in Function Secrets) is stable.
+
+Supabase SQL Editor → run as ONE LINE inside the `$$ ... $$` block (chat wrap can introduce newlines that pg_cron stores literally — burned us once 2026-05-08):
 
 ```sql
-ALTER DATABASE postgres SET app.service_role_key = '<service-role-jwt>';
-
-SELECT cron.schedule(
-  'apple-revocation-retry',
-  '*/15 * * * *',
-  $$
-    SELECT net.http_post(
-      url := 'https://vpioftosgdkyiwvhxewy.supabase.co/functions/v1/apple-revocation-retry',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.service_role_key', true)
-      ),
-      body := '{}'::jsonb
-    );
-  $$
-);
+SELECT cron.schedule('apple-revocation-retry', '*/15 * * * *', $$SELECT net.http_post(url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url' LIMIT 1) || '/functions/v1/apple-revocation-retry', headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret' LIMIT 1)), body := '{}'::jsonb);$$);
 
 -- Verify
 SELECT jobname, schedule FROM cron.job WHERE jobname = 'apple-revocation-retry';
 -- Expected: 1 row with jobname = 'apple-revocation-retry', schedule = '*/15 * * * *'
 ```
 
-Get the service-role JWT from Supabase dashboard → **Project Settings** → **API** → **service_role secret**.
+Prereqs (already set on Denis's project, verify if working in a fresh setup): `cron_secret` exists in `vault.secrets` AND `CRON_SECRET` env var is set in Function Secrets to the SAME value.
 
 ### B.5 Flip prod feature flag (~5 min)
 

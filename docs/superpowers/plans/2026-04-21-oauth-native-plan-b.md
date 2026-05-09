@@ -3523,7 +3523,7 @@ Reuses Task B3.1 Steps 1-3 (previously deferred). Run them now.
 
 Fill in:
 - **Enabled:** on
-- **Client IDs:** `com.whatsgoodhere.app,com.whatsgoodhere.service` (comma-separated — native bundle + web services)
+- **Client IDs:** `com.whatsgoodhere.service,com.whatsgoodhere.app` (comma-separated — Services ID FIRST, Bundle ID second). Order matters: Supabase uses the FIRST entry as the `client_id` when initiating the web OAuth flow with Apple. Putting the Bundle ID first sends `client_id=com.whatsgoodhere.app` to Apple and yields `invalid_request — Invalid client id or web redirect url` (verified 2026-05-08).
 - **Secret Key (for OAuth):** leave blank if using .p8 flow, or generate a client secret JWT and paste
 - **Team ID:** from Apple Dev portal
 - **Key ID:** from Apple Dev portal
@@ -3542,28 +3542,19 @@ Test Apple web sign-in from a production-like environment. Confirm Supabase retu
 
 ### Task B3.12: Activate pg_cron schedule
 
-- [ ] **Step 1: Uncomment / run the `cron.schedule(...)` block from B3.7 Step 2**
+**Updated 2026-05-08 (root-fix pass):** the original `app.service_role_key` ALTER DATABASE pattern is blocked by Supabase's hosted-postgres permissions, AND `SUPABASE_SERVICE_ROLE_KEY` env auto-injection has been swapping between legacy JWT and `sb_secret_*` formats during Supabase's key migration (failing the function's byte-comparison auth check). Production uses the `CRON_SECRET` pattern instead — same as menu-refresh and scraper-dispatcher on this project. Function code updated to match (`apple-revocation-retry/index.ts`).
+
+- [ ] **Step 1: Run the cron.schedule call as ONE line** (chat-wrap can introduce literal newlines that pg_cron stores in the URL string — burned us 2026-05-08)
 
 Run in SQL Editor:
 
 ```sql
-SELECT cron.schedule(
-  'apple-revocation-retry',
-  '*/15 * * * *',
-  $$
-    SELECT net.http_post(
-      url := 'https://vpioftosgdkyiwvhxewy.supabase.co/functions/v1/apple-revocation-retry',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.service_role_key', true)
-      ),
-      body := '{}'::jsonb
-    );
-  $$
-);
+SELECT cron.schedule('apple-revocation-retry', '*/15 * * * *', $$SELECT net.http_post(url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url' LIMIT 1) || '/functions/v1/apple-revocation-retry', headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret' LIMIT 1)), body := '{}'::jsonb);$$);
 ```
 
-Set `app.service_role_key` via `ALTER DATABASE postgres SET app.service_role_key = '<service-role-jwt>';` (or Supabase-native cron-secret mechanism if available). Confirm with:
+Prereqs: `cron_secret` exists in `vault.secrets` AND `CRON_SECRET` env var is set in Function Secrets to the SAME value. (Both pre-existing on Denis's project from the menu-refresh / scraper-dispatcher setup.)
+
+Confirm:
 
 ```sql
 SELECT jobname, schedule FROM cron.job WHERE jobname = 'apple-revocation-retry';

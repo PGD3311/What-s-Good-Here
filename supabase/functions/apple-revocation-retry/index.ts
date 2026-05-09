@@ -4,8 +4,12 @@
 // delete-account when inline revoke failed. Uses lease_apple_revocations RPC
 // with FOR UPDATE SKIP LOCKED for safe concurrent execution.
 //
-// Auth: service-role JWT only. Public invocation would let anyone drain
-// Apple's rate limits or force revocation attempts.
+// Auth: shared CRON_SECRET match. Public invocation would let anyone drain
+// Apple's rate limits or force revocation attempts. Mirrors the menu-refresh
+// + scraper-dispatcher pattern used elsewhere on this project — explicit
+// project-set CRON_SECRET avoids depending on Supabase's auto-injected
+// SUPABASE_SERVICE_ROLE_KEY env var, which has been silently changing between
+// legacy JWT and sb_secret_* formats during their key migration.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
@@ -30,21 +34,30 @@ function backoffMinutes(attempts: number): number {
 }
 
 Deno.serve(async (req) => {
-  // Auth guard: caller must present the service-role JWT. Compare timing-safely.
+  // Auth guard: caller must present the shared CRON_SECRET as Bearer.
+  // Compare timing-safely. CRON_SECRET is project-set in Function Secrets;
+  // the matching value lives in vault.decrypted_secrets WHERE name='cron_secret'
+  // and is read by pg_cron when invoking this function.
+  const cronSecret = Deno.env.get('CRON_SECRET') ?? '';
+  if (!cronSecret) {
+    return new Response(
+      JSON.stringify({ ok: false, code: 'CRON_SECRET_NOT_CONFIGURED' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
   const authHeader = req.headers.get('authorization') ?? '';
-  const jwt = authHeader.toLowerCase().startsWith('bearer ')
+  const presented = authHeader.toLowerCase().startsWith('bearer ')
     ? authHeader.slice(7).trim()
     : '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  if (!jwt || jwt.length !== serviceRoleKey.length) {
+  if (!presented || presented.length !== cronSecret.length) {
     return new Response(JSON.stringify({ ok: false, code: 'UNAUTHORIZED' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
   let equal = 0;
-  for (let i = 0; i < jwt.length; i++) {
-    equal |= jwt.charCodeAt(i) ^ serviceRoleKey.charCodeAt(i);
+  for (let i = 0; i < presented.length; i++) {
+    equal |= presented.charCodeAt(i) ^ cronSecret.charCodeAt(i);
   }
   if (equal !== 0) {
     return new Response(JSON.stringify({ ok: false, code: 'UNAUTHORIZED' }), {
@@ -53,6 +66,19 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Service role for DB queries (RPC calls, table updates). Independent
+  // from the auth check above — the function still needs service-role
+  // access to mutate pending_apple_revocations.
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  if (!serviceRoleKey) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        code: 'SERVICE_ROLE_KEY_NOT_CONFIGURED',
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
   const supa = createClient(
     Deno.env.get('SUPABASE_URL')!,
     serviceRoleKey,

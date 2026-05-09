@@ -9,15 +9,18 @@
 // mode (where the Edge Function runs in the same Deno process) but NOT against
 // a remotely-deployed function (remote isolation is a separate process).
 //
-// Auth: the function requires a service-role JWT. We pass it explicitly via
-// invokeFn({ jwt: SERVICE_ROLE_KEY }). The harness `invokeFn` accepts any
-// string in opts.jwt — callers are responsible for supplying the right JWT.
+// Auth: the function requires a shared CRON_SECRET (matching the
+// menu-refresh + scraper-dispatcher pattern). We pass it explicitly via
+// invokeFn({ jwt: CRON_SECRET }). The harness `invokeFn` accepts any
+// string in opts.jwt — callers are responsible for supplying the right
+// secret. (The `jwt` parameter name is harness-historical; the function
+// no longer requires a JWT-shaped value.)
 //
 // Run:
 //   deno test --allow-net --allow-env supabase/functions/apple-revocation-retry/
 //
 // Required env vars:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+//   SUPABASE_URL, CRON_SECRET
 // Optional:
 //   SUPABASE_FUNCTIONS_URL  (defaults to ${SUPABASE_URL}/functions/v1)
 //
@@ -33,7 +36,7 @@
 //   T5 — Unrevokable sentinel rows are never selected
 //   T6 — Concurrency: two workers vs same row → only one revoke
 //   T7 — Stale lease (>10min) is reclaimed
-//   T_AUTH — Requests without service-role JWT return 401
+//   T_AUTH — Requests without a matching CRON_SECRET return 401
 
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import {
@@ -53,9 +56,9 @@ function getEnv(key: string): string {
   return val;
 }
 
-// SERVICE_ROLE_KEY is read once — used as the auth credential for every invokeFn
-// call, since the function is guarded by a service-role JWT check.
-const SERVICE_ROLE_KEY = getEnv('SUPABASE_SERVICE_ROLE_KEY');
+// CRON_SECRET is read once — used as the auth credential for every invokeFn
+// call, since the function is guarded by a CRON_SECRET match check.
+const CRON_SECRET = getEnv('CRON_SECRET');
 
 // ---------------------------------------------------------------------------
 // mockAppleRevoke
@@ -123,7 +126,7 @@ Deno.test('T_AUTH: missing JWT → 401 UNAUTHORIZED', async () => {
   assertEquals(
     res.status,
     401,
-    'Function must reject requests without a service-role JWT',
+    'Function must reject requests without a matching CRON_SECRET',
   );
   const body = await res.json();
   assertEquals(body.code, 'UNAUTHORIZED');
@@ -131,7 +134,7 @@ Deno.test('T_AUTH: missing JWT → 401 UNAUTHORIZED', async () => {
 
 Deno.test('T_AUTH: wrong JWT → 401 UNAUTHORIZED', async () => {
   const res = await invokeFn('apple-revocation-retry', {
-    jwt: 'definitely-not-the-service-role-key',
+    jwt: 'definitely-not-the-cron-secret',
   });
   assertEquals(res.status, 401);
   const body = await res.json();
@@ -148,7 +151,7 @@ Deno.test('T_AUTH: wrong JWT → 401 UNAUTHORIZED', async () => {
 
 Deno.test('T1: authenticated with no targetable rows → 200 ok', async () => {
   const res = await invokeFn('apple-revocation-retry', {
-    jwt: SERVICE_ROLE_KEY,
+    jwt: CRON_SECRET,
   });
   assertEquals(res.status, 200, 'Expected 200 from authenticated call');
   const body = await res.json();
@@ -169,7 +172,7 @@ Deno.test('T2: Apple 200 → pending row deleted after successful revoke', async
   });
   try {
     const res = await invokeFn('apple-revocation-retry', {
-      jwt: SERVICE_ROLE_KEY,
+      jwt: CRON_SECRET,
     });
     assertEquals(res.status, 200);
     const body = await res.json();
@@ -196,7 +199,7 @@ Deno.test('T3: Apple 500 → attempts incremented, next_attempt_at scheduled, lo
   });
   try {
     const res = await invokeFn('apple-revocation-retry', {
-      jwt: SERVICE_ROLE_KEY,
+      jwt: CRON_SECRET,
     });
     assertEquals(res.status, 200);
 
@@ -228,7 +231,7 @@ Deno.test('T4: Apple invalid_grant (400) → row dead-lettered immediately', asy
   });
   try {
     const res = await invokeFn('apple-revocation-retry', {
-      jwt: SERVICE_ROLE_KEY,
+      jwt: CRON_SECRET,
     });
     assertEquals(res.status, 200);
 
@@ -256,7 +259,7 @@ Deno.test('T5: unrevokable sentinel rows are skipped by the lease RPC', async ()
   });
   try {
     const res = await invokeFn('apple-revocation-retry', {
-      jwt: SERVICE_ROLE_KEY,
+      jwt: CRON_SECRET,
     });
     assertEquals(res.status, 200);
 
@@ -293,8 +296,8 @@ Deno.test('T6: two concurrent workers vs same row — only one revoke, row delet
   });
   try {
     const [r1, r2] = await Promise.all([
-      invokeFn('apple-revocation-retry', { jwt: SERVICE_ROLE_KEY }),
-      invokeFn('apple-revocation-retry', { jwt: SERVICE_ROLE_KEY }),
+      invokeFn('apple-revocation-retry', { jwt: CRON_SECRET }),
+      invokeFn('apple-revocation-retry', { jwt: CRON_SECRET }),
     ]);
     assertEquals(r1.status, 200, 'First worker must return 200');
     assertEquals(r2.status, 200, 'Second worker must return 200');
@@ -338,7 +341,7 @@ Deno.test('T8: Apple 429 rate limit → transient backoff, not dead-lettered', a
   });
   try {
     const res = await invokeFn('apple-revocation-retry', {
-      jwt: SERVICE_ROLE_KEY,
+      jwt: CRON_SECRET,
     });
     assertEquals(res.status, 200);
 
@@ -377,7 +380,7 @@ Deno.test('T7: stale lease (15min old) is reclaimed and row processed', async ()
   });
   try {
     const res = await invokeFn('apple-revocation-retry', {
-      jwt: SERVICE_ROLE_KEY,
+      jwt: CRON_SECRET,
     });
     assertEquals(res.status, 200);
 
