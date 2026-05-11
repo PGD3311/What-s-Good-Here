@@ -80,6 +80,14 @@
 				<string>com.googleusercontent.apps.959822716440-vrio6ig6sj0dkg63v2d8k0a3o0h05vip</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.whatsgoodhere</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>whatsgoodhere</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>
