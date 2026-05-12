@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 28" width="60" height="28">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@700&amp;display=swap');
-    .lm-text { font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 22px; fill: #F5F1E8; letter-spacing: -0.5px; }
-  </style>
-  <text x="1" y="21" class="lm-text">W</text>
-  <text x="21" y="21" class="lm-text" fill="#D9A765">G</text>
-  <text x="38" y="21" class="lm-text">H</text>
-</svg>

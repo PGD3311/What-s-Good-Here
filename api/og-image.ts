@@ -127,6 +127,16 @@ function generateOgSvg(title: string, subtitle: string, rating: string, badge: s
     WHAT'S <tspan fill="#C48A12">GOOD</tspan> HERE
   </text>
 
+  <!-- WGH plate icon (top-right) — matches launcher icon -->
+  <g transform="translate(1040 60)">
+    <rect x="0" y="0" width="100" height="100" rx="22" fill="#E4440A"/>
+    <circle cx="50" cy="50" r="42" fill="#F7F4F1"/>
+    <circle cx="50" cy="50" r="35" fill="none" stroke="#E4440A" stroke-width="0.6" opacity="0.55"/>
+    <g transform="rotate(-8 50 50)">
+      <text x="50" y="60" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="900" font-size="34" fill="#E4440A" letter-spacing="-1.5">wgh</text>
+    </g>
+  </g>
+
   ${badge ? `
   <!-- Badge -->
   <rect x="80" y="140" width="${badge.length * 18 + 40}" height="44" rx="22" fill="#E4440A" opacity="0.12"/>

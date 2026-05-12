@@ -1,25 +1,21 @@
 import { useId } from 'react'
 
 /**
- * Seal — The WGH plate mark. Stamp of approval.
+ * Seal — the WGH plate mark. Mirrors the launcher icon (Wide Rim).
  *
- * Three variants (pick what matches the surface you're on):
- *   - `monogram` (default) — coral plate, cream "wgh", no rim/star. Works on
- *     light page backgrounds. Used by TopBar and most in-app brand anchors.
- *   - `seal` — `monogram` plus circular "WHAT'S GOOD HERE" ring text. For
- *     marketing/legal pages where you want the formal seal-of-approval look.
- *     Drop below ~64px and the ring becomes illegible.
- *   - `icon` — Full app-icon mark: coral square background, cream plate, thin
- *     cream rim, cream star at 10 o'clock (a 10/10 nod), coral italic "wgh".
- *     Use for hero brand stamps, splash overlays, anything that should echo
- *     the launcher icon.
+ * Three variants:
+ *   - `monogram` (default) — coral disc, cream italic "wgh", transparent
+ *     background. Used by TopBar and most in-app brand anchors.
+ *   - `seal` — monogram with circular "WHAT'S GOOD HERE" ring text around
+ *     the disc. For marketing/legal pages where you want the formal
+ *     stamp-of-approval look. Keep above ~64px so the ring stays legible.
+ *   - `icon` — full launcher mark: coral square background, cream plate,
+ *     coral inner-rim line, coral italic "wgh". Use for hero brand stamps
+ *     and splash overlays that should echo the iOS icon.
  *
- * `plateColor` / `monoColor` overrides still work for one-off recolors.
- * `showRing` and `showStar` let you compose ad-hoc looks without committing
- * to a full variant.
- *
- * Defaults are decorative (`aria-hidden`). Pass `ariaLabel` when the Seal is
- * the only brand identifier on screen and a screen reader should announce it.
+ * All variants share the launcher icon's -8° tilt on the wordmark and
+ * `opsz=144` on Fraunces so the display-cut letterforms read the same way
+ * everywhere.
  */
 export function Seal({
   size = 200,
@@ -27,11 +23,9 @@ export function Seal({
   plateColor,
   monoColor,
   ringColor,
-  starColor,
   rimColor,
   bgColor,
   showRing,
-  showStar,
   showRim,
   showBackground,
   borderColor = null,
@@ -43,31 +37,37 @@ export function Seal({
   const isSeal = variant === 'seal'
 
   const ring = showRing ?? isSeal
-  const star = showStar ?? isIcon
-  const rim = showRim ?? isIcon
+  const innerRim = showRim ?? isIcon
   const bg = showBackground ?? isIcon
 
   const plate = plateColor ?? (isIcon ? 'var(--color-surface)' : 'var(--color-primary)')
   const mono = monoColor ?? (isIcon ? 'var(--color-primary)' : 'var(--color-surface)')
+  const rimInk = rimColor ?? 'var(--color-primary)'
   const ringInk = ringColor ?? 'var(--color-text-primary)'
-  const rimInk = rimColor ?? (isIcon ? 'var(--color-surface)' : 'var(--color-primary)')
-  const starInk = starColor ?? (isIcon ? 'var(--color-surface)' : 'var(--color-primary)')
   const bgInk = bgColor ?? 'var(--color-primary)'
+
+  // Seal keeps the smaller r=50 plate so the ring text fits comfortably
+  // outside the disc. Icon + monogram match the launcher icon's r=84.
+  const plateR = isSeal ? 50 : 84
+  const innerRimR = 70
+
+  // Match the launcher wordmark proportions. Smaller plate (seal variant)
+  // gets a proportionally smaller wgh so it doesn't overflow the disc.
+  const wghFontSize = isSeal ? 42 : 68
+  const wghY = isSeal ? 113 : 120
+  const wghLetterSpacing = isSeal ? -1.5 : -2.5
+
+  // Tighten the viewBox to whatever's actually visible so the mark fills
+  // the requested `size` instead of floating in negative space.
+  let viewBox
+  if (bg || ring) viewBox = '0 0 200 200'
+  else if (isSeal) viewBox = '40 40 120 120'
+  else viewBox = '12 12 176 176'
 
   const id = 'seal_' + useId().replace(/:/g, '_')
   const a11y = ariaLabel
     ? { role: 'img', 'aria-label': ariaLabel }
     : { 'aria-hidden': true }
-
-  // The icon mark uses a bigger plate (r=62) so the proportions read like the
-  // launcher icon. Other variants keep the tighter r=50 so the ring text has
-  // room to breathe.
-  const plateR = isIcon ? 62 : 50
-  const rimR = isIcon ? 78 : 65
-  // Crop the viewBox to whatever's actually rendered so the mark fills the
-  // icon area: full canvas when bg/ring are on, wider crop when the star is
-  // showing (so it doesn't get clipped), tightest crop for the bare monogram.
-  const viewBox = ring || bg ? '0 0 200 200' : star ? '22 22 156 156' : '40 40 120 120'
 
   return (
     <svg
@@ -81,14 +81,19 @@ export function Seal({
       <defs>
         <path id={id} d="M 100,100 m -70,0 a 70,70 0 1,1 140,0 a 70,70 0 1,1 -140,0" />
       </defs>
+
       {bg && <rect width="200" height="200" fill={bgInk} />}
+
       {borderColor && (
-        <circle cx="100" cy="100" r="72" fill="none" stroke={borderColor} strokeWidth="1.5" />
+        <circle cx="100" cy="100" r={plateR + 8} fill="none" stroke={borderColor} strokeWidth="1.5" />
       )}
+
       <circle cx="100" cy="100" r={plateR} fill={plate} />
-      {rim && (
-        <circle cx="100" cy="100" r={rimR} fill="none" stroke={rimInk} strokeWidth="1.6" opacity="0.75" />
+
+      {innerRim && (
+        <circle cx="100" cy="100" r={innerRimR} fill="none" stroke={rimInk} strokeWidth="1.0" opacity="0.55" />
       )}
+
       {ring && (
         <text
           fontFamily="'JetBrains Mono', monospace"
@@ -102,27 +107,23 @@ export function Seal({
           </textPath>
         </text>
       )}
-      {star && (
-        <g transform="translate(35 60)">
-          <path
-            d="M 0 -7 L 1.6 -2.2 L 6.7 -2.2 L 2.6 0.9 L 4.1 5.7 L 0 2.7 L -4.1 5.7 L -2.6 0.9 L -6.7 -2.2 L -1.6 -2.2 Z"
-            fill={starInk}
-          />
-        </g>
-      )}
-      <text
-        x="100"
-        y={isIcon ? 116 : 111}
-        textAnchor="middle"
-        fontFamily="'Fraunces', serif"
-        fontStyle="italic"
-        fontWeight="900"
-        fontSize={isIcon ? 52 : 44}
-        fill={mono}
-        letterSpacing={isIcon ? -2 : -1}
-      >
-        wgh
-      </text>
+
+      <g transform="rotate(-8 100 100)">
+        <text
+          x="100"
+          y={wghY}
+          textAnchor="middle"
+          fontFamily="'Fraunces', serif"
+          fontStyle="italic"
+          fontWeight="900"
+          fontSize={wghFontSize}
+          fill={mono}
+          letterSpacing={wghLetterSpacing}
+          style={{ fontVariationSettings: '"opsz" 144' }}
+        >
+          wgh
+        </text>
+      </g>
     </svg>
   )
 }
