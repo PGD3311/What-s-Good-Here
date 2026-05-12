@@ -59,10 +59,9 @@ describe('signInWithAppleNative', () => {
     loginMock.mockResolvedValueOnce({
       provider: 'apple',
       result: {
-        identityToken: 'apple-id',
+        idToken: 'apple-id',
         authorizationCode: 'apple-code',
-        user: '000123.abc',
-        profile: { givenName: 'Dan', familyName: 'Walsh' },
+        profile: { user: '000123.abc', givenName: 'Dan', familyName: 'Walsh' },
       },
     })
     const r = await signInWithAppleNative()

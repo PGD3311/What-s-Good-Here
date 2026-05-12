@@ -103,9 +103,9 @@ export async function signInWithAppleNative() {
     throw mapPluginError(err, 'apple')
   }
   const result = res?.result || {}
-  const identityToken = result.identityToken
+  const identityToken = result.idToken
   const authorizationCode = result.authorizationCode || null
-  const appleSub = result.user || null
+  const appleSub = result.profile?.user || null
   if (!identityToken) {
     throw Object.assign(new Error('Missing identityToken from Apple'), {
       code: 'AUTH_UNKNOWN',
