@@ -134,6 +134,38 @@ export class AppleApiError extends Error {
   }
 }
 
+// Apple's appleid.apple.com endpoints have no documented SLA. Without a
+// client-side timeout, a stalled TLS handshake or slow Apple response can
+// block an Edge Function until Supabase kills it minutes later — the worker
+// dies before the cascade completes, the client sees a generic 504, and
+// the user's delete-account request appears to "server-error" with no logged
+// reason. 15s is generous (Apple's revoke/token endpoints typically respond
+// in <1s) while still leaving headroom for the rest of the function under
+// Supabase's default 60s wall-clock budget.
+const APPLE_FETCH_TIMEOUT_MS = 15_000;
+
+async function fetchAppleWithTimeout(
+  url: string,
+  init: RequestInit,
+  endpointLabel: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), APPLE_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new AppleApiError(
+        `Apple ${endpointLabel} timeout after ${APPLE_FETCH_TIMEOUT_MS}ms`,
+        { status: 504, transient: true },
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function loadAppleConfig(clientIdFor: 'native' | 'web'): Promise<AppleConfig> {
   const supa = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -216,11 +248,15 @@ export async function exchangeAuthorizationCode(
     grant_type: 'authorization_code',
     code,
   });
-  const res = await fetch('https://appleid.apple.com/auth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
-  });
+  const res = await fetchAppleWithTimeout(
+    'https://appleid.apple.com/auth/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    },
+    'token exchange',
+  );
   if (!res.ok) {
     const text = await res.text();
     throw new AppleApiError(`Apple token exchange failed: ${res.status}`, {
@@ -255,11 +291,15 @@ export async function revokeToken(
     token: refreshToken,
     token_type_hint: 'refresh_token',
   });
-  const res = await fetch('https://appleid.apple.com/auth/revoke', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
-  });
+  const res = await fetchAppleWithTimeout(
+    'https://appleid.apple.com/auth/revoke',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    },
+    'revoke',
+  );
   if (!res.ok) {
     const text = await res.text();
     throw new AppleApiError(`Apple revoke failed: ${res.status}`, {
