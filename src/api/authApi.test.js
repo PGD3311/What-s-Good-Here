@@ -408,10 +408,12 @@ describe('authApi.signInWithGoogle on native (B2.5)', () => {
     const r = await authApi.signInWithGoogle()
 
     expect(r).toEqual({ success: true })
+    // PR #127 intentionally drops access_token: the Capgo plugin returns
+    // accessToken as { token, ... } object, but Supabase expects a string.
+    // Native Google sign-in works with the id_token alone.
     expect(supabase.auth.signInWithIdToken).toHaveBeenCalledWith({
       provider: 'google',
       token: 'g-id',
-      access_token: 'g-access',
     })
     expect(supabase.auth.signInWithOAuth).not.toHaveBeenCalled()
   })
