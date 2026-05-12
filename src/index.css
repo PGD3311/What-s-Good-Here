@@ -140,6 +140,10 @@
     color: var(--color-text-primary);
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     overscroll-behavior-y: none;
+    /* Single source of truth for top safe-area on non-fixed content. Fixed/
+       absolute elements (HomeListMode, modals, OfflineIndicator) handle their
+       own env(safe-area-inset-top). */
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
   h1, h2, h3 {
@@ -195,7 +199,10 @@
     transform: scale(1.05);
   }
 
-  /* TopBar - Coral brand band — inverted Seal sits on coral, controls in cream */
+  /* TopBar - Coral brand band — inverted Seal sits on coral, controls in cream.
+     Its own safe-area padding extends the coral fill under the status bar; the
+     wrapping Layout cancels body's safe-area padding via negative margin so the
+     coral runs edge-to-edge to the top of the viewport. */
   .top-bar {
     position: relative;
     width: 100%;

@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   appName: "What's Good Here",
   webDir: 'dist',
   ios: {
-    contentInset: 'always',
+    // 'never' so CSS env(safe-area-inset-*) is the single source of truth across
+    // web/PWA and native. 'always' double-pads when CSS also applies env() insets.
+    contentInset: 'never',
     scheme: 'WhatsGoodHere',
   },
   server: {

@@ -11,6 +11,10 @@ export function Layout({ children }) {
         minHeight: '100dvh',
         // 64px nav + safe area inset for devices with home indicator
         paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 16px))',
+        // Cancel body's safe-area-top padding so .top-bar can extend its coral
+        // edge-to-edge under the status bar. Non-Layout pages keep the body
+        // padding so their content stays below the status bar.
+        marginTop: 'calc(env(safe-area-inset-top, 0px) * -1)',
       }}
     >
       {/* Skip link for keyboard users */}
