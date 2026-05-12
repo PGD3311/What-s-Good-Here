@@ -81,7 +81,7 @@ export const HomeListMode = memo(function HomeListMode({
           </p>
         </div>
         {/* Search bar */}
-        <div className="px-5 pt-2 pb-2">
+        <div className="px-5 pt-2 pb-1">
           <div style={{
             borderRadius: '14px',
             boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
@@ -258,7 +258,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
 
   return (
     <div
-      className="flex gap-3 overflow-x-auto mt-2"
+      className="flex gap-3 overflow-x-auto mt-1"
       style={{
         padding: '0 16px 0',
         WebkitOverflowScrolling: 'touch',

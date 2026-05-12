@@ -1,13 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useLocalPicksCurators } from '../../hooks/useLocalPicksCurators'
-import { LocalsPicksStamp } from './LocalsPicksStamp'
+import { Seal } from '../Seal'
 
 var BANNER_OUTER = {
   position: 'relative',
   background: 'linear-gradient(180deg, var(--color-paper-cream-light) 0%, var(--color-paper-cream-dark) 100%)',
   borderRadius: '14px',
   padding: '14px 14px 12px 16px',
-  margin: '10px 16px 4px',
+  margin: '6px 16px 4px',
   border: '1px solid rgba(196, 138, 18, 0.18)',
   boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 20px rgba(180, 130, 60, 0.12)',
   display: 'flex',
@@ -64,7 +64,9 @@ var STAMP_WRAP = {
   width: '72px',
   height: '72px',
   flexShrink: 0,
-  transform: 'rotate(-6deg)',
+  borderRadius: '16px',
+  overflow: 'hidden',
+  boxShadow: '0 4px 12px rgba(228, 68, 10, 0.18)',
 }
 
 export function LocalsPicksBanner() {
@@ -96,7 +98,7 @@ export function LocalsPicksBanner() {
         <div style={CTA}>See what they order <span style={{ fontWeight: 800, marginLeft: '1px' }}>&rarr;</span></div>
       </div>
       <div style={STAMP_WRAP}>
-        <LocalsPicksStamp seed={4} />
+        <Seal variant="icon" size={72} />
       </div>
     </button>
   )
