@@ -1,39 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <!-- Coral full-bleed, cream seal anchored center-left, italic wordmark right -->
+  <!-- Coral full-bleed, new WGH mark anchored center-left, italic wordmark right -->
   <rect width="1200" height="630" fill="#E4440A"/>
 
-  <!-- Seal — cream plate w/ inverted color treatment -->
-  <g transform="translate(220, 315)">
-    <!-- Plate (radius 144 in 1200×630 framing) -->
-    <circle cx="0" cy="0" r="170" fill="none" stroke="#F7F4F1" stroke-width="3"/>
-    <circle cx="0" cy="0" r="118" fill="#F7F4F1"/>
-    <!-- Ring text — repeating mono on the cream ring -->
-    <defs>
-      <path id="ogRing" d="M 0,0 m -144,0 a 144,144 0 1,1 288,0 a 144,144 0 1,1 -288,0"/>
-    </defs>
-    <text font-family="JetBrains Mono, Menlo, monospace" font-size="22"
-          fill="#1A1A1A" letter-spacing="6" font-weight="600">
-      <textPath href="#ogRing" startOffset="0">WHAT'S GOOD HERE · WHAT'S GOOD HERE · WHAT'S GOOD HERE · </textPath>
-    </text>
-    <!-- wgh monogram inside the cream plate -->
-    <text x="0" y="32" text-anchor="middle"
+  <!-- New WGH mark — cream plate, thin cream rim, single cream star at 10 o'clock -->
+  <g transform="translate(310, 315)">
+    <circle cx="0" cy="0" r="180" fill="#F7F4F1"/>
+    <circle cx="0" cy="0" r="226" fill="none" stroke="#F7F4F1" stroke-width="4.6" opacity="0.75"/>
+    <g transform="translate(-188, -116) scale(4.6)">
+      <path d="M 0 -7 L 1.6 -2.2 L 6.7 -2.2 L 2.6 0.9 L 4.1 5.7 L 0 2.7 L -4.1 5.7 L -2.6 0.9 L -6.7 -2.2 L -1.6 -2.2 Z" fill="#F7F4F1"/>
+    </g>
+    <text x="0" y="46" text-anchor="middle"
           font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
-          font-size="120" fill="#E4440A" letter-spacing="-2">wgh</text>
+          font-size="170" fill="#E4440A" letter-spacing="-3">wgh</text>
   </g>
 
-  <!-- Wordmark — italic stacked, right-side -->
-  <text x="540" y="240"
+  <!-- Wordmark — italic stacked, right of the mark -->
+  <text x="620" y="240"
         font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
-        font-size="140" fill="#F7F4F1" letter-spacing="-5">what's</text>
-  <text x="540" y="370"
+        font-size="140" fill="#F7F4F1" letter-spacing="-5">what&rsquo;s</text>
+  <text x="620" y="370"
         font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
         font-size="140" fill="#F7F4F1" letter-spacing="-5">good</text>
-  <text x="540" y="500"
+  <text x="620" y="500"
         font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="900"
         font-size="140" fill="#F7F4F1" letter-spacing="-5">here<tspan fill="#1A1A1A">.</tspan></text>
 
   <!-- Footer mono tagline -->
-  <text x="540" y="568"
+  <text x="620" y="568"
         font-family="JetBrains Mono, Menlo, monospace" font-weight="600"
         font-size="18" fill="#F7F4F1" opacity="0.7" letter-spacing="6">
     · RATE EVERY DISH · WGHAPP.COM ·
