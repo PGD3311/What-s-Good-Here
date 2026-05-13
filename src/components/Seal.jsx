@@ -119,7 +119,7 @@ export function Seal({
           fontSize={wghFontSize}
           fill={mono}
           letterSpacing={wghLetterSpacing}
-          style={{ fontVariationSettings: '"opsz" 144' }}
+          style={{ fontOpticalSizing: 'none', fontVariationSettings: '"opsz" 144' }}
         >
           wgh
         </text>

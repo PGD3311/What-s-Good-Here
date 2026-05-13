@@ -29,7 +29,7 @@ export function LocalsPicksStamp({ seed = 4, includeRibbon = true, size = 72 }) 
             </text>
           </>
         )}
-        <text x="50" y="62" textAnchor="middle" fontFamily="'Fraunces', serif" fontStyle="italic" fontSize="28" fontWeight="900" letterSpacing="-1.5" fill={ink} stroke="none" style={{ fontVariationSettings: '"opsz" 144' }}>wgh</text>
+        <text x="50" y="62" textAnchor="middle" fontFamily="'Fraunces', serif" fontStyle="italic" fontSize="28" fontWeight="900" letterSpacing="-1.5" fill={ink} stroke="none" style={{ fontOpticalSizing: 'none', fontVariationSettings: '"opsz" 144' }}>wgh</text>
       </g>
     </svg>
   )
