@@ -51,11 +51,13 @@ export function Seal({
   const plateR = isSeal ? 50 : 84
   const innerRimR = 70
 
-  // Match the launcher wordmark proportions. Smaller plate (seal variant)
-  // gets a proportionally smaller wgh so it doesn't overflow the disc.
-  const wghFontSize = isSeal ? 42 : 68
-  const wghY = isSeal ? 113 : 120
-  const wghLetterSpacing = isSeal ? -1.5 : -2.5
+  // The pre-baked wgh PNG is 1600×640 (aspect 2.5:1). Match the launcher's
+  // wordmark proportions by sizing the image box to fill the plate well.
+  // Smaller plate (seal variant) gets a proportionally smaller image.
+  const wghWidth = isSeal ? 110 : 170
+  const wghHeight = wghWidth / 2.5
+  const wghX = (200 - wghWidth) / 2
+  const wghYImg = (isSeal ? 98 : 102) - wghHeight / 2
 
   // Tighten the viewBox to whatever's actually visible so the mark fills
   // the requested `size` instead of floating in negative space.
@@ -108,22 +110,22 @@ export function Seal({
         </text>
       )}
 
-      <g transform="rotate(-8 100 100)">
-        <text
-          x="100"
-          y={wghY}
-          textAnchor="middle"
-          fontFamily="'Fraunces', serif"
-          fontStyle="italic"
-          fontWeight="900"
-          fontSize={wghFontSize}
-          fill={mono}
-          letterSpacing={wghLetterSpacing}
-          style={{ fontOpticalSizing: 'none', fontVariationSettings: '"opsz" 144' }}
-        >
-          wgh
-        </text>
-      </g>
+      {/* The wgh wordmark is rendered as a pre-baked PNG (chunky display
+          Fraunces with -8° tilt) rather than live SVG <text> because iOS
+          WebKit silently ignores font-variation-settings: 'opsz' 144 at
+          small render sizes, producing the refined text-cut letterforms
+          instead of the display cut we want everywhere. The PNG was
+          rendered once at 1600×640 in Chromium where the override is
+          honored, so the geometry is identical at every size from 32px
+          tabs to the 1024px App Store hero. */}
+      <image
+        href={mono === 'var(--color-primary)' ? '/wgh-mark-coral.png' : '/wgh-mark-cream.png'}
+        x={wghX}
+        y={wghYImg}
+        width={wghWidth}
+        height={wghHeight}
+        preserveAspectRatio="xMidYMid meet"
+      />
     </svg>
   )
 }
