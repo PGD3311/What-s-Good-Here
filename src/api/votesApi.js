@@ -421,6 +421,7 @@ export const votesApi = {
       const { data, error } = await supabase
         .from('public_votes')
         .select(`
+          id,
           review_text,
           rating_10,
           review_created_at,

@@ -309,16 +309,27 @@ export function useDishDetail(dishId, user) {
   }
 
   const handleVote = async () => {
-    try {
-      const [data, reviewsData] = await Promise.all([
-        dishesApi.getDishById(dishId),
-        votesApi.getReviewsForDish(dishId, { limit: 20 }),
-      ])
-      const transformedDish = transformDish(data)
-      setDish(transformedDish)
-      setReviews(reviewsData)
-    } catch (err) {
-      logger.error('Failed to refresh dish data after vote:', err)
+    // allSettled (not Promise.all) so a single failed sub-fetch doesn't
+    // discard the others. Matches fetchSecondaryData's pattern above.
+    const [dishResult, reviewsResult, snippetResult] = await Promise.allSettled([
+      dishesApi.getDishById(dishId),
+      votesApi.getReviewsForDish(dishId, { limit: 20 }),
+      votesApi.getSmartSnippetForDish(dishId),
+    ])
+    if (dishResult.status === 'fulfilled') {
+      setDish(transformDish(dishResult.value))
+    } else {
+      logger.error('Failed to refresh dish after vote:', dishResult.reason)
+    }
+    if (reviewsResult.status === 'fulfilled') {
+      setReviews(reviewsResult.value)
+    } else {
+      logger.error('Failed to refresh reviews after vote:', reviewsResult.reason)
+    }
+    if (snippetResult.status === 'fulfilled') {
+      setSmartSnippet(snippetResult.value)
+    } else {
+      logger.error('Failed to refresh smart snippet after vote:', snippetResult.reason)
     }
   }
 

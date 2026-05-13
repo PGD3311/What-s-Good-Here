@@ -22,6 +22,20 @@ export function getRatingColor(rating) {
 }
 
 /**
+ * Get the left-border accent color used on review cards.
+ * Distinct from getRatingColor — uses theme accent tokens, not badge colors.
+ * @param {number} rating - Rating on 1-10 scale
+ * @returns {string} CSS color value
+ */
+export function getRatingAccentColor(rating) {
+  if (rating === null || rating === undefined) return 'var(--color-divider)'
+  const score = Number(rating)
+  if (score >= 8.0) return 'var(--color-success, #22c55e)'
+  if (score >= 6.0) return 'var(--color-accent-gold)'
+  return 'var(--color-primary)'
+}
+
+/**
  * Get confidence level based on vote count
  * @param {number} totalVotes - Total number of votes
  * @returns {'none' | 'low' | 'medium' | 'high'}

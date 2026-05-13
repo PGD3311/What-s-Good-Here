@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { TrustBadge, TrustSummary, JitterExplainer } from '../jitter'
 import { VariantSelector } from '../VariantPicker'
-import { getRatingColor, formatScore10 } from '../../utils/ranking'
+import { getRatingColor, getRatingAccentColor, formatScore10 } from '../../utils/ranking'
 import { formatRelativeTime } from '../../utils/formatters'
 import { ReportModal } from '../ReportModal'
 
@@ -14,6 +14,8 @@ export function DishEvidence({
   dish,
   dishId,
   user,
+  authLoading,
+  priorVote,
   shouldLoadEvidence,
   evidenceSentinelRef,
   friendsVotes,
@@ -35,19 +37,84 @@ export function DishEvidence({
   const displayPhotos = showAllPhotos ? allPhotos : communityPhotos.slice(0, 4)
   const hasMorePhotos = allPhotos.length > 4 && !showAllPhotos
 
+  // Surface the current user's own review here so it isn't lost to the
+  // "Reviews = what others say" filter below. Prefer the loaded review record
+  // (full profile + trust badge) and fall back to priorVote for the brief
+  // window before reviews finish fetching.
+  const ownReviewFromList = user ? reviews.find(r => r.user_id === user.id) : null
+  const ownReview = ownReviewFromList || (
+    user && priorVote && priorVote.review_text
+      ? {
+          rating_10: priorVote.rating_10,
+          review_text: priorVote.review_text,
+          review_created_at: priorVote.review_created_at,
+          user_id: user.id,
+        }
+      : null
+  )
+  const snippetIsOwnReview = !!(user && smartSnippet && smartSnippet.user_id === user.id)
+  const friendIds = new Set(friendsVotes.map(v => v.user_id))
+  const snippetId = !snippetIsOwnReview && smartSnippet && smartSnippet.id ? smartSnippet.id : null
+  const filteredReviews = reviews.filter(r => {
+    if (user && r.user_id === user.id) return false
+    if (friendIds.has(r.user_id)) return false
+    if (snippetId && r.id === snippetId) return false
+    return true
+  })
+
   return (
     <>
       <div ref={evidenceSentinelRef} aria-hidden="true" />
       <div className="px-3 pt-4 pb-4">
 
-        {/* Evidence skeleton while secondary data loads */}
-        {!shouldLoadEvidence && (
+        {/* Evidence skeleton while secondary data loads. authLoading is part of
+            the gate so the user-own-review filter below doesn't briefly leak
+            self-authored reviews into the public list during cold-start auth
+            hydration. */}
+        {(!shouldLoadEvidence || authLoading) && (
           <div className="space-y-3 animate-pulse" role="status" aria-label="Loading details">
             <div className="h-20 rounded-xl" style={{ background: 'var(--color-divider)' }} />
             <div className="grid grid-cols-4 gap-2">
               {[0, 1, 2, 3].map(function (i) { return <div key={i} className="aspect-square rounded-lg" style={{ background: 'var(--color-divider)' }} /> })}
             </div>
             <div className="h-16 rounded-xl" style={{ background: 'var(--color-divider)' }} />
+          </div>
+        )}
+
+        {ownReview && (
+          <div className="mb-4">
+            <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Your Review
+            </h3>
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                background: 'var(--color-card)',
+                border: '1.5px solid var(--color-divider)',
+                borderLeft: '3px solid ' + getRatingAccentColor(ownReview.rating_10),
+              }}
+            >
+              {ownReview.rating_10 ? (
+                <div className="flex items-center gap-2 mb-2.5">
+                  <span
+                    className="rounded-full px-2.5 py-0.5 font-bold text-sm"
+                    style={{ background: getRatingColor(ownReview.rating_10) + '26', color: getRatingColor(ownReview.rating_10) }}
+                  >
+                    {formatScore10(ownReview.rating_10)}
+                  </span>
+                  {ownReview.review_created_at && (
+                    <span className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+                      {formatRelativeTime(ownReview.review_created_at)}
+                    </span>
+                  )}
+                </div>
+              ) : null}
+              {ownReview.review_text && (
+                <p style={{ color: 'var(--color-text-primary)', fontSize: '15px', lineHeight: 1.7 }}>
+                  {ownReview.review_text}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -128,8 +195,7 @@ export function DishEvidence({
           )
         })()}
 
-        {/* Smart Snippet */}
-        {smartSnippet && smartSnippet.review_text && (
+        {!snippetIsOwnReview && smartSnippet && smartSnippet.review_text && (
           <div
             className="mb-4 p-4 rounded-xl"
             style={{
@@ -207,17 +273,8 @@ export function DishEvidence({
           </div>
         )}
 
-        {/* Reviews feed */}
-        {(function () {
-          var friendIds = new Set(friendsVotes.map(function (v) { return v.user_id }))
-          var snippetId = smartSnippet && smartSnippet.id ? smartSnippet.id : null
-          var filteredReviews = reviews.filter(function (r) {
-            if (user && r.user_id === user.id) return false
-            if (friendIds.has(r.user_id)) return false
-            if (snippetId && r.id === snippetId) return false
-            return true
-          })
-          return filteredReviews.length > 0 && (
+        {/* Reviews feed (others) */}
+        {filteredReviews.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
@@ -233,7 +290,7 @@ export function DishEvidence({
               style={{ WebkitOverflowScrolling: 'touch' }}
             >
               {filteredReviews.map(function (review) {
-                var borderColor = review.rating_10 >= 8 ? 'var(--color-success, #22c55e)' : review.rating_10 >= 6 ? 'var(--color-accent-gold)' : 'var(--color-primary)';
+                var borderColor = getRatingAccentColor(review.rating_10);
                 return (
                   <div
                     key={review.id}
@@ -313,11 +370,9 @@ export function DishEvidence({
               })}
             </div>
           </div>
-          )
-        })()}
+        )}
 
-        {/* No reviews message */}
-        {!reviewsLoading && reviews.length === 0 && dish.total_votes > 0 && (
+        {!reviewsLoading && filteredReviews.length === 0 && !ownReview && dish.total_votes > 0 && (
           <div
             className="mb-4 p-4 rounded-xl text-center"
             style={{ background: 'var(--color-surface)', border: '1.5px solid var(--color-divider)' }}

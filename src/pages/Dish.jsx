@@ -26,7 +26,7 @@ import { ErrorTypes, getUserMessage } from '../utils/errorHandler'
 export function Dish() {
   const { dishId } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
 
   const {
     dish, loading, error,
@@ -438,6 +438,8 @@ export function Dish() {
             dish={dish}
             dishId={dishId}
             user={user}
+            authLoading={authLoading}
+            priorVote={priorVote}
             shouldLoadEvidence={shouldLoadEvidence}
             evidenceSentinelRef={evidenceSentinelRef}
             friendsVotes={friendsVotes}
