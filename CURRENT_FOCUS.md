@@ -20,9 +20,11 @@ Confirmed 2026-05-14 via clean cherry-pick attempt: **everything that needed to 
 
 ## Where we are
 
-**SIWA infrastructure: production-live (as of 2026-05-08).** Web Apple Sign-In tested end-to-end (sign-in, lands signed in, brand wordmark with name, journal feed loads). Cron worker (`apple-revocation-retry`) verified under synthetic failure — drains, increments attempts, schedules backoff, releases lease, does not dead-letter prematurely.
+**SIWA infrastructure: production-live (as of 2026-05-08).** Web Apple Sign-In tested end-to-end. Cron worker (`apple-revocation-retry`) verified under synthetic failure. Apple Dev verification **CLEARED 2026-05-13**.
 
-**Why nothing has shipped since 5/8:** Phase C requires Xcode + a physical iPhone, which is a different cognitive mode than the previous infra work. Whatever the friction is — break it today.
+**Heavy shipping 2026-05-12 → 2026-05-14:** PR #157 (SIWA capability + new app icon + iOS safe-area double-padding fix + Capgo Apple plugin field-name fix + Apple endpoint 15s timeouts + homepage polish), PRs #158/#159/#160/#161 (brand iteration including the PR #161 PNG-bake-wgh fix for iOS WebKit ignoring `font-optical-sizing`), PR #162 (surface user's own review on public dish page), PR #163 (ASC paperwork: description in Dan's voice + 4 of 5 screenshots at 1290×2796 + Codex-reviewed on-device smoke runbook), plus account-deletion fixes (`e328a8e` Apple identity lookup via Auth Admin API, `f037382` silent-500 logging, `99945ec` dish-modal prompt suppression, `e6e8e82` reset-password URL parsing).
+
+**Real-device smoke (2026-05-14):** Dan walking `2026-05-13-onDevice-smoke-runbook.md`. Sections A (cold launch + anon browse) and B (auth — email, Apple first-time, Apple returning, Google) are GREEN. Sections C (authenticated actions on demo account), D (account deletion on Apple-relay user — Apple 5.1.1(v) gate), and E (regression checks) still to run.
 
 **What's left to launch:**
 
@@ -83,6 +85,33 @@ Confirmed 2026-05-14 via clean cherry-pick attempt: **everything that needed to 
 - **C.2 Cron worker end-to-end ✅** — seeded synthetic pending row, manually invoked cron, verified: function reaches decryption, handles failure gracefully, increments attempts (0→1), schedules backoff (~16 min for attempts=1), releases lease, doesn't dead-letter prematurely
 - C.3 Inline revocation flow — DEFERRED to Phase C real-device (needs Apple-signed-in user with token)
 
+### PR #157 (2026-05-12) — feat(ios): SIWA + new app icon + iOS layout polish ✅
+- `com.apple.developer.applesignin` entitlement; `DEVELOPMENT_TEAM = K447QTHBR9`; `PrivacyInfo.xcprivacy` re-registered with fresh fileRef UUIDs
+- New WGH app icon (coral plate, italic wgh, star at 10 o'clock) across iOS launcher 1024, apple-touch-icon 180, favicon 64+SVG, iOS splash 2732×2732, og-image 1200×630
+- `Seal.jsx` `variant` prop (`monogram` | `seal` | `icon`) — defaults backward-compat
+- **iOS safe-area double-padding fix:** Capacitor `contentInset: 'always' → 'never'` + body-level CSS `env(safe-area-inset-top)` + Layout negative-margin (Codex-confirmed). Killed the huge empty coral band over the Seal + giant grey void over the homepage wordmark.
+- Homepage rhythm tightened (search → chalkboards → Locals' Picks)
+- Locals' Picks banner mark swapped from red ink-stamp to new coral app-icon mark
+- Capgo Apple plugin field-name fix: `result.idToken` + `result.profile?.user` (was failing real-device with "Missing identityToken")
+- Apple endpoint fetches get 15s AbortController timeout — fixes account-deletion silent 500
+- Stale test fix: `signInWithGoogle` test aligned with PR #127's `access_token` drop
+
+### Brand iteration + native fixes (2026-05-13) ✅
+- **PR #158** — new wgh app icon — wide-rim plate
+- **PR #159** — roll out new wgh plate icon across the app
+- **PR #160** — force Fraunces display opsz at every size
+- **PR #161** — bake wgh as PNG to defeat iOS WebKit ignoring `font-optical-sizing` (real-device finding; the mark was rendering distorted on iOS only)
+- **PR #162** — surface user's own review on public Dish page
+- `99945ec` — suppress 'rate now?' prompt when already rated this session
+- `e6e8e82` — `parseAuthUrl` now recognizes `/reset-password` redirect paths
+- `e328a8e` — delete-account uses Auth Admin API for Apple identity lookup
+- `f037382` — log silent 500 paths in delete-account for diagnostics
+
+### PR #163 (2026-05-13) — docs: App Store submission prep ✅
+- `2026-05-13-app-store-description.md` — ~1,720 char description in Dan's voice for ASC's Description field
+- `2026-05-13-screenshots/` — 4 of 5 ASC screenshots at exact 6.7" iPhone Pro Max spec (1290×2796), captured via Playwright with mobile emulation. Missing `04-profile-journal.png` — requires auth, Dan to AirDrop from device
+- `2026-05-13-onDevice-smoke-runbook.md` — tap-by-tap smoke test for real-device pre-TestFlight, with explicit pass criteria tied to specific commits. Codex-reviewed (gpt-5.3-codex high effort): 5 additions, 2 corrections applied, 1 push-back on re-introducing custom URL scheme
+
 ---
 
 ## Daily ritual
@@ -98,10 +127,13 @@ Until App Store launch:
 
 | Topic | File |
 |---|---|
-| Phase C execution playbook | `docs/superpowers/specs/2026-05-07-b3-activate-execution-prep.md` |
+| **Smoke runbook (use for real-device work — STARTS HERE)** | `docs/superpowers/specs/2026-05-13-onDevice-smoke-runbook.md` |
+| **ASC description draft (Dan's voice)** | `docs/superpowers/specs/2026-05-13-app-store-description.md` |
+| **ASC screenshots (4 of 5)** | `docs/superpowers/specs/2026-05-13-screenshots/` |
+| Phase C execution playbook (Archive → TestFlight) | `docs/superpowers/specs/2026-05-07-b3-activate-execution-prep.md` §C.5–C.6 |
 | ASC submission paste guide | `docs/superpowers/specs/2026-05-06-app-store-submission-day.md` |
 | Reviewer notes copy | `docs/superpowers/specs/2026-05-03-app-store-reviewer-notes.md` |
-| Description copy | `docs/superpowers/specs/2026-05-04-app-store-description-final.md` |
+| Description copy (earlier draft, superseded by `2026-05-13-app-store-description.md`) | `docs/superpowers/specs/2026-05-04-app-store-description-final.md` |
 | Privacy nutrition labels | `docs/app-store-connect-privacy-details.md` |
 | Age rating answers | `docs/superpowers/specs/2026-05-06-app-store-age-rating.md` |
 | What's New v1.0 copy | `docs/superpowers/specs/2026-05-06-app-store-whats-new.md` |

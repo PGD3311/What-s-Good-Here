@@ -1,6 +1,6 @@
 # Launch Readiness — Memorial Day 2026-05-25
 
-**~22 days remaining as of 2026-05-03. Apple Dev verification is the critical-path blocker — see `docs/superpowers/plans/2026-04-27-app-store-final-push.md`. Dan has a call with Apple tomorrow (2026-05-04).**
+**11 days remaining as of 2026-05-14. Apple Dev verification CLEARED 2026-05-13. The bottleneck has moved from Apple's clock to ours: real-device smoke (green so far) → TestFlight → ASC submission.**
 
 Any Claude session (Dan's, Denis's, mine, a future one) can check items off as work ships. If you see `[ ]` and you just shipped the thing, tick it. If you see `[x]` on something that's actually broken, flip it back and leave a one-line note.
 
@@ -8,28 +8,33 @@ Any Claude session (Dan's, Denis's, mine, a future one) can check items off as w
 
 ## 🚨 Apple Dev critical path (gates everything iOS-native)
 
-- [ ] Apple Developer enrollment **verified** (submitted, pending Apple) — **the bottleneck**
-- [ ] `VITE_GOOGLE_IOS_CLIENT_ID` provisioned in Vercel (Google Cloud → Credentials → iOS, Bundle `com.whatsgoodhere.app`)
-- [ ] Apple Team ID + Key ID + Services ID + `.p8` uploaded to Supabase Vault (gated on Apple Dev)
-- [ ] Supabase Auth → Apple provider configured (gated on Apple Dev)
-- [ ] `<TEAMID>` placeholder in `public/.well-known/apple-app-site-association` replaced with real Team ID (gated on Apple Dev)
-- [ ] Sign In with Apple capability added in Xcode → Signing & Capabilities (gated on Apple Dev)
-- [ ] `VITE_FEATURES_APPLE_SIGNIN=true` flipped in prod env (gated on Apple Dev)
-- [ ] TestFlight build uploaded + internal testers
+- [x] Apple Developer enrollment **verified** (cleared 2026-05-13) — gate is lifted
+- [x] `VITE_GOOGLE_IOS_CLIENT_ID` provisioned in Vercel
+- [x] Apple Team ID + Key ID + Services ID + `.p8` uploaded to Supabase Vault (Phase A/B, see `2026-05-07-b3-activate-execution-prep.md`)
+- [x] Supabase Auth → Apple provider configured (Phase B)
+- [x] `<TEAMID>` placeholder in `public/.well-known/apple-app-site-association` replaced with real Team ID (PR #149)
+- [x] Sign In with Apple capability added in Xcode → Signing & Capabilities (PR #157)
+- [x] `VITE_FEATURES_APPLE_SIGNIN=true` flipped in prod env (Track A / PR #151)
+- [partial] **Real-device smoke run on physical iPhone** — Dan walking through `2026-05-13-onDevice-smoke-runbook.md`, all green so far (2026-05-14)
+- [ ] **TestFlight build uploaded + internal testers** — next step once smoke completes
 - [ ] App Store review passed
-
-**2026-04-30 contingency call:** if Apple Dev hasn't cleared, evaluate PWA-primary fallback per plan Section 7.
 
 ## Native iOS app (Capacitor)
 
 - [x] Capacitor shell builds locally — simulator smoke passed 2026-04-20 (#62, #67–#72)
 - [x] Native auth lifecycle wired (Plan B B1 #79, B2 #85, B3-code #99, B4 #106)
-- [x] Universal links / AASA file shipped (B4 / PR #106) — placeholder Team ID until Apple Dev clears
-- [x] Apple revocation backend wired (B3-code / PR #99) — dormant until provider config
-- [x] Account deletion live + smoke-tested
-- [x] PR #122 merged (2026-05-03) — camera/photo permission strings + PrivacyInfo.xcprivacy in main at `2e46e47`
-- [ ] **Drag `ios/App/App/PrivacyInfo.xcprivacy` into Xcode App group** (1 click) — without this, file is in repo but not in app bundle
-- [ ] Real-device smoke run on physical iPhone (free provisioning works without paid Apple Dev — do this now, don't wait)
+- [x] Universal links / AASA file shipped (B4 / PR #106) — Team ID replaced post-Apple-Dev (PR #149)
+- [x] Apple revocation backend wired (B3-code / PR #99) + 15s timeout on Apple endpoint fetches (PR #157 / commit `311cc7d`)
+- [x] Account deletion live + Apple identity lookup via Auth Admin API (commit `e328a8e`)
+- [x] PR #122 merged (2026-05-03) — camera/photo permission strings
+- [x] **`PrivacyInfo.xcprivacy` registered in Xcode App group** — PR #157 re-registered the file with fresh fileRef UUIDs
+- [x] **New WGH brand identity shipped** across iOS launcher icon, splash, favicon, og-image, in-app Seal (PRs #157 / #158 / #159) — iteration: wide-rim plate (#158), Fraunces opsz force (#160), PNG-baked wgh to defeat iOS WebKit optical-sizing override (#161)
+- [x] iOS safe-area double-padding fixed — `contentInset: 'never'` + body-level CSS env() (PR #157, Codex-confirmed)
+- [x] Capgo Apple plugin field-name fix — `result.idToken` + `result.profile?.user` (commit `4551d9f` — was failing real-device with "Missing identityToken")
+- [x] Reset password universal link parsing — `parseAuthUrl` now recognizes `/reset-password` redirect paths (commit `e6e8e82`)
+- [x] Dish modal "rate now?" prompt suppression when already rated this session (commit `99945ec`)
+- [x] User's own review surfaces on public Dish page (commit `092d47e`)
+- [partial] **Real-device smoke run on physical iPhone** — see [§ Apple Dev critical path](#-apple-dev-critical-path-gates-everything-ios-native) above; walking `2026-05-13-onDevice-smoke-runbook.md`, all green so far
 
 ## Core experience
 
@@ -78,10 +83,12 @@ Any Claude session (Dan's, Denis's, mine, a future one) can check items off as w
 - [x] Privacy nutrition labels pre-filled
 - [x] Submission checklist sequenced
 - [ ] App name reserved in ASC (verify "What's Good Here" available — Dan, when ASC accessible)
-- [ ] Description (≤4000 chars) — needs Dan's voice
-- [ ] Demo account created with rated dishes + photo + favorite
-- [ ] Screenshots captured (6.7" iPhone, 5 shots — capture AFTER brand refresh ships)
-- [ ] Virtual business address signed up (Stable / Anytime Mailbox, ~$10–30/mo) — Privacy/Terms blocker
+- [x] **Description (≤4000 chars) drafted in Dan's voice** — `docs/superpowers/specs/2026-05-13-app-store-description.md` (PR #163)
+- [x] Demo account exists — `walshdaniel143+wghdemo@gmail.com` / `WGH33!` with 5 rated dishes + name set (reviewer notes already reflect actual state; no photo/favorite claim)
+- [partial] **Screenshots (6.7" iPhone, 4 of 5 shots captured)** — `docs/superpowers/specs/2026-05-13-screenshots/` (PR #163). Missing `04-profile-journal.png` — requires auth, Dan to AirDrop from device build
+- [ ] Virtual business address signed up (Stable / Anytime Mailbox, ~$10–30/mo) — Privacy/Terms blocker (legal copy currently email-only)
+- [ ] Real phone number in App Review Information field (placeholder still in submission-day doc)
+- [x] **On-device smoke runbook drafted** — `docs/superpowers/specs/2026-05-13-onDevice-smoke-runbook.md` (PR #163, Codex-reviewed)
 
 ## Google Places TOS (submission risks per `project_google_places_compliance`)
 
@@ -91,7 +98,7 @@ Any Claude session (Dan's, Denis's, mine, a future one) can check items off as w
 ## Marketing / launch content
 
 - [ ] Landing copy final
-- [ ] Social share assets (OG images verified — note: brand-refresh session is currently regenerating these)
+- [x] Social share assets — OG image regenerated to match new brand (PR #157)
 - [ ] Launch post drafted — where is it going?
 - [ ] First 100 users plan — who, how, when
 
