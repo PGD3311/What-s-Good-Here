@@ -334,6 +334,7 @@ export function Dish() {
             dishName={dish.dish_name}
             photoUrl={photoUploaded.photo_url}
             status={photoUploaded.analysisResults?.status}
+            hasRated={!!priorVote}
             onRateNow={clearPhotoUploaded}
             onLater={clearPhotoUploaded}
           />

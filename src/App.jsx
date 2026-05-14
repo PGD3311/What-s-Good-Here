@@ -102,6 +102,7 @@ function App() {
         expand={false}
         duration={4000}
         closeButton
+        offset="calc(env(safe-area-inset-top) + 16px)"
         toastOptions={{
           style: {
             padding: '16px',

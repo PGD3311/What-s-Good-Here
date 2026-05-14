@@ -88,7 +88,7 @@ export function useFavorites(userId) {
 
     try {
       await addMutation.mutateAsync(dishId)
-      toast.success('Moved to Heard it was Good Here', { duration: 2000 })
+      toast.success('Saved', { duration: 2000 })
       return { error: null }
     } catch (err) {
       toast.error('Could not save dish')
@@ -109,7 +109,7 @@ export function useFavorites(userId) {
 
     try {
       await removeMutation.mutateAsync(dishId)
-      toast('Removed from Heard it was Good Here', { duration: 2000 })
+      toast('Removed', { duration: 2000 })
       return { error: null }
     } catch (err) {
       toast.error('Could not remove dish')

@@ -50,7 +50,7 @@ export function AddToPlaylistSheet({ isOpen, onClose, dishId, dishName, restaura
   return (
     <>
       <div
-        className="fixed inset-0 z-50"
+        className="fixed inset-0 z-[60]"
         style={{ background: 'rgba(0,0,0,0.5)' }}
         onClick={function (e) { if (e.target === e.currentTarget) onClose() }}
         onKeyDown={function (e) { if (e.key === 'Escape') onClose() }}

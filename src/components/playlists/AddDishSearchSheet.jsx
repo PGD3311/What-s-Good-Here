@@ -208,7 +208,7 @@ export function AddDishSearchSheet({ isOpen, onClose, playlistId, existingDishId
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-[60] flex items-end"
       style={{ background: 'rgba(0,0,0,0.5)' }}
       onClick={function (e) { if (e.target === e.currentTarget) onClose() }}
       onKeyDown={function (e) { if (e.key === 'Escape') onClose() }}
@@ -219,7 +219,7 @@ export function AddDishSearchSheet({ isOpen, onClose, playlistId, existingDishId
         aria-modal="true"
         aria-label="Add dishes to playlist"
         className="w-full rounded-t-2xl flex flex-col"
-        style={{ background: 'var(--color-surface)', maxHeight: '85vh' }}
+        style={{ background: 'var(--color-surface)', height: '85vh' }}
       >
         {/* Grabber */}
         <div style={{ width: 40, height: 4, background: 'var(--color-divider)', borderRadius: 2, margin: '8px auto 0' }} />

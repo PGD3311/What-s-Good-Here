@@ -712,7 +712,7 @@ export function UserProfile() {
             Share
           </button>
           {currentUser && !isOwnProfile && (
-            <div className="relative" ref={actionsMenuRef}>
+            <div className="relative" style={{ zIndex: 50 }} ref={actionsMenuRef}>
               <button
                 type="button"
                 onClick={() => setShowActionsMenu((v) => !v)}
