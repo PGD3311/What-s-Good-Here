@@ -203,8 +203,9 @@ export const authApi = {
    * Capgo plugin's ID-token flow — no redirect dance.
    *
    * Note: Apple's identity token does NOT include the user's name (unlike
-   * Google), so display_name will be null on first sign-in via web. The
-   * WelcomeModal handles that case by opening when display_name is missing.
+   * Google), so display_name may be null on first sign-in. Per App Store
+   * Guideline 4, the UI must NOT prompt for name/email after SIWA — Apple's
+   * Authentication Services framework owns that contract. See WelcomeModal.
    *
    * @param {{ returnPath?: string|null }} [options]
    * @param {string|null} [options.returnPath] - Web only: path to return to

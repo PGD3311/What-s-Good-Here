@@ -45,24 +45,31 @@ export function WelcomeModal() {
   const [isOpen, setIsOpen] = useState(false)
   const [phase, setPhase] = useState('onboarding') // 'onboarding' | 'celebration' | 'fade-out'
 
-  // Skip name step if user already set one during signup
+  const authProvider = String(user?.app_metadata?.provider || '').toLowerCase()
+  const isAppleAuthSession = authProvider === 'apple'
+
+  // Apple sessions must never be prompted for name/email after SIWA (App Store
+  // Guideline 4 / Design — Sign in with Apple). Skip the name step regardless
+  // of whether display_name is populated, since profile fetch can race the
+  // initial render and briefly look empty.
   const hasName = profile?.display_name && profile.display_name.trim().length > 0
-  const activeSteps = hasName ? STEPS.filter(s => s.id !== 'name') : STEPS
+  const shouldSkipNameStep = isAppleAuthSession || hasName
+  const activeSteps = shouldSkipNameStep ? STEPS.filter(s => s.id !== 'name') : STEPS
 
   useEffect(() => {
     if (user && !loading && profile) {
-      // Open for net-new users, and also for anyone whose display_name is
-      // still missing — covers Apple users who declined name share on first
-      // sign-in, Google users whose provider didn't supply a name, and any
-      // past user who got into a weird data state. display_name is required
-      // to vote, so we can't let onboarded-but-nameless users slip through.
-      // Use trim() to match the hasName semantics elsewhere in the component.
-      if (!profile.has_onboarded || !profile.display_name?.trim()) {
+      // Open for net-new users. For non-Apple users, also reopen if display_name
+      // is missing (Google/email signups still need a name to vote). Apple
+      // sessions are never reopened solely due to a missing display_name —
+      // Apple's Authentication Services framework owns the name/email contract.
+      const missingName = !profile.display_name?.trim()
+      const shouldOpenForMissingName = missingName && !isAppleAuthSession
+      if (!profile.has_onboarded || shouldOpenForMissingName) {
         setIsOpen(true)
         capture('onboarding_started')
       }
     }
-  }, [user, profile, loading])
+  }, [user, profile, loading, isAppleAuthSession])
 
   const displayName = name.trim() || profile?.display_name || ''
 

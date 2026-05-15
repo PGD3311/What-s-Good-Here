@@ -29,7 +29,7 @@ export function LocationBanner({ permissionState, requestLocation, message }) {
           color: 'var(--color-bg)',
         }}
       >
-        Enable
+        Continue
       </button>
     </div>
   )
