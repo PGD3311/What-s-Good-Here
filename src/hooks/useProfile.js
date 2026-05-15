@@ -7,7 +7,7 @@ import { logger } from '../utils/logger'
 export function useProfile(userId) {
   const queryClient = useQueryClient()
 
-  const { data: profile, isLoading: loading, error } = useQuery({
+  const { data: profile, isLoading: loading, error, refetch } = useQuery({
     queryKey: ['profile', userId],
     queryFn: async () => {
       // API uses auth.getUser() internally for security
@@ -40,6 +40,7 @@ export function useProfile(userId) {
     profile: profile ?? null,
     loading: userId ? loading : false,
     error: error ? { message: getUserMessage(error, 'loading profile') } : null,
+    refetch,
     updateProfile,
   }
 }

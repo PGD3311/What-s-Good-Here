@@ -128,6 +128,8 @@ export function Map() {
   var rankedData = useDishes(location, radius, null, null, null)
   var rankedDishes = rankedData.dishes
   var rankedLoading = rankedData.loading || rankedData.isFetching
+  var rankedError = rankedData.error
+  var rankedRefetch = rankedData.refetch
 
   var selectedCategoryLabel = selectedCategory
     ? BROWSE_CATEGORIES.find(function (c) { return c.id === selectedCategory })
@@ -316,6 +318,8 @@ export function Map() {
           searchQuery={searchQuery}
           searchLoading={searchLoading}
           rankedLoading={rankedLoading}
+          rankedError={rankedError}
+          rankedRefetch={rankedRefetch}
           activeDishes={activeDishes}
           allRankedDishes={allRanked}
           expandedCategory={expandedCategory}

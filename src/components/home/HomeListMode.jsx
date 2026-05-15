@@ -4,6 +4,7 @@ import { BROWSE_CATEGORIES } from '../../constants/categories'
 import { DishSearch } from '../DishSearch'
 import { DishListItem } from '../DishListItem'
 import { EmptyState } from '../EmptyState'
+import { DataLoadError } from '../DataLoadError'
 import { LocationBanner } from '../LocationBanner'
 import { LocalsPicksBanner, Top10Carousel } from './'
 export const HomeListMode = memo(function HomeListMode({
@@ -11,6 +12,8 @@ export const HomeListMode = memo(function HomeListMode({
   searchQuery,
   searchLoading,
   rankedLoading,
+  rankedError,
+  rankedRefetch,
   activeDishes,
   allRankedDishes,
   expandedCategory,
@@ -188,6 +191,11 @@ export const HomeListMode = memo(function HomeListMode({
               <Top10Carousel ref={carouselRef} dishes={allRankedDishes} onCategoryChange={onCategoryChange} />
             </div>
           </>
+        ) : rankedError ? (
+          <DataLoadError
+            message={rankedError.message}
+            onRetry={rankedRefetch}
+          />
         ) : (
           <div className="px-4 pt-4">
             <EmptyState emoji="🍽️" title="No dishes found nearby" />

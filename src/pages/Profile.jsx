@@ -13,6 +13,7 @@ import { DishModal } from '../components/DishModal'
 import { LoginModal } from '../components/Auth/LoginModal'
 import { FollowListModal } from '../components/FollowListModal'
 import { ProfileSkeleton } from '../components/Skeleton'
+import { DataLoadError } from '../components/DataLoadError'
 import { CameraIcon } from '../components/CameraIcon'
 import { PlaylistStripCard } from '../components/playlists/PlaylistStripCard'
 import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
@@ -31,7 +32,7 @@ export function Profile() {
   const [newName, setNewName] = useState('')
   const [nameStatus, setNameStatus] = useState(null) // null | 'checking' | 'available' | 'taken' | 'same'
 
-  const { profile, updateProfile } = useProfile(user?.id)
+  const { profile, error: profileError, loading: profileLoading, refetch: refetchProfile } = useProfile(user?.id)
   const { ratedDishes, stats, loading: votesLoading, refetch: refetchVotes } = useUserVotes(user?.id)
   const { dishes: unratedDishes, count: unratedCount, refetch: refetchUnrated } = useUnratedDishes(user?.id)
 
@@ -145,6 +146,23 @@ export function Profile() {
 
   if (loading) {
     return <ProfileSkeleton />
+  }
+
+  // Distinguish "your account looks fine but the server is unreachable"
+  // from "you genuinely have no data yet". If the profile fetch errored
+  // and we have no profile to render, show the error instead of the
+  // empty-state UI that would otherwise look like the account was wiped.
+  if (user && !profileLoading && profileError && !profile) {
+    return (
+      <DataLoadError
+        fullPage
+        message={profileError.message}
+        onRetry={() => {
+          refetchProfile?.()
+          refetchVotes?.()
+        }}
+      />
+    )
   }
 
   return (

@@ -10,6 +10,7 @@ import { followsApi } from '../api/followsApi'
 import { votesApi } from '../api/votesApi'
 import { FollowListModal } from '../components/FollowListModal'
 import { ProfileSkeleton } from '../components/Skeleton'
+import { DataLoadError } from '../components/DataLoadError'
 import { FoodMap, JournalFeed, LocalListCard } from '../components/profile'
 import { useUserPlaylists } from '../hooks/useUserPlaylists'
 import { PlaylistStripCard } from '../components/playlists/PlaylistStripCard'
@@ -432,6 +433,19 @@ export function UserProfile() {
 
   if (loading) {
     return <ProfileSkeleton />
+  }
+
+  // Distinguish "user not found" (404 — actually missing) from
+  // "failed to load profile" (network/server — Supabase blip).
+  // Without this split, a transient outage looks like a deleted account.
+  if (error === 'Failed to load profile') {
+    return (
+      <DataLoadError
+        fullPage
+        message="We couldn't reach the server. This profile is still there — try again in a moment."
+        onRetry={() => window.location.reload()}
+      />
+    )
   }
 
   if (error || !profile) {
