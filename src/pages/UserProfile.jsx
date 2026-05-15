@@ -534,7 +534,7 @@ export function UserProfile() {
       <h1 className="sr-only">{profile.display_name}'s Profile</h1>
       {/* Header */}
       <div
-        className="relative px-4 pt-4 pb-6 overflow-hidden"
+        className="relative px-4 pt-4 pb-6"
         style={{
           background: 'var(--color-bg)',
         }}
@@ -801,6 +801,20 @@ export function UserProfile() {
 
       </div>
 
+      {/* Review Fingerprint — surfaced near the top so visitors see the
+          trust context before diving into specific picks. Only renders for
+          users with jitter data (real humans, not the AI cold-start
+          aggregator). */}
+      {jitterBadgeData && (
+        <div className="px-4 pt-3">
+          <ProfileJitterCard
+            profile={jitterBadgeData}
+            displayName={profile.display_name}
+            isPublic
+          />
+        </div>
+      )}
+
       {/* Food Map */}
       {totalVotes > 0 && (
         <div className="px-4 pt-4">
@@ -865,17 +879,6 @@ export function UserProfile() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Review Fingerprint — public view */}
-      {jitterBadgeData && (
-        <div className="px-4 pt-3">
-          <ProfileJitterCard
-            profile={jitterBadgeData}
-            displayName={profile.display_name}
-            isPublic
-          />
         </div>
       )}
 
