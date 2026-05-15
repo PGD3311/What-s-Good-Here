@@ -93,7 +93,8 @@ function MapSearchBar({ onSearch }) {
     <div
       style={{
         position: 'absolute',
-        top: '10px',
+        // Clear iOS Dynamic Island / notch on the map's top-anchored search bar.
+        top: 'calc(10px + env(safe-area-inset-top, 0px))',
         left: '10px',
         right: '50px',
         zIndex: 1000,
@@ -551,7 +552,8 @@ export function RestaurantMap({
         <div
           style={{
             position: 'absolute',
-            top: '10px',
+            // Clear iOS Dynamic Island / notch.
+            top: 'calc(10px + env(safe-area-inset-top, 0px))',
             left: '10px',
             right: '10px',
             zIndex: 1000,
@@ -633,7 +635,12 @@ export function RestaurantMap({
           <div
             style={{
               position: 'absolute',
-              top: '10px',
+              // env(safe-area-inset-top) clears the iOS Dynamic Island /
+              // notch — without it, the card renders BEHIND the Island
+              // on iPhone 15+ and the restaurant name is unreadable.
+              // Fallback to 0px on non-iOS / older devices keeps the
+              // original 10px offset behavior.
+              top: 'calc(10px + env(safe-area-inset-top, 0px))',
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 1000,
@@ -644,7 +651,10 @@ export function RestaurantMap({
               border: '1px solid var(--color-divider)',
               boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
               padding: '12px 14px',
-              maxHeight: '280px',
+              // Cap at 280px on tall viewports but shrink with the viewport
+              // on shorter ones so the card never extends past the home
+              // indicator area on small/landscape iPhones.
+              maxHeight: 'min(280px, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px))',
               overflowY: 'auto',
             }}
           >
@@ -769,7 +779,9 @@ export function RestaurantMap({
       <div
         style={{
           position: 'absolute',
-          bottom: '10px',
+          // env(safe-area-inset-bottom) clears the iOS home indicator
+          // area in fullscreen / viewport-fit=cover layouts.
+          bottom: 'calc(10px + env(safe-area-inset-bottom, 0px))',
           left: '10px',
           zIndex: 1000,
           background: isDishMode ? 'rgba(13,27,34,0.9)' : 'rgba(255,255,255,0.95)',
