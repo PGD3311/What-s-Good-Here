@@ -8,10 +8,12 @@ import { Seal } from '../components/Seal'
 import { FEATURES } from '../constants/features'
 import { getAuthUrlType } from '../utils/authUrlType'
 import { SignInWithAppleButton } from '../components/Auth/SignInWithAppleButton'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
 
 export function Login() {
+  useDocumentTitle('Sign in')
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()

@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { Seal } from '../components/Seal'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export function Terms() {
+  useDocumentTitle('Terms of service')
   const navigate = useNavigate()
 
   return (

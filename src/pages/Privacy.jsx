@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { Seal } from '../components/Seal'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export function Privacy() {
+  useDocumentTitle('Privacy policy')
   const navigate = useNavigate()
 
   return (

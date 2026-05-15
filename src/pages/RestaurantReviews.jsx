@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { votesApi } from '../api/votesApi'
 import { restaurantsApi } from '../api/restaurantsApi'
 import { logger } from '../utils/logger'
@@ -20,6 +21,9 @@ export function RestaurantReviews() {
   var [restaurant, setRestaurant] = useState(null)
   var [reviews, setReviews] = useState([])
   var [loading, setLoading] = useState(true)
+
+  useDocumentTitle(restaurant?.name ? `Reviews — ${restaurant.name}` : null)
+
   var [fetchError, setFetchError] = useState(null)
   var [sortBy, setSortBy] = useState('newest')
   var [reportTarget, setReportTarget] = useState(null)

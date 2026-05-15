@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { capture } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
 import { useLocationContext } from '../context/LocationContext'
@@ -22,6 +23,8 @@ function bayesianScore(avgRating, totalVotes) {
 }
 
 export function Restaurants() {
+  useDocumentTitle('Restaurants on Martha’s Vineyard')
+
   var user = useAuth().user
   var navigate = useNavigate()
   var ctx = useLocationContext()

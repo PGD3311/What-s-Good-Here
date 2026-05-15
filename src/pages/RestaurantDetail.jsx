@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { capture } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
 import { ReportModal } from '../components/ReportModal'
@@ -34,6 +35,8 @@ export function RestaurantDetail() {
   const [restaurant, setRestaurant] = useState(null)
   const [loadingRestaurant, setLoadingRestaurant] = useState(true)
   const [fetchError, setFetchError] = useState(null)
+
+  useDocumentTitle(restaurant?.name || null)
 
   const [activeTab, setActiveTab] = useState(null) // null = auto-detect
   const [dishSearchQuery, setDishSearchQuery] = useState('')

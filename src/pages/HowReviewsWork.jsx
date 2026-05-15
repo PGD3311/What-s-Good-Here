@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { TrustBadge } from '../components/TrustBadge'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export function HowReviewsWork() {
+  useDocumentTitle('How reviews work')
   const navigate = useNavigate()
 
   return (

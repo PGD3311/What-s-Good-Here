@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLocalListDetail } from '../hooks/useLocalListDetail'
 import { LocalsPicksStamp } from '../components/home/LocalsPicksStamp'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 var PAGE = {
   background: 'linear-gradient(180deg, var(--color-paper-cream-light) 0%, var(--color-paper-cream-dark) 100%)',
@@ -41,6 +42,7 @@ var NOTE = { fontSize: '12.5px', color: 'var(--color-text-secondary)', lineHeigh
 var EMPTY = { textAlign: 'center', padding: '40px 0', fontSize: '13px', color: 'var(--color-text-tertiary)' }
 
 export function LocalsCurator() {
+  useDocumentTitle('A local’s picks')
   var { userId } = useParams()
   var navigate = useNavigate()
   var { items, loading, error } = useLocalListDetail(userId)

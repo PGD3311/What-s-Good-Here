@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { capture } from '../lib/analytics'
 import { logger } from '../utils/logger'
 import { useAuth } from '../context/AuthContext'
@@ -38,6 +39,12 @@ export function Dish() {
     handlePhotoUploaded, handleVote, clearPhotoUploaded,
     refetchDish,
   } = useDishDetail(dishId, user)
+
+  useDocumentTitle(
+    dish?.dish_name
+      ? (dish.restaurant_name ? `${dish.dish_name} at ${dish.restaurant_name}` : dish.dish_name)
+      : null
+  )
 
   const [loginModalOpen, setLoginModalOpen] = useState(false)
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false)

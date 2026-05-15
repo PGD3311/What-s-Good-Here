@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 /**
  * ForRestaurants — pitch page for door-knocking.
@@ -6,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
  * No auth, no data fetching, pure persuasion.
  */
 export function ForRestaurants() {
+  useDocumentTitle('For restaurants')
   var navigate = useNavigate()
 
   return (

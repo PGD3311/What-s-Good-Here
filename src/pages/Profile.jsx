@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { authApi } from '../api/authApi'
@@ -26,6 +27,8 @@ import { jitterApi } from '../api/jitterApi'
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
 
 export function Profile() {
+  useDocumentTitle('Your food journal')
+
   const { user, loading } = useAuth()
   const [editingName, setEditingName] = useState(false)
   const [newName, setNewName] = useState('')

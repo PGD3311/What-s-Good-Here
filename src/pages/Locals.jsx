@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useLocalPicksConsensus } from '../hooks/useLocalPicksConsensus'
 import { useLocalPicksCurators } from '../hooks/useLocalPicksCurators'
 import { useLocalPicksSearch } from '../hooks/useLocalPicksSearch'
@@ -93,6 +94,7 @@ var SEARCH_INPUT = {
 var EMPTY = { textAlign: 'center', padding: '20px 0', fontSize: '12px', color: 'var(--color-text-tertiary)', fontWeight: 500 }
 
 export function Locals() {
+  useDocumentTitle('Locals’ picks')
   var navigate = useNavigate()
   var [activeTab, setActiveTab] = useState('read')
 

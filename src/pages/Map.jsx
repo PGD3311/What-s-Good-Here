@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useLocationContext } from '../context/LocationContext'
 import { useDishes } from '../hooks/useDishes'
 import { useDishSearch } from '../hooks/useDishSearch'
@@ -19,6 +20,8 @@ var RestaurantMap = lazy(function () {
 })
 
 export function Map() {
+  useDocumentTitle('Top dishes on Martha’s Vineyard')
+
   var navigate = useNavigate()
   var routeLocation = useLocation()
   var [searchParams] = useSearchParams()

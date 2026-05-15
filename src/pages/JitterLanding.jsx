@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { JITTER_TIERS } from '../constants/jitter'
 import { jitterApi } from '../api/jitterApi'
 import { logger } from '../utils/logger'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 /**
  * JitterLanding — standalone explainer page.
@@ -9,6 +10,7 @@ import { logger } from '../utils/logger'
  * Route: /jitter
  */
 export default function JitterLanding() {
+  useDocumentTitle('Jitter — every review is verified human')
   return (
     <div style={{ background: 'var(--color-bg)', minHeight: '100vh' }}>
       <HookSection />

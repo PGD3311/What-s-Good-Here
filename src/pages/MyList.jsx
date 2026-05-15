@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useMyLocalList } from '../hooks/useMyLocalList'
 import { useDishSearch } from '../hooks/useDishSearch'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { getCategoryEmoji } from '../constants/categories'
 import { logger } from '../utils/logger'
 
@@ -18,6 +19,7 @@ function snapshot(tagline, items) {
 }
 
 export function MyList() {
+  useDocumentTitle('Your top 10')
   var navigate = useNavigate()
   var location = useLocation()
   var { listMeta, dishes, loading, error, saveList, saving } = useMyLocalList()

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { usePlaylistDetail } from '../hooks/usePlaylistDetail'
 import { usePlaylistMutations } from '../hooks/usePlaylistMutations'
 import { useAuth } from '../context/AuthContext'
@@ -18,6 +19,9 @@ export function Playlist() {
   const { playlist, loading, error } = usePlaylistDetail(id)
   const { follow, unfollow, removeDish } = usePlaylistMutations()
   const [searchSheetOpen, setSearchSheetOpen] = useState(false)
+
+  useDocumentTitle(playlist?.playlist_name || null)
+
 
   const items = playlist?.items || []
   const existingDishIds = useMemo(() => items.map((i) => i.dish_id), [items])

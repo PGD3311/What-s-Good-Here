@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { getCompatColor } from '../utils/formatters'
@@ -78,6 +79,9 @@ export function UserProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isFollowing, setIsFollowing] = useState(false)
+
+  useDocumentTitle(profile?.display_name ? `@${profile.display_name}` : null)
+
   const [followLoading, setFollowLoading] = useState(false)
   const [followListModal, setFollowListModal] = useState(null) // 'followers' | 'following' | null
   const [myRatings, setMyRatings] = useState({}) // { dishId: rating }
