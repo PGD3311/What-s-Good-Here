@@ -43,61 +43,115 @@ function buildWebRedirectUrl(returnPath) {
 }
 
 /**
- * Persist Apple-provided first/last name as profile.display_name on the user's
- * FIRST sign-in only. Apple only returns name on the first authorization.
+ * Build a deterministic placeholder display name for a user who has no other
+ * source. Used when Apple's SIWA picker had "Hide My Name" selected (no first/
+ * last shared), the OAuth provider didn't populate user_metadata.full_name, and
+ * email signup never happened. Format: `eater-{8charsOfUserIdHex}`.
  *
- * Never throws — name persistence is nice-to-have. Any failure is logged and
- * swallowed. Silent-failure on DB errors would leave profiles half-updated,
- * so we DO inspect {error} from supabase and log each specific failure.
+ * Collision space is 16^8 ≈ 4.3B; with <10k users this is effectively unique.
+ * The user can rename in Profile settings whenever they want.
  */
-async function persistFirstSignInName(givenName, familyName) {
+function generatePlaceholderName(userId) {
+  const short = String(userId).replace(/-/g, '').slice(0, 8).toLowerCase()
+  return `eater-${short}`
+}
+
+/**
+ * Ensure the signed-in user has a non-empty `profiles.display_name`. The
+ * broken invariant before this function existed: SIWA users who chose "Hide
+ * My Name" landed in the app with display_name=NULL, which makes them
+ * invisible to other users (RLS policy `profiles_select_public_or_own`
+ * requires display_name IS NOT NULL for public reads).
+ *
+ * Two call sites:
+ *   1. `signInWithApple` (native branch) — passes Apple-provided given/family
+ *      name when SIWA shared it on first sign-in.
+ *   2. `AuthContext` SIGNED_IN listener — universal safety net (no args). Catches
+ *      web Apple OAuth, legacy users with NULL display_name, and any provider
+ *      edge case where the `handle_new_user` trigger left display_name empty.
+ *
+ * Race-safe by design (the two call sites fire concurrently on native Apple):
+ *   - **Path A** (Apple name supplied) is conditional on `display_name IS NULL`
+ *     OR matching the `eater-%` placeholder pattern. So Apple's real name
+ *     beats a placeholder written by a concurrent safety-net call, but never
+ *     overwrites a name the user picked themselves.
+ *   - **Path B** (no Apple name) is conditional on `display_name IS NULL`. Pure
+ *     backfill — fills empty profiles, never overwrites anything.
+ *
+ * Final state on native Apple with shared name:
+ *   - If Path A wins the race: `display_name = "Given Family"`. Path B's
+ *     `IS NULL` filter no-matches; no-op.
+ *   - If Path B wins the race: `display_name = "eater-{8char}"` (Apple's
+ *     id_token has no metadata.full_name, so Path B falls to placeholder).
+ *     Path A's `IS NULL OR LIKE eater-%` filter matches; overwrites with
+ *     `"Given Family"`.
+ *
+ * Either way, terminal state is Apple's name. Same logic ensures returning
+ * Apple users (whose display_name is already custom-set) are never clobbered.
+ *
+ * Never throws — display_name persistence is best-effort. All failures logged.
+ */
+async function ensureDisplayName({ appleGivenName = null, appleFamilyName = null } = {}) {
   try {
-    if (!givenName && !familyName) return
-    const displayName = [givenName, familyName].filter(Boolean).join(' ').trim()
-    if (!displayName) return
-
-    // Codex fix #4: validate Apple-provided names against blocklist before write.
-    const contentError = validateUserContent(displayName, 'Display name')
-    if (contentError) {
-      logger.warn('persistFirstSignInName: display name rejected by blocklist', {
-        reason: contentError,
-      })
-      return
-    }
-
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
     if (sessionError) {
-      logger.warn('persistFirstSignInName: getSession failed', sessionError)
+      logger.warn('ensureDisplayName: getSession failed', sessionError)
       return
     }
-    const userId = sessionData?.session?.user?.id
-    if (!userId) return
+    const user = sessionData?.session?.user
+    if (!user) return
 
-    const { data: profile, error: selectError } = await supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', userId)
-      .maybeSingle()
-    if (selectError) {
-      logger.warn('persistFirstSignInName: profile select failed', selectError)
-      return
+    // Path A: Apple shared a name on first sign-in. Conditional on existing
+    // value being either empty or our placeholder pattern.
+    if (appleGivenName || appleFamilyName) {
+      const appleName = [appleGivenName, appleFamilyName].filter(Boolean).join(' ').trim()
+      if (appleName) {
+        const contentError = validateUserContent(appleName, 'Display name')
+        if (contentError) {
+          logger.warn('ensureDisplayName: Apple-supplied name rejected by blocklist', {
+            reason: contentError,
+          })
+          // Fall through to Path B so user still gets a usable placeholder.
+        } else {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ display_name: appleName })
+            .eq('id', user.id)
+            .or('display_name.is.null,display_name.like.eater-*')
+          if (updateError) {
+            logger.warn('ensureDisplayName: Apple-name update failed', updateError)
+          }
+          return
+        }
+      }
     }
-    // Don't overwrite an existing name — only fill if blank.
-    if (profile?.display_name && profile.display_name.trim()) return
+
+    // Path B: No Apple name (or it was blocklisted). Pure backfill.
+    const metaName = user.user_metadata?.full_name?.trim()
+      || user.user_metadata?.name?.trim()
+      || null
+    const candidate = metaName || generatePlaceholderName(user.id)
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ display_name: displayName })
-      .eq('id', userId)
+      .update({ display_name: candidate })
+      .eq('id', user.id)
+      .is('display_name', null)
     if (updateError) {
-      logger.warn('persistFirstSignInName: profile update failed', updateError)
+      logger.warn('ensureDisplayName: backfill update failed', updateError)
     }
   } catch (err) {
-    logger.warn('persistFirstSignInName: unexpected error', err)
+    logger.warn('ensureDisplayName: unexpected error', err)
   }
 }
 
 export const authApi = {
+  /**
+   * Backfill missing `profiles.display_name`. See ensureDisplayName helper
+   * docstring for the race-safety design and call sites.
+   */
+  ensureDisplayName,
+
   /**
    * Get current auth session
    */
@@ -248,11 +302,16 @@ export const authApi = {
           throw createClassifiedError(error)
         }
 
-        // First-sign-in name persistence runs independently of token exchange.
-        // Never allowed to block sign-in — helper itself is wrapped in try/catch
-        // but we also catch here for defense in depth.
-        await persistFirstSignInName(appleRes.givenName, appleRes.familyName).catch((e) => {
-          logger.warn('persistFirstSignInName failed', e)
+        // Persist display_name from Apple-shared given/family name when SIWA
+        // shared it. Awaited so the modal/UI sees the populated name. Helper
+        // never throws — failures are logged. AuthContext also runs
+        // ensureDisplayName() as a universal safety net; both calls are
+        // race-safe (see ensureDisplayName for the conditional-UPDATE design).
+        await ensureDisplayName({
+          appleGivenName: appleRes.givenName,
+          appleFamilyName: appleRes.familyName,
+        }).catch((e) => {
+          logger.warn('ensureDisplayName failed', e)
         })
 
         if (typeof appleRes.authorizationCode === 'string' && appleRes.authorizationCode.length > 0) {

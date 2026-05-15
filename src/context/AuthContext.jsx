@@ -77,6 +77,21 @@ export function AuthProvider({ children }) {
         })
       }
 
+      // Universal display_name safety net. Catches web Apple OAuth (no
+      // signInWithApple instance still running by the time the user lands
+      // back), legacy users whose profile got created with NULL display_name
+      // before this helper existed, and any provider where the
+      // handle_new_user trigger left display_name empty. The helper is
+      // idempotent (conditional UPDATE) — cheap no-op when display_name is
+      // already set. Race-safe vs. the awaited call in authApi.signInWithApple
+      // native branch (Apple's name always wins; see ensureDisplayName
+      // docstring for orderings).
+      if (event === 'SIGNED_IN' && newUser) {
+        authApi.ensureDisplayName().catch((err) => {
+          logger.warn('ensureDisplayName safety net failed', err)
+        })
+      }
+
       setUser(newUser)
       setLoading(false)
       prevUserRef.current = newUser
