@@ -436,28 +436,31 @@ export const votesApi = {
         .order('review_created_at', { ascending: false, nullsFirst: false })
         .limit(1)
 
-      if (error) {
-        logger.error('Error fetching smart snippet:', error)
-        return null // Graceful degradation
-      }
+      if (error) throw createClassifiedError(error)
 
       const review = data?.[0]
       if (!review) return null
 
-      // Enrich with profile display name
+      // Enrich with profile display name. The profile lookup is auxiliary —
+      // the snippet body itself is useful even without a name — so we log
+      // and continue on error rather than throw. A null result is fine —
+      // display_name is allowed null at the DB and the UI optional-chains it.
       if (review.user_id) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('id, display_name')
           .eq('id', review.user_id)
           .maybeSingle()
+        if (profileError) {
+          logger.error('Smart snippet profile enrichment failed:', profileError)
+        }
         review.profiles = profile || { id: review.user_id, display_name: null }
       }
 
       return review
     } catch (error) {
       logger.error('Error fetching smart snippet:', error)
-      return null // Graceful degradation - don't break the UI
+      throw error.type ? error : createClassifiedError(error)
     }
   },
 
@@ -552,10 +555,7 @@ export const votesApi = {
         .select('id, name, restaurant_id')
         .eq('restaurant_id', restaurantId)
 
-      if (dishesError) {
-        logger.error('Error fetching restaurant dishes for reviews:', dishesError)
-        return []
-      }
+      if (dishesError) throw createClassifiedError(dishesError)
 
       const dishMap = Object.fromEntries((dishes || []).map(d => [d.id, d]))
       const dishIds = Object.keys(dishMap)
@@ -586,10 +586,7 @@ export const votesApi = {
 
       const { data, error } = await query
 
-      if (error) {
-        logger.error('Error fetching reviews for restaurant:', error)
-        return []
-      }
+      if (error) throw createClassifiedError(error)
 
       return (data || []).map(function (v) {
         return {
@@ -604,7 +601,7 @@ export const votesApi = {
       })
     } catch (error) {
       logger.error('Error fetching reviews for restaurant:', error)
-      return []
+      throw error.type ? error : createClassifiedError(error)
     }
   },
 
@@ -629,10 +626,7 @@ export const votesApi = {
         .order('review_created_at', { ascending: false, nullsFirst: false })
         .range(offset, offset + limit - 1)
 
-      if (error) {
-        logger.error('Error fetching reviews for user:', error)
-        return []
-      }
+      if (error) throw createClassifiedError(error)
 
       if (!data?.length) return []
 
@@ -662,7 +656,7 @@ export const votesApi = {
       }))
     } catch (error) {
       logger.error('Error fetching reviews for user:', error)
-      return []
+      throw error.type ? error : createClassifiedError(error)
     }
   },
 }

@@ -363,12 +363,13 @@ export const followsApi = {
       votesResult,
       badgesResult,
     ] = await Promise.all([
-      // 1. Get basic profile info
+      // 1. Get basic profile info. maybeSingle so a stale share link to a
+      // deleted user returns null cleanly instead of an unhandled PGRST116.
       supabase
         .from('profiles')
         .select('id, display_name, created_at')
         .eq('id', userId)
-        .single(),
+        .maybeSingle(),
       // 2. Get follower count
       supabase
         .from('follows')
@@ -404,8 +405,9 @@ export const followsApi = {
       supabase.rpc('get_user_badges', { p_user_id: userId, p_public_only: false }),
     ])
 
-    // Check for profile error (required)
-    if (profileResult.error) {
+    // Check for profile error or not-found. Callers (UserProfile page)
+    // surface "user not found" UI from a null return.
+    if (profileResult.error || !profileResult.data) {
       return null
     }
 

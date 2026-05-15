@@ -553,7 +553,7 @@ describe('votesApi', () => {
       expect(result).toBeNull()
     })
 
-    it('should return null on error (graceful degradation)', async () => {
+    it('should throw classified error on supabase error (pre-launch hardening)', async () => {
       supabase.from.mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
@@ -572,9 +572,9 @@ describe('votesApi', () => {
         }),
       })
 
-      const result = await votesApi.getSmartSnippetForDish('dish-1')
-
-      expect(result).toBeNull()
+      // Previously: silently returned null. Now: throws so React Query
+      // can surface an error state instead of rendering a blank quote.
+      await expect(votesApi.getSmartSnippetForDish('dish-1')).rejects.toThrow()
     })
   })
 
@@ -634,7 +634,7 @@ describe('votesApi', () => {
       expect(result).toEqual(mockReviews)
     })
 
-    it('should return empty array on error (graceful degradation)', async () => {
+    it('should throw classified error on supabase error (pre-launch hardening)', async () => {
       supabase.from.mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
@@ -649,9 +649,9 @@ describe('votesApi', () => {
         }),
       })
 
-      const result = await votesApi.getReviewsForUser('user-1')
-
-      expect(result).toEqual([])
+      // Previously: silently returned []. Now: throws so React Query can
+      // surface "couldn't load reviews" instead of "no reviews yet".
+      await expect(votesApi.getReviewsForUser('user-1')).rejects.toThrow()
     })
   })
 })

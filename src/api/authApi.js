@@ -95,7 +95,7 @@ async function ensureDisplayName({ appleGivenName = null, appleFamilyName = null
   try {
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
     if (sessionError) {
-      logger.warn('ensureDisplayName: getSession failed', sessionError)
+      logger.error('ensureDisplayName: getSession failed', sessionError)
       return
     }
     const user = sessionData?.session?.user
@@ -108,7 +108,7 @@ async function ensureDisplayName({ appleGivenName = null, appleFamilyName = null
       if (appleName) {
         const contentError = validateUserContent(appleName, 'Display name')
         if (contentError) {
-          logger.warn('ensureDisplayName: Apple-supplied name rejected by blocklist', {
+          logger.error('ensureDisplayName: Apple-supplied name rejected by blocklist', {
             reason: contentError,
           })
           // Fall through to Path B so user still gets a usable placeholder.
@@ -119,7 +119,7 @@ async function ensureDisplayName({ appleGivenName = null, appleFamilyName = null
             .eq('id', user.id)
             .or('display_name.is.null,display_name.like.eater-*')
           if (updateError) {
-            logger.warn('ensureDisplayName: Apple-name update failed', updateError)
+            logger.error('ensureDisplayName: Apple-name update failed', updateError)
           }
           return
         }
@@ -138,10 +138,10 @@ async function ensureDisplayName({ appleGivenName = null, appleFamilyName = null
       .eq('id', user.id)
       .is('display_name', null)
     if (updateError) {
-      logger.warn('ensureDisplayName: backfill update failed', updateError)
+      logger.error('ensureDisplayName: backfill update failed', updateError)
     }
   } catch (err) {
-    logger.warn('ensureDisplayName: unexpected error', err)
+    logger.error('ensureDisplayName: unexpected error', err)
   }
 }
 
@@ -311,7 +311,7 @@ export const authApi = {
           appleGivenName: appleRes.givenName,
           appleFamilyName: appleRes.familyName,
         }).catch((e) => {
-          logger.warn('ensureDisplayName failed', e)
+          logger.error('ensureDisplayName failed', e)
         })
 
         if (typeof appleRes.authorizationCode === 'string' && appleRes.authorizationCode.length > 0) {
@@ -707,6 +707,13 @@ export const authApi = {
    *
    * Best-effort: logs but never throws. Sign-out must not fail because the
    * plugin couldn't log out a provider we may not even have used.
+   *
+   * Failures are logged at ERROR level (→ Sentry in prod). A persistent
+   * failure here is the documented "switched user, got wrong account" bug —
+   * Capgo's social-login cache stays warm and the next SIWA tap silently
+   * reuses the previous Apple/Google identity. We can't easily surface to
+   * the user (signOut is fire-and-forget from AuthContext.signOut) but we
+   * must at minimum see it in production telemetry.
    */
   async signOutNative() {
     if (!Capacitor.isNativePlatform()) return
@@ -715,7 +722,7 @@ export const authApi = {
       // Clear both providers — cheap and avoids branching on which one we used.
       await Promise.all([logoutNative('google'), logoutNative('apple')])
     } catch (err) {
-      logger.warn('signOutNative failed', err)
+      logger.error('signOutNative failed', err)
     }
   },
 

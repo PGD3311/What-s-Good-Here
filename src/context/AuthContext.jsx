@@ -88,7 +88,7 @@ export function AuthProvider({ children }) {
       // docstring for orderings).
       if (event === 'SIGNED_IN' && newUser) {
         authApi.ensureDisplayName().catch((err) => {
-          logger.warn('ensureDisplayName safety net failed', err)
+          logger.error('ensureDisplayName safety net failed', err)
         })
       }
 
