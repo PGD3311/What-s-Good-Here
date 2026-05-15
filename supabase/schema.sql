@@ -5098,7 +5098,7 @@ GRANT EXECUTE ON FUNCTION get_open_reports(INT, BIGINT, TIMESTAMPTZ, UUID) TO au
 -- See migrations/20260415_h3_ugc_reporting_blocking.sql for the bodies.
 
 
--- get_smart_snippet — exclude reviews by blocked users
+-- get_smart_snippet — exclude reviews by blocked users and AI-estimated rows
 CREATE OR REPLACE FUNCTION get_smart_snippet(p_dish_id UUID)
 RETURNS TABLE (
   review_text TEXT, rating_10 DECIMAL, display_name TEXT,
@@ -5112,6 +5112,7 @@ BEGIN
   INNER JOIN profiles p ON v.user_id = p.id
   WHERE v.dish_id = p_dish_id
     AND v.review_text IS NOT NULL AND v.review_text != ''
+    AND v.source != 'ai_estimated'
     AND (v_viewer_id IS NULL OR NOT is_blocked_pair(v_viewer_id, v.user_id))
   ORDER BY
     CASE WHEN v.rating_10 >= 9 THEN 0 ELSE 1 END,

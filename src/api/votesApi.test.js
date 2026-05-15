@@ -435,8 +435,10 @@ describe('votesApi', () => {
           eq: vi.fn().mockReturnValue({
             not: vi.fn().mockReturnValue({
               neq: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
-                  range: vi.fn().mockResolvedValue({ data: mockVoteRows, error: null }),
+                neq: vi.fn().mockReturnValue({
+                  order: vi.fn().mockReturnValue({
+                    range: vi.fn().mockResolvedValue({ data: mockVoteRows, error: null }),
+                  }),
                 }),
               }),
             }),
@@ -467,8 +469,10 @@ describe('votesApi', () => {
           eq: vi.fn().mockReturnValue({
             not: vi.fn().mockReturnValue({
               neq: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
-                  range: vi.fn().mockResolvedValue({ data: null, error: { message: 'Error' } }),
+                neq: vi.fn().mockReturnValue({
+                  order: vi.fn().mockReturnValue({
+                    range: vi.fn().mockResolvedValue({ data: null, error: { message: 'Error' } }),
+                  }),
                 }),
               }),
             }),
@@ -497,9 +501,11 @@ describe('votesApi', () => {
           eq: vi.fn().mockReturnValue({
             not: vi.fn().mockReturnValue({
               neq: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
+                neq: vi.fn().mockReturnValue({
                   order: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue({ data: [mockVoteRow], error: null }),
+                    order: vi.fn().mockReturnValue({
+                      limit: vi.fn().mockResolvedValue({ data: [mockVoteRow], error: null }),
+                    }),
                   }),
                 }),
               }),
@@ -529,9 +535,11 @@ describe('votesApi', () => {
           eq: vi.fn().mockReturnValue({
             not: vi.fn().mockReturnValue({
               neq: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
+                neq: vi.fn().mockReturnValue({
                   order: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+                    order: vi.fn().mockReturnValue({
+                      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+                    }),
                   }),
                 }),
               }),
@@ -551,9 +559,11 @@ describe('votesApi', () => {
           eq: vi.fn().mockReturnValue({
             not: vi.fn().mockReturnValue({
               neq: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
+                neq: vi.fn().mockReturnValue({
                   order: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue({ data: null, error: { message: 'Error' } }),
+                    order: vi.fn().mockReturnValue({
+                      limit: vi.fn().mockResolvedValue({ data: null, error: { message: 'Error' } }),
+                    }),
                   }),
                 }),
               }),

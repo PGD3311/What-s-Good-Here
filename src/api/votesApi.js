@@ -362,6 +362,7 @@ export const votesApi = {
         .eq('dish_id', dishId)
         .not('review_text', 'is', null)
         .neq('review_text', '')
+        .neq('source', 'ai_estimated')
         .order('review_created_at', { ascending: false, nullsFirst: false })
         .range(offset, offset + limit - 1)
 
@@ -430,6 +431,7 @@ export const votesApi = {
         .eq('dish_id', dishId)
         .not('review_text', 'is', null)
         .neq('review_text', '')
+        .neq('source', 'ai_estimated')
         .order('rating_10', { ascending: false, nullsFirst: false })
         .order('review_created_at', { ascending: false, nullsFirst: false })
         .limit(1)
@@ -572,6 +574,7 @@ export const votesApi = {
         .in('dish_id', dishIds)
         .not('review_text', 'is', null)
         .neq('review_text', '')
+        .neq('source', 'ai_estimated')
 
       if (sort === 'newest') {
         query = query.order('review_created_at', { ascending: false, nullsFirst: false })
