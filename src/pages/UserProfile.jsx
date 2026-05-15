@@ -687,7 +687,7 @@ export function UserProfile() {
                   {ratingStyle.label}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                  avg {ratingStyle.avgRating.toFixed(1)}/10
+                  avg {ratingStyle.avgRating.toFixed(1)}
                 </p>
               </div>
             )}
@@ -849,7 +849,7 @@ export function UserProfile() {
                   {standoutPicks.bestFind.dish_name}
                 </p>
                 <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {standoutPicks.bestFind.restaurant_name} &middot; {standoutPicks.bestFind.userRating}/10
+                  {standoutPicks.bestFind.restaurant_name} &middot; {standoutPicks.bestFind.userRating}
                 </p>
               </div>
             </div>
@@ -874,7 +874,7 @@ export function UserProfile() {
                   {standoutPicks.harshestTake.dish_name}
                 </p>
                 <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {standoutPicks.harshestTake.restaurant_name} &middot; {standoutPicks.harshestTake.userRating}/10 vs {standoutPicks.harshestTake.communityAvg.toFixed(1)} crowd
+                  {standoutPicks.harshestTake.restaurant_name} &middot; {standoutPicks.harshestTake.userRating} vs {standoutPicks.harshestTake.communityAvg.toFixed(1)} crowd
                 </p>
               </div>
             </div>
