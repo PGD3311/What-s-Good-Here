@@ -1,18 +1,18 @@
 import { test, expect } from '../fixtures/test.js'
 
-test.describe('Browse — Category discovery', () => {
-  test('/browse shows category grid, clicking one loads dishes', async ({ page }) => {
+test.describe('/browse legacy route', () => {
+  test('/browse?category=<id> redirects to / with category param preserved', async ({ page }) => {
+    await page.goto('/browse?category=pizza')
+    await expect(page).toHaveURL(/\/\?category=pizza$/, { timeout: 10_000 })
+  })
+
+  test('/browse?q=<query> redirects to / with query param preserved', async ({ page }) => {
+    await page.goto('/browse?q=lobster')
+    await expect(page).toHaveURL(/\/\?q=lobster$/, { timeout: 10_000 })
+  })
+
+  test('bare /browse redirects to /', async ({ page }) => {
     await page.goto('/browse')
-
-    // Should show category cards (19 browse categories)
-    const categoryCard = page.getByText(/Seafood|Pizza|Burgers|Breakfast|Tacos|Sushi|Lobster/i).first()
-    await expect(categoryCard).toBeVisible({ timeout: 20_000 })
-
-    // Click a category
-    await categoryCard.click()
-
-    // Should now show a dish list heading
-    const heading = page.getByText(/The Best|Results for/i).first()
-    await expect(heading).toBeVisible({ timeout: 15_000 })
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 })
   })
 })

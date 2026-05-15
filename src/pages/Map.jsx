@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useLocationContext } from '../context/LocationContext'
 import { useDishes } from '../hooks/useDishes'
 import { useDishSearch } from '../hooks/useDishSearch'
@@ -21,14 +21,20 @@ var RestaurantMap = lazy(function () {
 export function Map() {
   var navigate = useNavigate()
   var routeLocation = useLocation()
+  var [searchParams] = useSearchParams()
   var { location, radius, setRadius, permissionState, requestLocation } = useLocationContext()
+
+  // Seed filters from URL on first render. Used when arriving via search/category
+  // links from elsewhere in the app (DishSearch) or from a legacy /browse bookmark.
+  var initialCategory = searchParams.get('category')
+  var initialQuery = searchParams.get('q')
 
   var [mode, setMode] = useState(function () {
     return getSessionItem('wgh_home_mode') || 'list'
   })
-  var [selectedCategory, setSelectedCategory] = useState(null)
+  var [selectedCategory, setSelectedCategory] = useState(initialCategory)
   var [radiusSheetOpen, setRadiusSheetOpen] = useState(false)
-  var [searchQuery, setSearchQuery] = useState('')
+  var [searchQuery, setSearchQuery] = useState(initialQuery || '')
   var [searchLimit, setSearchLimit] = useState(10)
   var [focusDishId, setFocusDishId] = useState(null)
   var [highlightedDishId, setHighlightedDishId] = useState(null)

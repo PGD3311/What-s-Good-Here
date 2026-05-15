@@ -1,5 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from './context/AuthContext'
 import { LocationProvider } from './context/LocationContext'
@@ -32,7 +32,6 @@ function lazyWithRetry(importFn, namedExport) {
 }
 
 // Lazy load pages for code splitting
-const Browse = lazyWithRetry(() => import('./pages/Browse'), 'Browse')
 const Dish = lazyWithRetry(() => import('./pages/Dish'), 'Dish')
 const Restaurants = lazyWithRetry(() => import('./pages/Restaurants'), 'Restaurants')
 const RestaurantDetail = lazyWithRetry(() => import('./pages/RestaurantDetail'), 'RestaurantDetail')
@@ -63,12 +62,18 @@ const NotFound = lazyWithRetry(() => import('./pages/NotFound'), 'NotFound')
 
 // Prefetch functions for smoother navigation - call on hover/focus
 export const prefetchRoutes = {
-  browse: () => import('./pages/Browse'),
   dish: () => import('./pages/Dish'),
   map: () => import('./pages/Map'),
   restaurants: () => import('./pages/Restaurants'),
   restaurantDetail: () => import('./pages/RestaurantDetail'),
   profile: () => import('./pages/Profile'),
+}
+
+// /browse retired — redirect to home, preserving search params and hash so
+// the home page can read ?category=<id> / ?q=<query> and seed its filters.
+function BrowseRedirect() {
+  const location = useLocation()
+  return <Navigate to={{ pathname: '/', search: location.search, hash: location.hash }} replace />
 }
 
 // Loading fallback
@@ -120,7 +125,7 @@ function App() {
             <Routes>
               <Route path="/" element={<><MapPage /><BottomNav /></>} />
               <Route path="/map" element={<Navigate to="/" replace />} />
-              <Route path="/browse" element={<Layout><Browse /></Layout>} />
+              <Route path="/browse" element={<BrowseRedirect />} />
               <Route path="/dish/:dishId" element={<Layout><Dish /></Layout>} />
               <Route path="/restaurants" element={<Layout><Restaurants /></Layout>} />
               <Route path="/restaurants/:restaurantId" element={<Layout><RestaurantDetail /></Layout>} />

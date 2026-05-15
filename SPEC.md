@@ -212,19 +212,19 @@ Evidence: `schema.sql:1534-1776`
 
 **VERIFIED** — `src/pages/Map.jsx`, `src/components/ModeFAB.jsx`
 
-### Feature 2: Browse / Category View
+### Feature 2: Category + Search (on homepage)
 
-**User flow:** Tap category → see ranked dishes filtered by category → search, sort, vote
-**Screens:** `Browse.jsx`
-**Components:** `RankedDishRow`, `SortDropdown`, `CategoryGrid`, `DishCardSkeleton`, `LoginModal`, `ImpactFeedback`
-**Hooks:** `useDishes`, `useUserVotes`, `useDishSearch`, `useFavorites`
+**User flow:** From the homepage, tap a category chip or use the search bar → ranked dishes filter in place. External entry points (DishSearch autocomplete, legacy `/browse` bookmarks) deep-link via `/?category=<id>` or `/?q=<query>`, which the home page reads from the URL on mount to seed its filters.
+**Screens:** `Map.jsx` (the homepage; absorbed the old `/browse` flow)
+**Components:** `DishSearch`, `DishListItem`, `LoginModal`, `ImpactFeedback`, `CategoryChips`
+**Hooks:** `useDishes`, `useUserVotes`, `useDishSearch`, `useFavorites`, `useSearchParams`
 **API calls:** `dishesApi.getRankedDishes()`, `dishesApi.search()`, `votesApi.submitVote()`
 **Data reads:** `get_ranked_dishes` RPC, dishes table (search)
 **Data writes:** votes table (upsert), `check_vote_rate_limit` RPC
 
 **Ranking display:** Matches homepage Top 10 style. Restaurant-first hierarchy (restaurant name bold, dish name small uppercase). Ranks 1-3 get podium treatment with medal colors. Ranks 4-10 in Apple-style grouped list (rounded container, surface bg, inset dividers, chevrons). "Show more" section uses same grouped container.
 
-**VERIFIED** — `src/pages/Browse.jsx`, `src/components/browse/`
+**VERIFIED** — `src/pages/Map.jsx`, `src/components/home/`. Legacy `/browse` route is a `Navigate` redirect to `/` that preserves search params + hash so DishSearch deep-links keep working.
 
 ### Feature 3: Dish Detail
 
@@ -472,7 +472,7 @@ Evidence: `src/App.jsx:104-121`
 | Route | Page | Auth Required | Layout |
 |---|---|---|---|
 | `/` | Home | No | Yes |
-| `/browse` | Browse | No | Yes |
+| `/browse` | Redirect → `/` (legacy; search params preserved) | No | No |
 | `/dish/:dishId` | Dish | No | Yes |
 | `/restaurants` | Restaurants | No | Yes |
 | `/restaurants/:restaurantId` | Restaurants | No | Yes |

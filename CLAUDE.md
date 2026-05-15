@@ -88,7 +88,7 @@ These rules are absolute. Violating any of them is a bug.
 - **Every risky migration must declare a rollback path.** If a migration changes column types, drops/recreates triggers, alters FK strategies, or rewrites policies, include a commented `-- ROLLBACK:` block at the bottom of the file with paste-ready SQL to revert. Pure additive `CREATE INDEX IF NOT EXISTS` and `CREATE OR REPLACE FUNCTION` changes don't need one (rollback is obvious). If no SQL rollback is possible (e.g., the migration triggers a data backfill), say so explicitly: `-- No SQL rollback. Recovery requires restore from the <timestamp> backup.`
 
 ### 1.6 Auth Gates
-- **Voting, favorites, and photo uploads require login.** Check `user` from `useAuth()` first, show `<LoginModal>` if null. Pattern: `Browse.jsx`.
+- **Voting, favorites, and photo uploads require login.** Check `user` from `useAuth()` first, show `<LoginModal>` if null. Pattern: `Dish.jsx` (vote handler).
 
 ### 1.7 Logging
 - **Use `logger` from `src/utils/logger.js`.** Never use `console.*` directly.
@@ -399,9 +399,9 @@ Defined in `src/index.css`. Light theme only ("Appetite"). Use `var(--color-*)` 
 ### 4.14 Routes (18 pages, all lazy-loaded via `lazyWithRetry()`)
 | Route | Page | Auth |
 |---|---|---|
-| `/` | Map (dual-mode list/map homepage) | No |
+| `/` | Map (dual-mode list/map homepage; reads `?category=<id>` and `?q=<query>` to seed filters) | No |
 | `/map` | Redirect → `/` | No |
-| `/browse` | Browse | No |
+| `/browse` | Redirect → `/` (search params preserved; legacy bookmarks) | No |
 | `/dish/:dishId` | Dish | No |
 | `/restaurants` | Restaurants | No |
 | `/restaurants/:restaurantId` | RestaurantDetail | No |
@@ -424,7 +424,7 @@ Defined in `src/index.css`. Light theme only ("Appetite"). Use `var(--color-*)` 
 - **Extract components when files exceed ~400 lines** — keep pages focused on orchestration
 - **Use barrel exports** — import from `'../components/home'` not individual files
 - **Delete unused code immediately** — don't let dead code accumulate
-- **Component subdirectories match pages** — `components/browse/` for Browse page components
+- **Component subdirectories match pages** — e.g., `components/dish/` for Dish page components, `components/home/` for the homepage
 
 ### 4.16 Deployment
 - **CSP in `vercel.json`** — external resources need `connect-src` too. Add new external domains to both `img-src` and `connect-src`.

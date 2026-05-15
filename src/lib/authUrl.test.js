@@ -18,7 +18,7 @@ describe('authUrl.parse', () => {
   })
 
   it('returns null for non-auth URLs', () => {
-    expect(parse('https://wghapp.com/browse')).toBeNull()
+    expect(parse('https://wghapp.com/restaurants')).toBeNull()
     expect(parse('https://wghapp.com/dish/abc')).toBeNull()
   })
 

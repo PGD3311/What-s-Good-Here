@@ -35,7 +35,7 @@ If a feature needs a specific data shape (e.g., a dish with zero votes, a user w
 ### Favorites
 **Data preconditions:** **user** account has zero favorites (so the "add" is unambiguous).
 1. Sign in as **user**
-2. Tap heart on any dish card on `/browse`
+2. Tap heart on any dish card on `/`
 3. Navigate to `/profile` → Favorites tab
 4. Dish appears in favorites list
 5. Tap heart again to remove — disappears on refresh

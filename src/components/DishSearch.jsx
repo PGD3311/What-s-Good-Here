@@ -114,7 +114,7 @@ export function DishSearch({ loading = false, placeholder = "Find What's Good ne
     })
     setQuery('')
     setIsFocused(false)
-    navigate(`/browse?category=${encodeURIComponent(category.id)}`)
+    navigate(`/?category=${encodeURIComponent(category.id)}`)
   }
 
   // Handle Enter key - go to full search results page (dropdown mode only)
@@ -130,7 +130,7 @@ export function DishSearch({ loading = false, placeholder = "Find What's Good ne
       })
       setQuery('')
       setIsFocused(false)
-      navigate(`/browse?q=${encodeURIComponent(query.trim())}`)
+      navigate(`/?q=${encodeURIComponent(query.trim())}`)
     }
   }
 

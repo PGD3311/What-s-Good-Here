@@ -100,12 +100,12 @@ describe('Auth API', () => {
     it('should resolve relative returnPath against current origin', async () => {
       supabase.auth.signInWithOAuth.mockResolvedValueOnce({ error: null })
 
-      await authApi.signInWithGoogle({ returnPath: '/browse?q=ramen#top' })
+      await authApi.signInWithGoogle({ returnPath: '/restaurants?q=ramen#top' })
 
       expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/browse?q=ramen#top`,
+          redirectTo: `${window.location.origin}/restaurants?q=ramen#top`,
         },
       })
     })
