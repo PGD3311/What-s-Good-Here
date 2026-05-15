@@ -29,7 +29,6 @@ export const placesApi = {
       if (response.error) {
         const errMsg = response.error?.message || response.error?.context?.message || String(response.error)
         logger.error('Places autocomplete edge function error:', errMsg, response.error)
-        logger.warn('Places autocomplete failed:', errMsg)
         // Graceful degradation for search — don't break local results
         return []
       }
@@ -37,7 +36,6 @@ export const placesApi = {
       // Check if the response itself contains an error (edge function returned 200 with error body)
       if (response.data?.error) {
         logger.error('Places autocomplete API error:', response.data.error)
-        logger.warn('Places autocomplete API error:', response.data.error)
         return []
       }
 

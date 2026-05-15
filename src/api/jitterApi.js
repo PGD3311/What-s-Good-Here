@@ -73,7 +73,10 @@ export const jitterApi = {
         profile: data.profile || null,
       }
     } catch (err) {
-      logger.warn('Attestation failed (non-critical):', err)
+      // Escalate to error so a sustained JITTEr server outage surfaces in
+      // Sentry — otherwise we'd ship un-attested votes silently for hours.
+      // Callers still treat null as non-blocking; the badge_hash is optional.
+      logger.error('Attestation failed (non-critical):', err)
       return null
     }
   },

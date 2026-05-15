@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { createElement } from 'react'
 import { renderHook, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useVote } from '../hooks/useVote'
 import { votesApi } from '../api/votesApi'
 
@@ -12,6 +14,17 @@ vi.mock('../api/votesApi', () => ({
   },
 }))
 
+// useVote now uses useQueryClient to invalidate cached queries after a
+// successful vote. Tests need a QueryClientProvider around the rendered hook.
+// Using createElement (instead of JSX) so this file stays .test.js — no
+// rename or build-config change needed.
+function makeWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return ({ children }) => createElement(QueryClientProvider, { client: queryClient }, children)
+}
+
 describe('useVote Hook', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -21,7 +34,7 @@ describe('useVote Hook', () => {
     it('calls votesApi.submitVote with positional args minus wouldOrderAgain', async () => {
       votesApi.submitVote.mockResolvedValueOnce({ success: true })
 
-      const { result } = renderHook(() => useVote())
+      const { result } = renderHook(() => useVote(), { wrapper: makeWrapper() })
 
       let response
       await act(async () => {
@@ -44,7 +57,7 @@ describe('useVote Hook', () => {
       const error = new Error('Not authenticated')
       votesApi.submitVote.mockRejectedValueOnce(error)
 
-      const { result } = renderHook(() => useVote())
+      const { result } = renderHook(() => useVote(), { wrapper: makeWrapper() })
 
       let response
       await act(async () => {
@@ -64,7 +77,7 @@ describe('useVote Hook', () => {
       })
       votesApi.submitVote.mockReturnValueOnce(apiPromise)
 
-      const { result } = renderHook(() => useVote())
+      const { result } = renderHook(() => useVote(), { wrapper: makeWrapper() })
 
       expect(result.current.submitting).toBe(false)
 
@@ -90,7 +103,7 @@ describe('useVote Hook', () => {
     it('should handle votes without an explicit rating', async () => {
       votesApi.submitVote.mockResolvedValueOnce({ success: true })
 
-      const { result } = renderHook(() => useVote())
+      const { result } = renderHook(() => useVote(), { wrapper: makeWrapper() })
 
       await act(async () => {
         await result.current.submitVote('dish-1')
@@ -106,6 +119,51 @@ describe('useVote Hook', () => {
         badgeHash: null,
       })
     })
+
+    it('invalidates dependent query caches on success', async () => {
+      votesApi.submitVote.mockResolvedValueOnce({ success: true })
+
+      // Build a wrapper backed by a known QueryClient so we can spy on it.
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+      const wrapper = ({ children }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children)
+
+      const { result } = renderHook(() => useVote(), { wrapper })
+
+      await act(async () => {
+        await result.current.submitVote('dish-1', 9)
+      })
+
+      // All keys vote outcomes depend on. Regressions here would let
+      // rankings, profile stats, or community averages drift stale until
+      // manual refetch.
+      const invalidatedKeys = invalidateSpy.mock.calls.map(([arg]) => arg.queryKey[0])
+      expect(invalidatedKeys).toEqual(
+        expect.arrayContaining(['dishes', 'dish', 'userVotes', 'allDishes', 'communityAvgs'])
+      )
+    })
+
+    it('does NOT invalidate caches when the API rejects', async () => {
+      votesApi.submitVote.mockRejectedValueOnce(new Error('boom'))
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+      const wrapper = ({ children }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children)
+
+      const { result } = renderHook(() => useVote(), { wrapper })
+
+      await act(async () => {
+        await result.current.submitVote('dish-1', 9)
+      })
+
+      expect(invalidateSpy).not.toHaveBeenCalled()
+    })
   })
 
   describe('getUserVotes', () => {
@@ -116,7 +174,7 @@ describe('useVote Hook', () => {
       }
       votesApi.getUserVotes.mockResolvedValueOnce(mockVotes)
 
-      const { result } = renderHook(() => useVote())
+      const { result } = renderHook(() => useVote(), { wrapper: makeWrapper() })
 
       let votes
       await act(async () => {
@@ -130,7 +188,7 @@ describe('useVote Hook', () => {
     it('should return empty object on error', async () => {
       votesApi.getUserVotes.mockRejectedValueOnce(new Error('Network error'))
 
-      const { result } = renderHook(() => useVote())
+      const { result } = renderHook(() => useVote(), { wrapper: makeWrapper() })
 
       let votes
       await act(async () => {
