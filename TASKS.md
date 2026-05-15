@@ -605,4 +605,40 @@
 
 Do NOT start Phase 2 until Phase 1 has been live for ≥7 days and Sentry shows no regressions from stale bundles.
 
+---
+
+## T42: Post-App-Store data quality sweep — menus, hours, closed restaurants
+
+**Why:** App is feature-complete and submitted to Apple (2026-05-15). The bar from here is *care*, not features. Anyone who opens the app over Memorial Day weekend tries 3–5 places — every menu needs to be real, every restaurant they tap needs to actually be open, every "9.5 lobster roll" needs to be at a place serving lobster rolls *today*. Stale data is the single biggest credibility risk now that the trust UX is solid.
+
+**Attack in this order — no point refreshing menus for places that closed last year.**
+
+### 1. Permanently closed restaurants
+- Pull `business_status` from Google Places for every restaurant in `restaurants` where `google_place_id IS NOT NULL`
+- Anything returning `CLOSED_PERMANENTLY` → hide or flag for manual review
+- Anything returning `CLOSED_TEMPORARILY` → log to a separate review list (might be off-season, not gone)
+- Script lives in `scripts/` or as a one-shot Edge Function call
+- Acceptance: zero `CLOSED_PERMANENTLY` restaurants visible in the homepage/restaurants list
+
+### 2. Seasonal-only restaurants not yet open
+- MV is ~half "Memorial Day → Columbus Day." Some places are still dark this week.
+- Heuristic: no Google review in the last 30 days = probably not open yet
+- Flag these for a "Opens soon" badge or hide until first recent activity
+- Don't auto-delete; many will open within days
+
+### 3. Stale menus
+- Query `restaurants` where `menu_last_refreshed_at IS NULL OR menu_last_refreshed_at < now() - interval '30 days'`
+- Trigger `menu-refresh` Edge Function for each (Sonnet-backed per memory; quality is decent)
+- Batch with rate limiting — Google Places + Anthropic API both have quotas
+- Acceptance: median `menu_last_refreshed_at` < 14 days across active restaurants
+
+### 4. Garbage dishes
+- Find dishes where any of: name matches placeholder regex (`^Item \d+$`, `^Menu Item`, pure numeric), `price IS NULL`, `description IS NULL OR description = ''`, `category IS NULL`
+- These are the ones that look bad on a dish detail page or in search results
+- Acceptance: zero dishes with placeholder names; reasonable price/description coverage on top-ranked dishes
+
+**Files / surfaces:** new audit scripts in `scripts/` (e.g. `audit-closed-restaurants.mjs`, `audit-stale-menus.mjs`, `audit-garbage-dishes.mjs`); possibly a one-off Edge Function for bulk menu-refresh; updates to `restaurants` table flagging hidden/seasonal entries (may need a new `visibility_status` column).
+
+**Do NOT block on Apple verdict.** This work ships independently — every fix improves the live web experience immediately, and rides into the next TestFlight automatically.
+
 Spec: `docs/superpowers/specs/2026-04-12-binary-vote-removal-design.md`.
