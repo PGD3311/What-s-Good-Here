@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger'
 import { getCategoryEmoji, getDishNameIcon } from '../../constants/categories'
 import { getPosterIconSrc } from '../home/CategoryIcons'
 import { calculateDistance } from '../../utils/distance'
+import { getSessionItem, setSessionItem, removeSessionItem, STORAGE_KEYS } from '../../lib/storage'
 
 const MILES_TO_METERS = 1609.34
 const PROXIMITY_THRESHOLD_MI = 0.062 // ~100m
@@ -224,16 +225,12 @@ export function RestaurantMap({
 
   // ─── Dish mode state ───
   const [selectedRestaurantId, _setSelectedRestaurantId] = useState(function () {
-    try {
-      return sessionStorage.getItem('wgh_map_selected_restaurant') || null
-    } catch (e) { return null }
+    return getSessionItem(STORAGE_KEYS.MAP_SELECTED_RESTAURANT)
   })
   var setSelectedRestaurantId = function (id) {
     _setSelectedRestaurantId(id)
-    try {
-      if (id) { sessionStorage.setItem('wgh_map_selected_restaurant', id) }
-      else { sessionStorage.removeItem('wgh_map_selected_restaurant') }
-    } catch (e) { /* noop */ }
+    if (id) setSessionItem(STORAGE_KEYS.MAP_SELECTED_RESTAURANT, id)
+    else removeSessionItem(STORAGE_KEYS.MAP_SELECTED_RESTAURANT)
   }
   const [dismissedProximity, setDismissedProximity] = useState({})
 

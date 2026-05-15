@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase'
 import { authApi } from '../api/authApi'
 import { capture, identify, reset } from '../lib/analytics'
 import { clearPendingVoteStorage, clearCache, removeStorageItem, removeSessionItem, STORAGE_KEYS } from '../lib/storage'
@@ -18,7 +17,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Restore session from localStorage (instant, works offline)
     // This is faster than getUser() which makes a network request
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    authApi.getSession().then(({ data: { session }, error }) => {
       if (error) {
         logger.error('Error restoring session:', error)
       }
@@ -36,7 +35,7 @@ export function AuthProvider({ children }) {
     })
 
     // Listen for auth changes (handles token refresh, sign in/out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = authApi.onAuthStateChange((event, session) => {
       const newUser = session?.user ?? null
 
       // Handle different auth events
@@ -110,7 +109,7 @@ export function AuthProvider({ children }) {
     // Native: clear the Capgo provider session so the next Google/Apple tap
     // doesn't silently reuse the cached account (spec Flow I). No-op on web.
     await authApi.signOutNative()
-    await supabase.auth.signOut()
+    await authApi.signOut()
     // Clear React Query cache so the next user on this browser doesn't inherit stale data
     queryClient.clear()
     setUser(null)

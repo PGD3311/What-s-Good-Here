@@ -154,7 +154,7 @@ src/
 │   ├── Auth/         # LoginModal, WelcomeModal
 │   ├── browse/       # CategoryGrid, SearchAutocomplete, SortDropdown
 │   ├── home/         # CategoryIcons
-│   ├── jitter/       # SessionCard, SessionBadge, TrustBadge
+│   ├── jitter/       # JitterBadge, JitterExplainer, ProfileJitterCard, TrustBadge
 │   ├── profile/      # JournalCard, JournalFeed, ShelfFilter, HeroIdentityCard, FoodMap
 │   ├── restaurant-admin/ # DishesManager, EventsManager, MenuImportWizard, SpecialsManager
 │   └── restaurants/  # RestaurantMap, RestaurantDishes, RestaurantMenu

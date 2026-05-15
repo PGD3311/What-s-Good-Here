@@ -169,6 +169,15 @@ export const authApi = {
   },
 
   /**
+   * End the Supabase session. Note: AuthContext.signOut wraps this with
+   * cache clearing, signOutNative, and React Query reset — call that for
+   * full app-state teardown. This is the bare passthrough.
+   */
+  async signOut() {
+    return supabase.auth.signOut()
+  },
+
+  /**
    * Exchange an auth code (from a universal-link / deep-link return) for a
    * Supabase session. Used by AuthLifecycle on appUrlOpen (B4).
    *
