@@ -98,10 +98,13 @@ CREATE TABLE IF NOT EXISTS votes (
 -- Partial unique index: only user votes are unique per dish/user (ai_estimated can have multiples)
 CREATE UNIQUE INDEX IF NOT EXISTS votes_user_unique ON votes (dish_id, user_id) WHERE source = 'user';
 
--- 1d. profiles (auto-created by handle_new_user trigger on auth.users INSERT)
+-- 1d. profiles (auto-created by handle_new_user trigger on auth.users INSERT;
+-- display_name is NOT NULL — the trigger guarantees it via the
+-- 'eater-{12char}' placeholder fallback when no metadata source is available.
+-- See migration 2026-05-15-display-name-not-null.sql.)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  display_name TEXT,
+  display_name TEXT NOT NULL,
   has_onboarded BOOLEAN DEFAULT false,
   preferred_categories TEXT[] DEFAULT '{}',
   follower_count INTEGER DEFAULT 0,
@@ -3651,8 +3654,17 @@ ON CONFLICT (key) DO UPDATE SET
 -- =============================================
 -- 17. AUTH TRIGGER: Auto-create profile on signup
 -- =============================================
--- Ensures every auth.users entry gets a profiles row.
--- For OAuth users (Google), pulls display_name from metadata.
+-- Ensures every auth.users entry gets a profiles row WITH a non-null
+-- display_name. Source chain (in priority order):
+--   1. raw_user_meta_data.full_name   (Google OAuth)
+--   2. raw_user_meta_data.name        (some OAuth providers)
+--   3. raw_user_meta_data.display_name (email signup via signUpWithPassword)
+--   4. 'eater-{12charsOfUserIdHex}'   (deterministic placeholder when SIWA
+--                                       didn't share a name, or any other
+--                                       provider that didn't populate metadata)
+--
+-- After the 2026-05-15 NOT NULL migration, this trigger is the single
+-- source of truth for the "every profile has a name" invariant.
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
@@ -3665,9 +3677,10 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(
-      NEW.raw_user_meta_data->>'full_name',
-      NEW.raw_user_meta_data->>'name',
-      NULL
+      NULLIF(TRIM(NEW.raw_user_meta_data->>'full_name'), ''),
+      NULLIF(TRIM(NEW.raw_user_meta_data->>'name'), ''),
+      NULLIF(TRIM(NEW.raw_user_meta_data->>'display_name'), ''),
+      'eater-' || SUBSTRING(REPLACE(NEW.id::text, '-', ''), 1, 12)
     ),
     false
   )

@@ -46,13 +46,20 @@ function buildWebRedirectUrl(returnPath) {
  * Build a deterministic placeholder display name for a user who has no other
  * source. Used when Apple's SIWA picker had "Hide My Name" selected (no first/
  * last shared), the OAuth provider didn't populate user_metadata.full_name, and
- * email signup never happened. Format: `eater-{8charsOfUserIdHex}`.
+ * email signup never happened. Format: `eater-{12charsOfUserIdHex}`.
  *
- * Collision space is 16^8 ≈ 4.3B; with <10k users this is effectively unique.
- * The user can rename in Profile settings whenever they want.
+ * Mirrors the `handle_new_user` trigger's placeholder format exactly (see
+ * supabase/schema.sql §17 and migration 2026-05-15-display-name-not-null.sql).
+ * Keep these in sync — they should produce identical output for any given
+ * user.id, otherwise the client and DB would generate different placeholders
+ * for the same user depending on which one ran first.
+ *
+ * Collision space is 16^12 ≈ 281 trillion; birthday-collision risk doesn't
+ * matter until ~16M users. The user can rename in Profile settings whenever
+ * they want.
  */
 function generatePlaceholderName(userId) {
-  const short = String(userId).replace(/-/g, '').slice(0, 8).toLowerCase()
+  const short = String(userId).replace(/-/g, '').slice(0, 12).toLowerCase()
   return `eater-${short}`
 }
 
@@ -81,10 +88,11 @@ function generatePlaceholderName(userId) {
  * Final state on native Apple with shared name:
  *   - If Path A wins the race: `display_name = "Given Family"`. Path B's
  *     `IS NULL` filter no-matches; no-op.
- *   - If Path B wins the race: `display_name = "eater-{8char}"` (Apple's
+ *   - If Path B wins the race: `display_name = "eater-{12char}"` (Apple's
  *     id_token has no metadata.full_name, so Path B falls to placeholder).
  *     Path A's `IS NULL OR LIKE eater-%` filter matches; overwrites with
- *     `"Given Family"`.
+ *     `"Given Family"`. (Legacy 8-char placeholders from before the
+ *     2026-05-15 migration also match the LIKE pattern.)
  *
  * Either way, terminal state is Apple's name. Same logic ensures returning
  * Apple users (whose display_name is already custom-set) are never clobbered.
@@ -447,17 +455,10 @@ export const authApi = {
         throw createClassifiedError(error)
       }
 
-      // Update the profile with the display name
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ display_name: username })
-          .eq('id', data.user.id)
-
-        if (profileError) {
-          throw createClassifiedError(profileError)
-        }
-      }
+      // The handle_new_user trigger reads raw_user_meta_data.display_name
+      // (set via options.data above) and creates the profile row with it
+      // pre-populated, so no explicit profiles UPDATE is needed here.
+      // See supabase/migrations/2026-05-15-display-name-not-null.sql.
 
       capture('signup_completed', { method: 'password' })
       return { success: true, user: data.user }
