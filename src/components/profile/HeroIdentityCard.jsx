@@ -227,36 +227,22 @@ export function HeroIdentityCard({
             border: '1px solid var(--color-divider)',
           }}
         >
-          <div className="px-4 py-3 space-y-2">
-            <DetailRow label="Typing pace" value={jitterData.mean_inter_key ? Math.round(jitterData.mean_inter_key) + 'ms between keys' : '\u2014'} />
-            <DetailRow label="Key press" value={jitterData.mean_dwell ? Math.round(jitterData.mean_dwell) + 'ms avg hold' : '\u2014'} />
-            <DetailRow label="Typo rate" value={jitterData.edit_ratio != null ? Math.round(jitterData.edit_ratio * 100) + '% corrections' : '\u2014'} />
-            {jitterProfile.created_at && (
-              <DetailRow label="Reviewing since" value={new Date(jitterProfile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} />
-            )}
-          </div>
-
-          {/* Per-key fingerprint visual */}
-          {jitterData.per_key_dwell && Object.keys(jitterData.per_key_dwell).length > 0 && (
-            <div className="px-4 pb-3">
-              <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                How long you hold each key
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(jitterData.per_key_dwell)
-                  .slice().sort(function (a, b) { return a[1] - b[1] })
-                  .map(function (entry) {
-                    var maxVal = getMaxDwell(jitterData.per_key_dwell)
-                    return <KeyBar key={entry[0]} letter={entry[0]} ms={entry[1]} max={maxVal} />
-                  })}
-              </div>
-            </div>
-          )}
-
-          <div className="px-4 pb-3">
-            <p className="text-xs" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-              Your typing rhythm builds over time as you write reviews. No two people type alike.
+          <div className="px-4 py-4 space-y-3">
+            <p className="text-sm" style={{ color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+              {getOwnerBlurb(jitterProfile)}
             </p>
+            {jitterProfile.created_at && (
+              <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                Reviewing since {new Date(jitterProfile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </p>
+            )}
+            <a
+              href="/jitter"
+              className="inline-block text-sm font-semibold"
+              style={{ color: 'var(--color-primary)' }}
+            >
+              Learn how this works &rarr;
+            </a>
           </div>
         </div>
       )}
@@ -264,31 +250,19 @@ export function HeroIdentityCard({
   )
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex justify-between text-xs">
-      <span style={{ color: 'var(--color-text-tertiary)' }}>{label}</span>
-      <span className="font-mono" style={{ color: 'var(--color-text-secondary)' }}>{value}</span>
-    </div>
-  )
-}
-
-function KeyBar({ letter, ms, max }) {
-  var width = max > 0 ? Math.max(20, (ms / max) * 100) : 50
-  return (
-    <div className="flex items-center gap-1" style={{ minWidth: '60px' }}>
-      <span className="font-mono font-bold text-xs w-3 text-center" style={{ color: 'var(--color-text-primary)' }}>{letter}</span>
-      <div className="flex-1 overflow-hidden" style={{ height: '6px', borderRadius: '3px', background: 'var(--color-surface)' }}>
-        <div style={{ width: width + '%', height: '100%', borderRadius: '3px', background: 'var(--color-accent-gold)' }} />
-      </div>
-      <span className="text-xs font-mono" style={{ color: 'var(--color-text-tertiary)', minWidth: '32px', textAlign: 'right' }}>{Math.round(ms)}</span>
-    </div>
-  )
-}
-
-function getMaxDwell(perKeyDwell) {
-  var values = Object.values(perKeyDwell)
-  return values.length > 0 ? Math.max.apply(null, values) : 0
+// Plain-English status copy for the profile owner. Branches on review count
+// + consistency_score so a brand-new user doesn't see "you're verified" and
+// a long-time reviewer doesn't get told to "keep writing".
+function getOwnerBlurb(jitterProfile) {
+  var reviews = jitterProfile?.review_count || 0
+  var consistency = Number(jitterProfile?.consistency_score) || 0
+  if (reviews >= 15 && consistency >= 0.6) {
+    return 'You\u2019re a Trusted Reviewer. Your votes carry extra weight in our rankings because your typing rhythm is steady and consistent.'
+  }
+  if (reviews >= 5 && consistency >= 0.4) {
+    return 'You\u2019re a Verified Human. Your reviews are confirmed to be typed by a real person. Keep writing to reach Trusted Reviewer status.'
+  }
+  return 'You\u2019re just getting started. Write a few more reviews and your typing rhythm will earn you a Verified Human badge.'
 }
 
 export default HeroIdentityCard

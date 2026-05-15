@@ -55,7 +55,7 @@ export function ProfileJitterCard({ profile, user, userProfile, displayName, isP
             </div>
             <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.4 }}>
               {isPublic
-                ? 'Every reviewer has a unique typing rhythm that verifies they\u2019re real.'
+                ? 'Every reviewer has a unique typing rhythm that verifies they’re real.'
                 : 'Your typing rhythm is unique — like a signature.'}
             </p>
           </div>
@@ -68,7 +68,7 @@ export function ProfileJitterCard({ profile, user, userProfile, displayName, isP
             label="Rhythm"
             value={profile.consistency_score != null
               ? getRhythmLabel(Number(profile.consistency_score))
-              : '\u2014'}
+              : '—'}
           />
           {hasPrivateData && (
             <StatCell label="Words typed" value={formatWordCount(data.total_keystrokes || 0)} />
@@ -96,42 +96,32 @@ export function ProfileJitterCard({ profile, user, userProfile, displayName, isP
           className="w-full text-xs text-center py-2"
           style={{ color: 'var(--color-accent-gold)', borderTop: '1px solid var(--color-divider)' }}
         >
-          {expanded ? 'Less detail \u25B2' : 'See your rhythm \u25BC'}
+          {expanded ? 'Less detail ▲' : 'See your rhythm ▼'}
         </button>
       )}
 
-      {/* Expanded details — own profile only */}
+      {/* Expanded details — own profile only. Plain-English summary plus
+          a "Reviewing since" date plus a Learn-how link to /jitter. The
+          technical metrics (typing pace, dwell time, per-key histogram)
+          were removed in favor of one clear sentence — dev metrics
+          aren't useful to non-technical users. */}
       {hasPrivateData && expanded && (
         <div className="px-4 pb-4 space-y-3" style={{ borderTop: '1px solid var(--color-divider)' }}>
-          <div className="pt-3 space-y-2">
-            <DetailRow label="Typing pace" value={data.mean_inter_key ? `${Math.round(data.mean_inter_key)}ms between keys` : '\u2014'} />
-            <DetailRow label="Key press" value={data.mean_dwell ? `${Math.round(data.mean_dwell)}ms avg hold` : '\u2014'} />
-            <DetailRow label="Typo rate" value={data.edit_ratio != null ? `${Math.round(data.edit_ratio * 100)}% corrections` : '\u2014'} />
-            {profile.created_at && (
-              <DetailRow label="Reviewing since" value={new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} />
-            )}
-          </div>
-
-          {/* Per-key fingerprint — the fun visual */}
-          {data.per_key_dwell && Object.keys(data.per_key_dwell).length > 0 && (
-            <div>
-              <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                How long you hold each key — your unique pattern
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(data.per_key_dwell)
-                  .slice().sort(([, a], [, b]) => a - b)
-                  .map(([key, ms]) => (
-                    <KeyBar key={key} letter={key} ms={ms} max={getMaxDwell(data.per_key_dwell)} />
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* What this means */}
-          <p className="text-xs" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-            This fingerprint builds over time as you write reviews. It helps verify that reviews come from real people — no two typing rhythms are alike.
+          <p className="text-sm pt-3" style={{ color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
+            {getOwnerBlurb(profile)}
           </p>
+          {profile.created_at && (
+            <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+              Reviewing since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+          )}
+          <a
+            href="/jitter"
+            className="inline-block text-sm font-semibold"
+            style={{ color: 'var(--color-primary)' }}
+          >
+            Learn how this works &rarr;
+          </a>
         </div>
       )}
     </div>
@@ -147,31 +137,18 @@ function StatCell({ label, value }) {
   )
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex justify-between text-xs">
-      <span style={{ color: 'var(--color-text-tertiary)' }}>{label}</span>
-      <span className="font-mono" style={{ color: 'var(--color-text-secondary)' }}>{value}</span>
-    </div>
-  )
-}
-
-function KeyBar({ letter, ms, max }) {
-  var width = max > 0 ? Math.max(20, (ms / max) * 100) : 50
-  return (
-    <div className="flex items-center gap-1" style={{ minWidth: '60px' }}>
-      <span className="font-mono font-bold text-xs w-3 text-center" style={{ color: 'var(--color-text-primary)' }}>{letter}</span>
-      <div className="flex-1 overflow-hidden" style={{ height: '6px', borderRadius: '3px', background: 'var(--color-surface)' }}>
-        <div style={{ width: width + '%', height: '100%', borderRadius: '3px', background: 'var(--color-accent-gold)' }} />
-      </div>
-      <span className="text-xs font-mono" style={{ color: 'var(--color-text-tertiary)', minWidth: '32px', textAlign: 'right' }}>{Math.round(ms)}</span>
-    </div>
-  )
-}
-
-function getMaxDwell(perKeyDwell) {
-  var values = Object.values(perKeyDwell)
-  return values.length > 0 ? Math.max.apply(null, values) : 0
+// Plain-English status copy keyed to tier. Kept in sync with the matching
+// helper in HeroIdentityCard (used in the own-profile inline panel).
+function getOwnerBlurb(profile) {
+  const reviews = profile?.review_count || 0
+  const consistency = Number(profile?.consistency_score) || 0
+  if (reviews >= 15 && consistency >= 0.6) {
+    return 'You’re a Trusted Reviewer. Your votes carry extra weight in our rankings because your typing rhythm is steady and consistent.'
+  }
+  if (reviews >= 5 && consistency >= 0.4) {
+    return 'You’re a Verified Human. Your reviews are confirmed to be typed by a real person. Keep writing to reach Trusted Reviewer status.'
+  }
+  return 'You’re just getting started. Write a few more reviews and your typing rhythm will earn you a Verified Human badge.'
 }
 
 // Friendly rhythm label from consistency score
