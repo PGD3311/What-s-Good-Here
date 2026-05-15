@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { JitterBadge } from './jitter/JitterBadge'
 
 /**
  * Displays trust indicators on reviews and profiles.
- * Optional popover shows cumulative stats when profileData is provided.
+ * Tap/hover opens a plain-English popover with a Learn how → link to /jitter.
  *
  * Types:
  * - 'human_verified': Green check — reviewer has consistent jitter profile (5+ reviews)
@@ -34,21 +35,25 @@ export function TrustBadge({ type, size = 'sm', profileData, warScore }) {
   const configs = {
     human_verified: {
       label: 'Verified Human',
+      blurb: "This person's reviews were typed by a real human, not a bot.",
       color: 'var(--color-rating)',
       bg: 'rgba(34, 197, 94, 0.15)',
     },
     trusted_reviewer: {
       label: 'Trusted Reviewer',
+      blurb: 'This person has written enough verified reviews that their votes count more in our rankings.',
       color: 'var(--color-rating)',
       bg: 'rgba(34, 197, 94, 0.22)',
     },
     ai_estimated: {
       label: 'AI Estimated',
+      blurb: 'Pulled from Google reviews to help rank new dishes — not written by our community.',
       color: 'var(--color-blue, #3b82f6)',
       bg: 'rgba(59, 130, 246, 0.12)',
     },
     building: {
-      label: 'Building...',
+      label: 'Building trust',
+      blurb: 'Write a few more reviews to earn a Verified Human badge.',
       color: 'var(--color-text-tertiary)',
       bg: 'rgba(156, 163, 175, 0.12)',
     },
@@ -60,6 +65,7 @@ export function TrustBadge({ type, size = 'sm', profileData, warScore }) {
   const dim = size === 'sm' ? 16 : 20
   const iconSize = size === 'sm' ? 10 : 12
   const isTrusted = type === 'trusted_reviewer'
+  const reviewCount = profileData?.review_count
 
   return (
     <span
@@ -68,11 +74,15 @@ export function TrustBadge({ type, size = 'sm', profileData, warScore }) {
         width: dim,
         height: dim,
         background: isTrusted ? config.color : config.bg,
-        cursor: profileData ? 'pointer' : 'default',
+        cursor: 'pointer',
       }}
       title={config.label}
-      onClick={() => profileData && setShowPopover(!showPopover)}
-      onMouseEnter={() => profileData && setShowPopover(true)}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setShowPopover(!showPopover)
+      }}
+      onMouseEnter={() => setShowPopover(true)}
       onMouseLeave={() => setShowPopover(false)}
     >
       {(type === 'human_verified' || type === 'trusted_reviewer') && (
@@ -98,47 +108,51 @@ export function TrustBadge({ type, size = 'sm', profileData, warScore }) {
         </svg>
       )}
 
-      {showPopover && profileData && (
+      {showPopover && (
         <span
           className="absolute left-0 top-full mt-1 p-3 rounded-lg shadow-lg z-50"
           style={{
             background: 'var(--color-card)',
             border: '1px solid var(--color-divider)',
-            minWidth: '160px',
-            fontSize: '11px',
+            width: '220px',
+            fontSize: '12px',
             display: 'block',
+            lineHeight: 1.5,
           }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <span className="block space-y-1.5">
-            {profileData.review_count != null && (
-              <PopoverRow label="Verified sessions" value={profileData.review_count} />
-            )}
-            {profileData.consistency_score != null && (
-              <PopoverRow label="Consistency" value={Number(profileData.consistency_score).toFixed(2)} />
-            )}
-            {profileData.created_at && (
-              <PopoverRow label="Member since" value={formatMemberSince(profileData.created_at)} />
-            )}
-            <PopoverRow label="Trust level" value={config.label} />
+          {reviewCount != null && reviewCount > 0 && (
+            <span
+              className="block font-semibold mb-1.5"
+              style={{ color: 'var(--color-text-primary)' }}
+            >
+              {reviewCount} verified review{reviewCount === 1 ? '' : 's'}
+            </span>
+          )}
+          <span
+            className="block font-semibold mb-1"
+            style={{ color: config.color }}
+          >
+            {config.label}
           </span>
+          <span
+            className="block mb-2"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            {config.blurb}
+          </span>
+          <Link
+            to="/jitter"
+            className="block font-semibold"
+            style={{ color: 'var(--color-primary)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            Learn how &rarr;
+          </Link>
         </span>
       )}
     </span>
   )
-}
-
-function PopoverRow({ label, value }) {
-  return (
-    <span className="flex justify-between gap-3" style={{ display: 'flex' }}>
-      <span style={{ color: 'var(--color-text-tertiary)' }}>{label}</span>
-      <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{value}</span>
-    </span>
-  )
-}
-
-function formatMemberSince(dateStr) {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
 /**
