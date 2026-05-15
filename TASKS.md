@@ -637,7 +637,18 @@ Do NOT start Phase 2 until Phase 1 has been live for ≥7 days and Sentry shows 
 - These are the ones that look bad on a dish detail page or in search results
 - Acceptance: zero dishes with placeholder names; reasonable price/description coverage on top-ranked dishes
 
-**Files / surfaces:** new audit scripts in `scripts/` (e.g. `audit-closed-restaurants.mjs`, `audit-stale-menus.mjs`, `audit-garbage-dishes.mjs`); possibly a one-off Edge Function for bulk menu-refresh; updates to `restaurants` table flagging hidden/seasonal entries (may need a new `visibility_status` column).
+### 5. Local lists (curator top-10s)
+- The curator system is the trust front door — a stale or broken Locals' Picks list is more visible than a stale menu
+- Find lists where:
+  - `local_list_items` reference dishes whose restaurant is `CLOSED_PERMANENTLY` (depends on #1 running first)
+  - `local_list_items` reference dishes that no longer exist (orphaned via menu refresh)
+  - Curator hasn't touched the list in > 60 days AND has < 10 items (signal: abandoned)
+  - List is empty (`local_list_items` count = 0) but `local_lists` row exists
+  - Curator profile missing display_name or has `is_local_curator = false` but still has a list visible
+- For each: either fix the broken reference, hide the list, or message the curator to update
+- Acceptance: every visible Locals' Picks list has a real curator, 10 real items, all pointing at open restaurants
+
+**Files / surfaces:** new audit scripts in `scripts/` (e.g. `audit-closed-restaurants.mjs`, `audit-stale-menus.mjs`, `audit-garbage-dishes.mjs`, `audit-local-lists.mjs`); possibly a one-off Edge Function for bulk menu-refresh; updates to `restaurants` table flagging hidden/seasonal entries (may need a new `visibility_status` column); curator outreach tooling (email template or in-app banner).
 
 **Do NOT block on Apple verdict.** This work ships independently — every fix improves the live web experience immediately, and rides into the next TestFlight automatically.
 
