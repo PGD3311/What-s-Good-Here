@@ -521,16 +521,40 @@ export function UserProfile() {
     )
   }
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      navigate('/')
+    }
+  }
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-surface)' }}>
       <h1 className="sr-only">{profile.display_name}'s Profile</h1>
       {/* Header */}
       <div
-        className="relative px-4 pt-8 pb-6 overflow-hidden"
+        className="relative px-4 pt-4 pb-6 overflow-hidden"
         style={{
           background: 'var(--color-bg)',
         }}
       >
+        {/* Back button — returns to wherever the user came from (dish detail,
+            restaurant page, social feed, etc.). Falls back to home for direct
+            URL hits with no history. */}
+        <button
+          type="button"
+          onClick={handleBack}
+          className="flex items-center gap-1 text-sm font-medium mb-3"
+          style={{ color: 'var(--color-primary)' }}
+          aria-label="Go back"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+
         {/* Bottom divider */}
         <div
           className="absolute bottom-0 left-1/2 -translate-x-1/2 h-px"
