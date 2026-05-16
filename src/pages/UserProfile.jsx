@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { getCompatColor } from '../utils/formatters'
 import { followsApi } from '../api/followsApi'
+import { useFollowUser } from '../hooks/useFollowUser'
 import { votesApi } from '../api/votesApi'
 import { FollowListModal } from '../components/FollowListModal'
 import { ProfileSkeleton } from '../components/Skeleton'
@@ -81,6 +82,7 @@ export function UserProfile() {
   useDocumentTitle(profile?.display_name ? `@${profile.display_name}` : null)
 
   const [followLoading, setFollowLoading] = useState(false)
+  const { follow: followMutation, unfollow: unfollowMutation } = useFollowUser()
   const [followListModal, setFollowListModal] = useState(null) // 'followers' | 'following' | null
   const [myRatings, setMyRatings] = useState({}) // { dishId: rating }
   const [userReviews, setUserReviews] = useState([])
@@ -324,10 +326,13 @@ export function UserProfile() {
 
     setFollowLoading(true)
     try {
+      // mutateAsync routes through useFollowUser so React Query invalidates
+      // ['followCounts'] on success — keeps your own /profile count fresh
+      // after following from somebody else's UserProfile page.
       if (wasFollowing) {
-        await followsApi.unfollow(userId)
+        await unfollowMutation.mutateAsync(userId)
       } else {
-        await followsApi.follow(userId)
+        await followMutation.mutateAsync(userId)
       }
     } catch (error) {
       logger.error('Failed to toggle follow:', error)
