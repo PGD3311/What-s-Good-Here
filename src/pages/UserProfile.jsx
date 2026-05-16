@@ -4,9 +4,6 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { getCompatColor } from '../utils/formatters'
-import { shareOrCopy } from '../utils/share'
-import { capture } from '../lib/analytics'
-import { toast } from 'sonner'
 import { followsApi } from '../api/followsApi'
 import { votesApi } from '../api/votesApi'
 import { FollowListModal } from '../components/FollowListModal'
@@ -344,35 +341,20 @@ export function UserProfile() {
   }
 
   // Handle share profile
-  const handleShare = async () => {
-    const result = await shareOrCopy({
-      url: window.location.href,
-      title: `${profile.display_name} on What's Good Here`,
-    })
-
-    capture('profile_shared', {
-      user_id: userId,
-      context: 'user_profile',
-      method: result.method,
-      success: result.success,
-    })
-
-    if (result.success && result.method !== 'native') {
-      toast.success('Link copied!', { duration: 2000 })
-    }
-  }
-
   // Compute stats from recent votes — single "My Ratings" shelf, sorted by recency.
-  const { uniqueRestaurants, foodMapStats, ratingStyle } = useMemo(() => {
+  const { uniqueRestaurants, foodMapStats, ratingStyle, favoriteRestaurant, favoriteRestaurantCount } = useMemo(() => {
     if (!profile?.recent_votes?.length) {
-      return { uniqueRestaurants: 0, foodMapStats: { totalVotes: 0, uniqueRestaurants: 0, categoryCounts: {} }, ratingStyle: null }
+      return { uniqueRestaurants: 0, foodMapStats: { totalVotes: 0, uniqueRestaurants: 0, categoryCounts: {} }, ratingStyle: null, favoriteRestaurant: null, favoriteRestaurantCount: 0 }
     }
     const restaurantNames = new Set()
+    const restaurantCounts = {}
     const catCounts = {}
     const ratings = []
     profile.recent_votes.forEach(vote => {
-      if (vote.dish?.restaurant_name) {
-        restaurantNames.add(vote.dish.restaurant_name)
+      const restName = vote.dish?.restaurant_name
+      if (restName) {
+        restaurantNames.add(restName)
+        restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
       }
       if (vote.dish?.category) {
         catCounts[vote.dish.category] = (catCounts[vote.dish.category] || 0) + 1
@@ -393,6 +375,21 @@ export function UserProfile() {
       if (style) style.avgRating = avgRating
     }
 
+    // Most loyal: restaurant with the most rated dishes. Only surface when
+    // there's actually a "favorite" — more than one visit signals loyalty.
+    let favRest = null
+    let favCount = 0
+    Object.entries(restaurantCounts).forEach(([name, count]) => {
+      if (count > favCount) {
+        favRest = name
+        favCount = count
+      }
+    })
+    if (favCount < 2) {
+      favRest = null
+      favCount = 0
+    }
+
     return {
       uniqueRestaurants: restaurantNames.size,
       foodMapStats: {
@@ -401,6 +398,8 @@ export function UserProfile() {
         categoryCounts: catCounts,
       },
       ratingStyle: style,
+      favoriteRestaurant: favRest,
+      favoriteRestaurantCount: favCount,
     }
   }, [profile?.recent_votes])
 
@@ -569,14 +568,23 @@ export function UserProfile() {
           {/* Avatar */}
           <div className="relative flex-shrink-0">
             <div
-              className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold"
+              className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold overflow-hidden"
               style={{
                 background: 'var(--color-primary)',
                 color: 'var(--color-text-on-primary)',
                 boxShadow: '0 0 0 3px var(--color-primary-muted)',
               }}
             >
-              {profile.display_name?.charAt(0).toUpperCase() || '?'}
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              ) : (
+                <span>{profile.display_name?.charAt(0).toUpperCase() || '?'}</span>
+              )}
             </div>
           </div>
 
@@ -662,66 +670,9 @@ export function UserProfile() {
           </div>
         )}
 
-        {/* Rating Style + Deviation Score */}
-        {(ratingStyle || (ratingBias && ratingBias.votesWithConsensus > 0)) && (
-          <div className="mt-4 flex gap-2.5">
-            {ratingStyle && (
-              <div
-                className="flex-1 rounded-2xl border px-4 py-3.5"
-                style={{
-                  background: 'var(--color-card)',
-                  borderColor: 'var(--color-divider)',
-                  boxShadow: 'none',
-                }}
-              >
-                <p
-                  className="text-sm font-bold"
-                  style={{
-                    color: ratingStyle.level === 'generous' || ratingStyle.level === 'easy'
-                      ? 'var(--color-emerald)'
-                      : ratingStyle.level === 'tough'
-                      ? 'var(--color-red)'
-                      : 'var(--color-orange)',
-                  }}
-                >
-                  {ratingStyle.label}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                  avg {ratingStyle.avgRating.toFixed(1)}
-                </p>
-              </div>
-            )}
-            {ratingBias && ratingBias.votesWithConsensus > 0 && (
-              <div
-                className="flex-1 rounded-2xl border px-4 py-3.5"
-                style={{
-                  background: 'var(--color-card)',
-                  borderColor: 'var(--color-divider)',
-                  boxShadow: 'none',
-                }}
-              >
-                <p className="text-sm font-bold" style={{
-                  color: (() => {
-                    const isAbove = ratingStyle?.level === 'generous' || ratingStyle?.level === 'easy'
-                    if (isAbove) {
-                      return ratingBias.ratingBias < 1.0 ? 'var(--color-emerald)' : 'var(--color-emerald-light)'
-                    }
-                    const isBelow = ratingStyle?.level === 'tough'
-                    if (isBelow) {
-                      return ratingBias.ratingBias < 1.0 ? 'var(--color-red-light)' : 'var(--color-red)'
-                    }
-                    return 'var(--color-orange)' // fair judge
-                  })(),
-                }}>
-                  {ratingBias.biasLabel}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                  {ratingBias.ratingBias.toFixed(1)} pts from crowd
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Rating Style + Most loyal + Best find + Hot take live in the
+            Food Story chalkboard further down — kept here as a single source
+            of truth, matching the Profile page layout. */}
 
         {/* Action Buttons */}
         <div className="flex gap-3 mt-4">
@@ -746,13 +697,6 @@ export function UserProfile() {
               {followLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
             </button>
           )}
-          <button
-            onClick={handleShare}
-            className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-            style={{ background: 'var(--color-surface-elevated)', color: 'var(--color-text-primary)' }}
-          >
-            Share
-          </button>
           {currentUser && !isOwnProfile && (
             <div className="relative" style={{ zIndex: 50 }} ref={actionsMenuRef}>
               <button
@@ -815,6 +759,62 @@ export function UserProfile() {
         </div>
       )}
 
+      {/* Food Story chalkboard — matches the own-profile layout */}
+      {totalVotes > 0 && (ratingStyle || favoriteRestaurant || standoutPicks.bestFind || standoutPicks.harshestTake) && (
+        <div style={{ padding: '12px 16px 0' }}>
+          <div
+            style={{
+              background: '#2C3033',
+              borderRadius: '12px',
+              padding: '18px',
+              backgroundImage: 'radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.04) 0%, transparent 60%)',
+            }}
+          >
+            <h3 style={{
+              fontFamily: "'Amatic SC', cursive",
+              fontSize: '22px',
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.88)',
+              marginBottom: '10px',
+            }}>
+              {profile.display_name || 'Their'}&rsquo;s Food Story
+            </h3>
+            {ratingStyle && (
+              <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Rating style</span>
+                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                  {ratingStyle.label}
+                </span>
+              </div>
+            )}
+            {favoriteRestaurant && (
+              <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Most loyal</span>
+                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
+                  {favoriteRestaurant} &middot; {favoriteRestaurantCount} {favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
+                </span>
+              </div>
+            )}
+            {standoutPicks.bestFind && (
+              <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Best find</span>
+                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
+                  {standoutPicks.bestFind.dish_name} &middot; {standoutPicks.bestFind.userRating}
+                </span>
+              </div>
+            )}
+            {standoutPicks.harshestTake && (
+              <div className="flex justify-between items-baseline" style={{ padding: '5px 0' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Hot take</span>
+                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
+                  {standoutPicks.harshestTake.dish_name} &middot; Them: {standoutPicks.harshestTake.userRating} &middot; Crowd: {(standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Food Map */}
       {totalVotes > 0 && (
         <div className="px-4 pt-4">
@@ -827,60 +827,6 @@ export function UserProfile() {
         <LocalListCard items={localList.items} />
       )}
 
-      {/* Standout Picks */}
-      {totalVotes >= 3 && Object.keys(standoutPicks).length > 0 && (
-        <div className="px-4 pt-3 flex flex-col gap-2.5">
-          {standoutPicks.bestFind && (
-            <div
-              className="rounded-xl border px-3.5 py-3 flex items-center gap-3"
-              style={{
-                background: 'var(--color-card)',
-                borderColor: 'var(--color-divider)',
-              }}
-            >
-              <span className="text-lg flex-shrink-0" style={{ color: 'var(--color-accent-gold)' }}>
-                {'\u2B50'}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold" style={{ color: 'var(--color-text-tertiary)' }}>
-                  Top pick
-                </p>
-                <p className="text-sm font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>
-                  {standoutPicks.bestFind.dish_name}
-                </p>
-                <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {standoutPicks.bestFind.restaurant_name} &middot; {standoutPicks.bestFind.userRating}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {standoutPicks.harshestTake && (
-            <div
-              className="rounded-xl border px-3.5 py-3 flex items-center gap-3"
-              style={{
-                background: 'var(--color-card)',
-                borderColor: 'var(--color-red-muted, rgba(239, 68, 68, 0.2))',
-              }}
-            >
-              <span className="text-lg flex-shrink-0" style={{ color: 'var(--color-red)' }}>
-                {'\uD83C\uDF36\uFE0F'}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold" style={{ color: 'var(--color-red)' }}>
-                  Hottest take
-                </p>
-                <p className="text-sm font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>
-                  {standoutPicks.harshestTake.dish_name}
-                </p>
-                <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {standoutPicks.harshestTake.restaurant_name} &middot; {standoutPicks.harshestTake.userRating} vs {standoutPicks.harshestTake.communityAvg.toFixed(1)} crowd
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Location Filter Banner */}
       {locationFilter && (
