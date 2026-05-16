@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { encode as encodeBase64 } from 'https://deno.land/std@0.177.0/encoding/base64.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
@@ -544,9 +545,63 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
   }
 }
 
+// Anthropic accepts image/png, image/jpeg, image/webp, image/gif for vision.
+const ANTHROPIC_IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
+// 5MB is Anthropic's per-image cap; well under Edge Function memory limits at typical batch=3.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+/**
+ * Download an image and return it as base64 with its media type. Returns null
+ * if the URL is unreachable, the host blocks us, the response isn't a
+ * supported image type, or the bytes exceed Anthropic's per-image cap.
+ */
+async function downloadImageAsBase64(
+  url: string,
+  signal: AbortSignal
+): Promise<{ data: string; mediaType: string } | null> {
+  try {
+    const resp = await fetch(url, {
+      signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-MenuBot/1.0)',
+        'Accept': 'image/png,image/jpeg,image/webp,image/gif,image/*;q=0.8',
+      },
+    })
+    if (!resp.ok) return null
+    const contentType = (resp.headers.get('content-type') || '').toLowerCase().split(';')[0].trim()
+    if (!ANTHROPIC_IMAGE_MEDIA_TYPES.includes(contentType)) {
+      await resp.body?.cancel()
+      return null
+    }
+    // Pre-check Content-Length so a maliciously large image doesn't get
+    // fully buffered into memory before we reject it (Supabase Edge
+    // Functions cap at ~256MB; three parallel downloads share that).
+    const advertisedLength = parseInt(resp.headers.get('content-length') || '0', 10)
+    if (advertisedLength > MAX_IMAGE_BYTES) {
+      await resp.body?.cancel()
+      return null
+    }
+    const buffer = await resp.arrayBuffer()
+    if (buffer.byteLength > MAX_IMAGE_BYTES) return null
+    return {
+      // Anthropic only knows image/jpeg, not image/jpg — normalise.
+      mediaType: contentType === 'image/jpg' ? 'image/jpeg' : contentType,
+      data: encodeBase64(buffer),
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Extract dishes from one or more menu IMAGES (PNG/JPG/WEBP) using Sonnet vision.
- * Images are passed by URL so Sonnet fetches them server-side (no Edge Function OOM).
+ *
+ * Images are downloaded server-side and sent to Anthropic as base64 because
+ * Anthropic's URL-fetch path respects robots.txt, and Square/Wix-hosted menu
+ * CDNs (the very hosts where menus are most often image-based) deny crawlers
+ * in robots.txt — see S&S Kitchenette. Base64 mode bypasses that fetch
+ * entirely; we already have permission to download as the user's agent.
+ *
  * Vision is more expensive than document blocks per token — keep batches small (≤3).
  */
 async function extractMenuFromImagesWithClaude(
@@ -556,14 +611,34 @@ async function extractMenuFromImagesWithClaude(
   const httpsUrls = toHttpsUrls(imageUrls)
   if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
 
-  const content: Array<Record<string, unknown>> = httpsUrls.map(url => ({
+  // 20s overall budget for image downloads — Anthropic's call itself takes
+  // multiple seconds, so we can't afford slow image hosts.
+  const downloadCtrl = new AbortController()
+  const downloadTimeout = setTimeout(() => downloadCtrl.abort(), 20000)
+  let downloaded: Array<{ data: string; mediaType: string } | null>
+  try {
+    downloaded = await Promise.all(
+      httpsUrls.map(url => downloadImageAsBase64(url, downloadCtrl.signal))
+    )
+  } finally {
+    clearTimeout(downloadTimeout)
+  }
+
+  const successful = downloaded.filter((d): d is { data: string; mediaType: string } => d !== null)
+  if (successful.length === 0) {
+    // Every image failed (404, blocked, wrong type, oversized). Don't call
+    // Anthropic — that would just waste tokens.
+    return { dishes: [], menu_section_order: [] }
+  }
+
+  const content: Array<Record<string, unknown>> = successful.map(img => ({
     type: 'image',
-    source: { type: 'url', url },
+    source: { type: 'base64', media_type: img.mediaType, data: img.data },
   }))
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached image' : `${httpsUrls.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${successful.length === 1 ? 'attached image' : `${successful.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
