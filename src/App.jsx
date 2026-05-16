@@ -39,6 +39,7 @@ const RateYourMeal = lazyWithRetry(() => import('./pages/RateYourMeal'), 'RateYo
 const Profile = lazyWithRetry(() => import('./pages/Profile'), 'Profile')
 const Admin = lazyWithRetry(() => import('./pages/Admin'), 'Admin')
 const Login = lazyWithRetry(() => import('./pages/Login'), 'Login')
+const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'), 'AuthCallback')
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'), 'Privacy')
 const Terms = lazyWithRetry(() => import('./pages/Terms'), 'Terms')
 const Support = lazyWithRetry(() => import('./pages/Support'), 'Support')
@@ -134,6 +135,7 @@ function App() {
               <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
               <Route path="/user/:userId" element={<Layout><UserProfile /></Layout>} />
               <Route path="/login" element={<Login />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/cross-device" element={<CrossDevicePkce />} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />

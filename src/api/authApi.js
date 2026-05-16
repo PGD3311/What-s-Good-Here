@@ -444,6 +444,7 @@ export const authApi = {
         email,
         password,
         options: {
+          emailRedirectTo: buildWebRedirectUrl('/auth/callback?type=signup'),
           data: {
             display_name: username,
           },
