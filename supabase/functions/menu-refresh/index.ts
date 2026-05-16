@@ -274,10 +274,11 @@ async function hashContent(text: string): Promise<string> {
     .slice(0, 16) // 16 hex chars = 64 bits, plenty for change detection
 }
 
-type ErrorCode = 'no_menu_url' | 'fetch_timeout' | 'fetch_error' | 'claude_error' | 'parse_error' | 'no_dishes' | 'page_too_short'
+type ErrorCode = 'no_menu_url' | 'fetch_timeout' | 'fetch_error' | 'dns_error' | 'claude_error' | 'parse_error' | 'no_dishes' | 'page_too_short' | 'unknown_error'
 
 function classifyError(error: unknown, context?: string): { code: ErrorCode; message: string; context: Record<string, unknown> } {
   const message = error instanceof Error ? error.message : String(error)
+  const lower = message.toLowerCase()
 
   if (context === 'no_menu_url') {
     return { code: 'no_menu_url', message: 'No menu URL found', context: {} }
@@ -288,20 +289,30 @@ function classifyError(error: unknown, context?: string): { code: ErrorCode; mes
   if (context === 'page_too_short') {
     return { code: 'page_too_short', message: 'Page content too short (<50 chars)', context: {} }
   }
-  if (message.includes('abort') || message.includes('timeout')) {
+  // Match Claude prefixes BEFORE network branches — Claude error bodies can
+  // embed arbitrary upstream text (including phrases like "dns error") that
+  // would otherwise trigger network classifiers below.
+  if (lower.includes('claude api error') || lower.includes('claude image api error') || lower.includes('claude pdf api error')) {
+    return { code: 'claude_error', message, context: {} }
+  }
+  // DNS resolution failure — Deno surfaces this as "dns error: failed to lookup
+  // address information". Must precede the generic "fetch_error" branch because
+  // these errors don't carry an "HTTP <status>" prefix and otherwise fell through
+  // to the catch-all and got mislabelled as claude_error.
+  if (lower.includes('dns error') || lower.includes('failed to lookup address')) {
+    return { code: 'dns_error', message, context: {} }
+  }
+  if (lower.includes('abort') || lower.includes('timeout')) {
     return { code: 'fetch_timeout', message, context: {} }
   }
   if (message.includes('HTTP ')) {
     const statusMatch = message.match(/HTTP (\d+)/)
     return { code: 'fetch_error', message, context: { http_status: statusMatch?.[1] } }
   }
-  if (message.includes('Claude API error')) {
-    return { code: 'claude_error', message, context: {} }
-  }
-  if (message.includes('JSON') || message.includes('parse')) {
+  if (lower.includes('json') || lower.includes('parse')) {
     return { code: 'parse_error', message, context: {} }
   }
-  return { code: 'claude_error', message, context: {} }
+  return { code: 'unknown_error', message, context: {} }
 }
 
 function calculateBackoff(attemptCount: number): Date {
