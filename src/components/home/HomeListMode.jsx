@@ -345,7 +345,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           sub={bestIceCream.restaurant_name}
           stat={(bestIceCream.total_votes || 0) + ' votes \u00B7 rated ' + Number(bestIceCream.avg_rating || 0).toFixed(1)}
           cta={'best ice cream \u2192'}
-          onClick={function () { navigate('/dish/' + bestIceCream.dish_id) }}
+          onClick={function () { onExpandCategory('ice cream') }}
           bottomIcon="/categories/icons/ice-cream-melting.png"
         />
       )}
