@@ -41,8 +41,8 @@ export function Terms() {
             </h2>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               These Terms of Service ("Terms") govern your use of the What's Good Here app and
-              website ("Service"), operated by Daniel Walsh. By using the Service, you agree to
-              these Terms. If you don't agree, please don't use the Service.
+              website ("Service"), operated by Daniel Walsh and Denis Gingras. By using the Service,
+              you agree to these Terms. If you don't agree, please don't use the Service.
             </p>
           </section>
 
@@ -205,7 +205,7 @@ export function Terms() {
                 If you downloaded the iOS app from the Apple App Store, you acknowledge:
               </p>
               <ul className="list-disc list-inside space-y-2">
-                <li>These Terms are between you and Daniel Walsh, not Apple. Apple is not responsible for the app or its content.</li>
+                <li>These Terms are between you and the operators of What's Good Here (Daniel Walsh and Denis Gingras), not Apple. Apple is not responsible for the app or its content.</li>
                 <li>You are granted a limited, non-transferable, non-exclusive license to install and use the app only on Apple-branded devices that you own or control, and as permitted by the App Store Terms of Service.</li>
                 <li>Apple has no obligation to provide maintenance or support for the app.</li>
                 <li>If the app fails to conform to any applicable warranty, you may notify Apple for a refund of the purchase price (if any). Apple has no other warranty obligations.</li>
@@ -266,7 +266,7 @@ export function Terms() {
             <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>
               Contact Us
             </h2>
-            <p className="leading-relaxed mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+            <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               Questions about these Terms? Contact us at:{' '}
               <a
                 href="mailto:wghapp@wghapp.com"
@@ -275,12 +275,8 @@ export function Terms() {
               >
                 wghapp@wghapp.com
               </a>
+              . A mailing address is available on request.
             </p>
-            <address className="not-italic leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-              Daniel Walsh<br />
-              134 Franklin Ter<br />
-              Vineyard Haven, MA 02568
-            </address>
           </section>
         </div>
       </div>

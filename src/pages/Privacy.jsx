@@ -40,8 +40,8 @@ export function Privacy() {
               Overview
             </h2>
             <p className="leading-relaxed mb-3" style={{ color: 'var(--color-text-secondary)' }}>
-              What's Good Here is operated by Daniel Walsh (Martha's Vineyard, Massachusetts).
-              Contact:{' '}
+              What's Good Here is operated by Daniel Walsh and Denis Gingras (Martha's Vineyard,
+              Massachusetts). Contact:{' '}
               <a
                 href="mailto:wghapp@wghapp.com"
                 className="font-medium"
@@ -49,7 +49,7 @@ export function Privacy() {
               >
                 wghapp@wghapp.com
               </a>
-              . Mailing address: Daniel Walsh, 134 Franklin Ter, Vineyard Haven, MA 02568.
+              . A mailing address is available on request.
             </p>
             <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               What's Good Here ("we", "our", or "the app") is a community-driven food discovery
@@ -333,7 +333,7 @@ export function Privacy() {
             <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>
               Contact Us
             </h2>
-            <p className="leading-relaxed mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+            <p className="leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
               If you have questions about this Privacy Policy, please contact us at:{' '}
               <a
                 href="mailto:wghapp@wghapp.com"
@@ -342,12 +342,8 @@ export function Privacy() {
               >
                 wghapp@wghapp.com
               </a>
+              . A mailing address is available on request.
             </p>
-            <address className="not-italic leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-              Daniel Walsh<br />
-              134 Franklin Ter<br />
-              Vineyard Haven, MA 02568
-            </address>
           </section>
         </div>
       </div>
