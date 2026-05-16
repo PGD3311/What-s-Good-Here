@@ -29,7 +29,7 @@ export function Login() {
   )
   const [showLogin, setShowLogin] = useState(isPostConfirmation) // Controls welcome vs login view
   const [mode, setMode] = useState(isPostConfirmation ? 'signin' : 'options') // 'options' | 'signin' | 'signup' | 'forgot'
-  const [usernameStatus, setUsernameStatus] = useState(null) // null | 'checking' | 'available' | 'taken'
+  const [usernameStatus, setUsernameStatus] = useState(null) // null | 'too-short' | 'checking' | 'available' | 'taken'
 
   // Redirect authenticated users to home (or where they came from)
   useEffect(() => {
@@ -55,8 +55,12 @@ export function Login() {
 
   // Check username availability with debounce
   useEffect(() => {
-    if (mode !== 'signup' || !username || username.length < 2) {
+    if (mode !== 'signup' || !username) {
       setUsernameStatus(null)
+      return
+    }
+    if (username.length < 2) {
+      setUsernameStatus('too-short')
       return
     }
 
@@ -576,6 +580,9 @@ export function Login() {
                       </span>
                     )}
                   </div>
+                  {usernameStatus === 'too-short' && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Username must be at least 2 characters</p>
+                  )}
                   {usernameStatus === 'taken' && (
                     <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>This username is taken</p>
                   )}
@@ -619,7 +626,7 @@ export function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || usernameStatus === 'taken' || usernameStatus === 'checking'}
+                  disabled={loading || usernameStatus === 'taken' || usernameStatus === 'checking' || usernameStatus === 'too-short'}
                   className="w-full px-6 py-4 font-semibold rounded-xl hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
                   style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
                 >

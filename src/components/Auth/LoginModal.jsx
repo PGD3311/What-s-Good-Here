@@ -15,7 +15,7 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
   const [username, setUsername] = useState('')
   const [message, setMessage] = useState(null)
   const [mode, setMode] = useState('options') // 'options' | 'signin' | 'signup' | 'forgot'
-  const [usernameStatus, setUsernameStatus] = useState(null) // null | 'checking' | 'available' | 'taken'
+  const [usernameStatus, setUsernameStatus] = useState(null) // null | 'too-short' | 'checking' | 'available' | 'taken'
 
   // Check for pending vote from storage
   const hasPendingVote = getPendingVoteFromStorage() !== null
@@ -33,8 +33,12 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
 
   // Check username availability with debounce
   useEffect(() => {
-    if (mode !== 'signup' || !username || username.length < 2) {
+    if (mode !== 'signup' || !username) {
       setUsernameStatus(null)
+      return
+    }
+    if (username.length < 2) {
+      setUsernameStatus('too-short')
       return
     }
 
@@ -465,6 +469,9 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
                     </span>
                   )}
                 </div>
+                {usernameStatus === 'too-short' && (
+                  <p id="username-status" className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Username must be at least 2 characters</p>
+                )}
                 {usernameStatus === 'taken' && (
                   <p id="username-status" className="text-xs mt-1" style={{ color: 'var(--color-red)' }} role="alert">This username is taken</p>
                 )}
@@ -508,7 +515,7 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
 
               <button
                 type="submit"
-                disabled={loading || usernameStatus === 'taken' || usernameStatus === 'checking'}
+                disabled={loading || usernameStatus === 'taken' || usernameStatus === 'checking' || usernameStatus === 'too-short'}
                 className="w-full px-6 py-4 font-semibold rounded-xl hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
                 style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
               >
