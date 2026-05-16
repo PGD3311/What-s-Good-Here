@@ -2,11 +2,20 @@
 -- to include avatar_url, so the dish-detail and restaurant-detail friend
 -- chips can render profile pictures instead of initial-only circles.
 --
--- Pure additive change to the RETURNS TABLE shape — existing consumers that
--- ignore the new column keep working.
+-- Existing consumers that ignore the new column keep working.
+--
+-- IMPORTANT: Postgres CREATE OR REPLACE FUNCTION cannot change a function's
+-- RETURNS TABLE shape — adding a column is treated as changing the return
+-- type and fails with "cannot change return type of existing function." So
+-- we DROP first, then create, matching the pattern used the last time these
+-- two RPCs changed shape (supabase/migrations/2026-04-13-binary-vote-
+-- removal-phase-2.sql lines 419 and 449).
 --
 -- See supabase/schema.sql for the prior shape and SECURITY DEFINER /
 -- access-control logic — both preserved verbatim here.
+
+DROP FUNCTION IF EXISTS get_friends_votes_for_dish(UUID, UUID);
+DROP FUNCTION IF EXISTS get_friends_votes_for_restaurant(UUID, UUID);
 
 CREATE OR REPLACE FUNCTION get_friends_votes_for_dish(
   p_user_id UUID,
@@ -74,6 +83,9 @@ BEGIN
 END;
 $$;
 
--- No SQL rollback needed — CREATE OR REPLACE FUNCTION is idempotent and the
--- prior signature is preserved in supabase/schema.sql (lines ~5140 and ~5175).
--- To revert: re-run the version from schema.sql.
+-- ROLLBACK: drop these and re-run the prior signatures from supabase/schema.sql
+-- (lines ~5140 and ~5175 — five-column return for the dish RPC, seven-column for
+-- the restaurant RPC, both without avatar_url).
+-- DROP FUNCTION IF EXISTS get_friends_votes_for_dish(UUID, UUID);
+-- DROP FUNCTION IF EXISTS get_friends_votes_for_restaurant(UUID, UUID);
+-- Then re-create from schema.sql.
