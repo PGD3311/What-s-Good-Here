@@ -345,7 +345,7 @@ export function Dish() {
             >
               <span aria-hidden="true">⚑</span>
               <span>
-                <strong style={{ color: 'var(--color-text-primary)' }}>{dish.restaurant_name}</strong> is permanently closed. You can still rate this dish if you remember it.
+                <strong style={{ color: 'var(--color-text-primary)' }}>{dish.restaurant_name}</strong> is closed right now. You can still rate this dish if you remember it.
               </span>
             </div>
           )}
