@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase'
 import { createClassifiedError } from '../utils/errorHandler'
 import { validateUserContent } from '../lib/reviewBlocklist'
 import { logger } from '../utils/logger'
-import { stripExifAndReencode, resizeToSquareJpeg } from '../utils/imageAnalysis'
+import { resizeToSquareJpeg } from '../utils/imageAnalysis'
 
 const AVATAR_ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024
@@ -223,10 +223,12 @@ export const profileApi = {
         throw new Error('You must be logged in to upload an avatar.')
       }
 
+      // resizeToSquareJpeg does both: canvas drawing strips EXIF metadata
+      // and applies EXIF orientation, then re-encodes as JPEG. No need for a
+      // separate strip pass — avoids double-encoding quality loss.
       let processed
       try {
-        const stripped = await stripExifAndReencode(file)
-        processed = await resizeToSquareJpeg(stripped, AVATAR_MAX_EDGE)
+        processed = await resizeToSquareJpeg(file, AVATAR_MAX_EDGE)
       } catch (err) {
         logger.warn('Avatar processing failed', { type: file.type, err })
         throw new Error("Couldn't process this image. Please try a different photo.")
@@ -258,6 +260,19 @@ export const profileApi = {
         .eq('id', user.id)
 
       if (updateError) {
+        // Compensating delete — without this we leak a storage object every time
+        // the DB update fails (network blip, RLS misconfig). Best-effort: log on
+        // failure but still surface the original DB error to the user.
+        const { error: cleanupError } = await supabase.storage
+          .from('avatars')
+          .remove([path])
+        if (cleanupError) {
+          logger.error('Avatar storage cleanup after DB failure failed', {
+            path,
+            cleanupError,
+            updateError,
+          })
+        }
         throw createClassifiedError(updateError)
       }
 

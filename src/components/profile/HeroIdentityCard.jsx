@@ -85,6 +85,7 @@ export function HeroIdentityCard({
           onClick={handleAvatarPick}
           disabled={avatarUploading}
           aria-label={profile?.avatar_url ? 'Change profile picture' : 'Add profile picture'}
+          aria-busy={avatarUploading}
           className="relative w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold flex-shrink-0 overflow-hidden p-0 active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           style={{
             background: 'var(--color-primary)',
@@ -120,12 +121,25 @@ export function HeroIdentityCard({
             </span>
           )}
         </button>
+        {/* iOS Safari sometimes fails to open the picker when the trigger
+            input is display:none. Visually-hidden (off-screen, but still in
+            the layout / focusable) reliably opens the native picker. */}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           onChange={handleAvatarChange}
-          className="hidden"
+          style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
         />
 
         <div className="flex-1 min-w-0">
