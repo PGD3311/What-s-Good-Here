@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
@@ -58,6 +59,42 @@ export function Profile() {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [activeTab, setActiveTab] = useState('journal')
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false)
+
+  // People-tab search state
+  const [peopleQuery, setPeopleQuery] = useState('')
+  const [peopleResults, setPeopleResults] = useState([])
+  const [peopleLoading, setPeopleLoading] = useState(false)
+
+  // Debounced people search — fires followsApi.searchUsers 350ms after typing stops.
+  // Skips queries shorter than 2 chars (matches the API's own guard).
+  useEffect(() => {
+    if (activeTab !== 'people') return
+    const q = peopleQuery.trim()
+    if (q.length < 2) {
+      setPeopleResults([])
+      setPeopleLoading(false)
+      return
+    }
+    setPeopleLoading(true)
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const results = await followsApi.searchUsers(q, 20)
+        if (!cancelled) setPeopleResults(results)
+      } catch (error) {
+        if (!cancelled) {
+          logger.error('People search failed:', error)
+          setPeopleResults([])
+        }
+      } finally {
+        if (!cancelled) setPeopleLoading(false)
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [peopleQuery, activeTab])
   const { playlists: myPlaylists } = useUserPlaylists(user?.id)
   const { playlists: savedPlaylists } = useFollowedPlaylists(!!user)
   const { data: followCounts = { followers: 0, following: 0 } } = useQuery({
@@ -285,7 +322,7 @@ export function Profile() {
             </div>
           )}
 
-          {/* Tabs: Journal / Playlists / Saved */}
+          {/* Tabs: Journal / Playlists / Saved / People */}
           <div
             className="flex"
             style={{
@@ -296,7 +333,7 @@ export function Profile() {
               zIndex: 10,
             }}
           >
-            {['journal', 'playlists', 'saved'].map((tab) => (
+            {['journal', 'playlists', 'saved', 'people'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -392,6 +429,87 @@ export function Profile() {
                       playlist={p}
                       tombstone={p.visibility === 'unavailable'}
                     />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- People tab --- */}
+          {activeTab === 'people' && (
+            <div className="px-4 pt-4 pb-6">
+              <div className="relative mb-4">
+                <svg
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+                  style={{ color: 'var(--color-text-tertiary)' }}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                <input
+                  type="text"
+                  value={peopleQuery}
+                  onChange={(e) => setPeopleQuery(e.target.value)}
+                  placeholder="Search by name"
+                  autoFocus
+                  className="w-full pl-10 pr-3 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
+                  style={{
+                    background: 'var(--color-surface-elevated)',
+                    border: '1px solid var(--color-divider)',
+                    color: 'var(--color-text-primary)',
+                  }}
+                />
+              </div>
+
+              {peopleQuery.trim().length < 2 ? (
+                <div className="py-10 text-center" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>👋</div>
+                  Type a name to find people on the app
+                </div>
+              ) : peopleLoading ? (
+                <div className="flex items-center justify-center py-10" role="status" aria-label="Searching">
+                  <div
+                    className="w-6 h-6 border-2 rounded-full animate-spin"
+                    style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-primary)' }}
+                    aria-hidden="true"
+                  />
+                </div>
+              ) : peopleResults.length === 0 ? (
+                <div className="py-10 text-center" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
+                  No one matches &ldquo;{peopleQuery.trim()}&rdquo;
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: 'var(--color-divider)' }}>
+                  {peopleResults.map((u) => (
+                    <Link
+                      key={u.id}
+                      to={`/user/${u.id}`}
+                      className="w-full flex items-center gap-3 px-1 py-3.5 transition-all hover:bg-black/5 active:scale-[0.99]"
+                    >
+                      <div
+                        className="w-11 h-11 rounded-full flex items-center justify-center font-bold flex-shrink-0"
+                        style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                      >
+                        {u.display_name?.charAt(0).toUpperCase() || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
+                          {u.display_name || 'Anonymous'}
+                        </p>
+                        <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                          {u.follower_count} follower{u.follower_count === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      <svg
+                        className="w-4 h-4 flex-shrink-0"
+                        style={{ color: 'var(--color-text-tertiary)' }}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
                   ))}
                 </div>
               )}
