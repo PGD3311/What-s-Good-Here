@@ -377,7 +377,7 @@ export const votesApi = {
       const userIds = [...new Set(data.map(v => v.user_id).filter(Boolean))]
       const [profileResult, jitterResult] = userIds.length
         ? await Promise.all([
-            supabase.from('profiles').select('id, display_name').in('id', userIds),
+            supabase.from('profiles').select('id, display_name, avatar_url').in('id', userIds),
             supabase.rpc('get_jitter_badges', { p_user_ids: userIds }),
           ])
         : [{ data: [] }, { data: [] }]

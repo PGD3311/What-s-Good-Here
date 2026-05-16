@@ -157,10 +157,14 @@ export function FollowListModal({ userId, type, onClose }) {
                   >
                     {/* Avatar */}
                     <div
-                      className="w-11 h-11 rounded-full flex items-center justify-center font-bold flex-shrink-0"
+                      className="w-11 h-11 rounded-full flex items-center justify-center font-bold flex-shrink-0 overflow-hidden"
                       style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
                     >
-                      {user.display_name?.charAt(0).toUpperCase() || '?'}
+                      {user.avatar_url ? (
+                        <img src={user.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
+                      ) : (
+                        <span>{user.display_name?.charAt(0).toUpperCase() || '?'}</span>
+                      )}
                     </div>
 
                     {/* Info */}

@@ -131,7 +131,7 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
                 <Link
                   key={friend.user_id}
                   to={`/user/${friend.user_id}`}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ring-2"
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ring-2 overflow-hidden"
                   style={{
                     background: 'var(--color-primary)',
                     color: 'var(--color-text-on-primary)',
@@ -139,7 +139,11 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
                     zIndex: 3 - i,
                   }}
                 >
-                  {friend.display_name?.charAt(0).toUpperCase() || '?'}
+                  {friend.avatar_url ? (
+                    <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
+                  ) : (
+                    <span>{friend.display_name?.charAt(0).toUpperCase() || '?'}</span>
+                  )}
                 </Link>
               ))
             })()}

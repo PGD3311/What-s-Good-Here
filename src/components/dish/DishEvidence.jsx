@@ -154,7 +154,7 @@ export function DishEvidence({
                     style={{ minWidth: minWidth + 'px' }}
                   >
                     <div
-                      className="rounded-full flex items-center justify-center font-bold"
+                      className="rounded-full flex items-center justify-center font-bold overflow-hidden"
                       style={{
                         width: avatarSize + 'px',
                         height: avatarSize + 'px',
@@ -163,7 +163,11 @@ export function DishEvidence({
                         fontSize: avatarFont + 'px',
                       }}
                     >
-                      {vote.display_name?.charAt(0).toUpperCase() || '?'}
+                      {vote.avatar_url ? (
+                        <img src={vote.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
+                      ) : (
+                        <span>{vote.display_name?.charAt(0).toUpperCase() || '?'}</span>
+                      )}
                     </div>
                     <span style={{
                       fontSize: nameSize + 'px',
@@ -300,10 +304,14 @@ export function DishEvidence({
                     <div className="flex items-start gap-2 mb-2.5">
                       <Link to={'/user/' + review.user_id} className="flex items-center gap-3 min-w-0 flex-1">
                         <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
+                          className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 overflow-hidden"
                           style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
                         >
-                          {review.profiles?.display_name?.charAt(0).toUpperCase() || '?'}
+                          {review.profiles?.avatar_url ? (
+                            <img src={review.profiles.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
+                          ) : (
+                            <span>{review.profiles?.display_name?.charAt(0).toUpperCase() || '?'}</span>
+                          )}
                         </div>
                         <div className="min-w-0">
                           <span className="flex items-center gap-1.5">

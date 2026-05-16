@@ -44,7 +44,7 @@ async function _paginateFollows(userId, direction, { limit = 20, cursor = null }
   const userIds = results.map(f => f[selectCol])
   const { data: profiles, error: profileError } = await supabase
     .from('profiles')
-    .select('id, display_name, follower_count')
+    .select('id, display_name, avatar_url, follower_count')
     .in('id', userIds)
 
   if (profileError) {
@@ -58,6 +58,7 @@ async function _paginateFollows(userId, direction, { limit = 20, cursor = null }
   const users = results.map(f => ({
     id: f[selectCol],
     display_name: profileMap[f[selectCol]]?.display_name || 'Anonymous',
+    avatar_url: profileMap[f[selectCol]]?.avatar_url || null,
     follower_count: profileMap[f[selectCol]]?.follower_count || 0,
     followed_at: f.created_at,
   }))
