@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { toast } from 'sonner'
+import { profileApi } from '../../api/profileApi'
+import { logger } from '../../utils/logger'
 
 /**
  * Hero Identity Card for the Profile page
@@ -30,8 +33,32 @@ export function HeroIdentityCard({
   handleSaveName,
   setFollowListModal,
   jitterProfile,
+  onAvatarUpdated,
 }) {
   const [jitterExpanded, setJitterExpanded] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const handleAvatarPick = () => {
+    if (avatarUploading) return
+    fileInputRef.current?.click()
+  }
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
+    if (!file) return
+    setAvatarUploading(true)
+    try {
+      await profileApi.uploadAvatar(file)
+      onAvatarUpdated?.()
+    } catch (error) {
+      logger.error('Avatar upload failed:', error)
+      toast.error(error?.message || "Couldn't upload your photo.")
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
   const jitterData = jitterProfile?.profile_data || {}
   const hasJitterDetail = !!(jitterProfile && Object.keys(jitterData).length > 0)
 
@@ -53,16 +80,53 @@ export function HeroIdentityCard({
 
       {/* Avatar + Name row */}
       <div className="flex items-center gap-4">
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold flex-shrink-0"
+        <button
+          type="button"
+          onClick={handleAvatarPick}
+          disabled={avatarUploading}
+          aria-label={profile?.avatar_url ? 'Change profile picture' : 'Add profile picture'}
+          className="relative w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold flex-shrink-0 overflow-hidden p-0 active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           style={{
             background: 'var(--color-primary)',
             color: 'var(--color-text-on-primary)',
             boxShadow: '0 0 0 3px var(--color-primary-muted)',
+            border: 'none',
           }}
         >
-          {profile?.display_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
-        </div>
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+            />
+          ) : (
+            <span>
+              {profile?.display_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
+            </span>
+          )}
+          {avatarUploading && (
+            <span
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ background: 'rgba(0, 0, 0, 0.35)' }}
+              aria-live="polite"
+            >
+              <span
+                className="w-6 h-6 border-2 rounded-full animate-spin"
+                style={{ borderColor: 'rgba(255,255,255,0.35)', borderTopColor: '#fff' }}
+                aria-hidden="true"
+              />
+              <span className="sr-only">Uploading…</span>
+            </span>
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleAvatarChange}
+          className="hidden"
+        />
 
         <div className="flex-1 min-w-0">
           {/* Display Name */}

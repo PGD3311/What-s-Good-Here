@@ -38,6 +38,39 @@ export async function stripExifAndReencode(file, { quality = 0.92 } = {}) {
 }
 
 /**
+ * Center-crop a file to a square and re-encode as JPEG at the given max
+ * dimension. Used for avatars — output is always image/jpeg, square,
+ * at most `maxDim` × `maxDim`. Smaller source images are not upscaled.
+ *
+ * @param {File} file
+ * @param {number} maxDim - Maximum output edge length, px
+ * @returns {Promise<File>} New File 'avatar.jpg' (image/jpeg)
+ */
+export async function resizeToSquareJpeg(file, maxDim) {
+  const img = await loadImageFromFile(file)
+  const srcW = img.naturalWidth || img.width
+  const srcH = img.naturalHeight || img.height
+  const square = Math.min(srcW, srcH)
+  const sx = (srcW - square) / 2
+  const sy = (srcH - square) / 2
+  const out = Math.min(maxDim, square)
+  const canvas = document.createElement('canvas')
+  canvas.width = out
+  canvas.height = out
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D context unavailable')
+  ctx.drawImage(img, sx, sy, square, square, 0, 0, out, out)
+  const blob = await new Promise(resolve =>
+    canvas.toBlob(resolve, 'image/jpeg', 0.9)
+  )
+  if (!blob) throw new Error('Image re-encoding failed')
+  return new File([blob], 'avatar.jpg', {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  })
+}
+
+/**
  * Load an image file into an HTMLImageElement
  */
 function loadImageFromFile(file) {

@@ -226,6 +226,7 @@ export function Profile() {
             handleSaveName={handleSaveName}
             setFollowListModal={setFollowListModal}
             jitterProfile={jitterProfile}
+            onAvatarUpdated={refetchProfile}
           />
 
           {/* Food Story chalkboard — your food identity at a glance */}

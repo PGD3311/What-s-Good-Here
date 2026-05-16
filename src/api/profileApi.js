@@ -2,6 +2,11 @@ import { supabase } from '../lib/supabase'
 import { createClassifiedError } from '../utils/errorHandler'
 import { validateUserContent } from '../lib/reviewBlocklist'
 import { logger } from '../utils/logger'
+import { stripExifAndReencode, resizeToSquareJpeg } from '../utils/imageAnalysis'
+
+const AVATAR_ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024
+const AVATAR_MAX_EDGE = 400
 
 /**
  * Profile API - Centralized data fetching and mutation for user profiles
@@ -183,6 +188,82 @@ export const profileApi = {
       return await this.createProfile(providerName)
     } catch (error) {
       logger.error('Error getting or creating profile:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
+   * Upload a new avatar for the current authenticated user. Strips EXIF,
+   * center-crops to a square, resizes to AVATAR_MAX_EDGE, uploads to the
+   * 'avatars' bucket at `<user_id>/avatar.jpg`, then updates
+   * profiles.avatar_url with a cache-busted public URL so browsers and the
+   * service worker don't shadow the new file.
+   *
+   * TODO: gate uploads through the photo-moderate Edge Function (already
+   * used by src/api/dishPhotosApi.js for dish photos). Avatars currently
+   * skip that pass; revisit before opening to general users at scale.
+   *
+   * @param {File} file - Image file from <input type="file"> or drop
+   * @returns {Promise<{ url: string }>} The new avatar URL (cache-busted)
+   */
+  async uploadAvatar(file) {
+    try {
+      if (!file || !(file instanceof File)) {
+        throw new Error('Invalid file provided')
+      }
+      if (!AVATAR_ALLOWED_MIME.includes(file.type)) {
+        throw new Error('Please choose a JPEG, PNG, WebP, or HEIC image.')
+      }
+      if (file.size > AVATAR_MAX_BYTES) {
+        throw new Error('That image is over 5MB. Please choose a smaller photo.')
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error('You must be logged in to upload an avatar.')
+      }
+
+      let processed
+      try {
+        const stripped = await stripExifAndReencode(file)
+        processed = await resizeToSquareJpeg(stripped, AVATAR_MAX_EDGE)
+      } catch (err) {
+        logger.warn('Avatar processing failed', { type: file.type, err })
+        throw new Error("Couldn't process this image. Please try a different photo.")
+      }
+
+      const path = `${user.id}/avatar.jpg`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, processed, {
+          upsert: true,
+          contentType: 'image/jpeg',
+        })
+
+      if (uploadError) {
+        throw createClassifiedError(uploadError)
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(path)
+
+      // Cache-bust on every upload — the path is stable, so without ?v=<ts>
+      // browsers and the service worker keep showing the old avatar.
+      const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: cacheBustedUrl })
+        .eq('id', user.id)
+
+      if (updateError) {
+        throw createClassifiedError(updateError)
+      }
+
+      return { url: cacheBustedUrl }
+    } catch (error) {
+      logger.error('Error uploading avatar:', error)
       throw error.type ? error : createClassifiedError(error)
     }
   },
