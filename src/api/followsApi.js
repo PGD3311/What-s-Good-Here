@@ -301,49 +301,29 @@ export const followsApi = {
     try {
       if (!query?.trim() || query.length < 2) return []
 
-      // Sanitize query to prevent SQL injection via LIKE patterns
+      // Sanitize query to prevent SQL injection via LIKE patterns (defense in
+      // depth — the RPC also trims and the ILIKE pattern itself is parameterized).
       const sanitized = sanitizeSearchQuery(query, 50)
       if (!sanitized || sanitized.length < 2) return []
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, display_name, avatar_url')
-        .ilike('display_name', `%${sanitized}%`)
-        .limit(limit)
+      // Server-side ranked search. Joins follower counts inline and orders
+      // before LIMIT, so the top-N really is the top-N by follower count.
+      // Prior client-side approach pre-limited the substring match and then
+      // sorted in JS — a high-follower user could be invisible if 20+ low-
+      // follower users alphabetically preceded them.
+      const { data, error } = await supabase.rpc('search_users_with_followers', {
+        p_query: sanitized,
+        p_limit: limit,
+      })
 
       if (error) {
         logger.error('Error searching users:', error)
         throw createClassifiedError(error)
       }
 
-      if (!data || data.length === 0) return []
-
-      // Get follower counts in a single query (avoid N+1)
-      const userIds = data.map(u => u.id)
-      const { data: followCounts, error: followError } = await supabase
-        .from('follows')
-        .select('followed_id')
-        .in('followed_id', userIds)
-
-      if (followError) {
-        logger.error('Error fetching follower counts:', followError)
-        // Graceful degradation - return users without counts
-        return data.map(user => ({ ...user, follower_count: 0 }))
-      }
-
-      // Count followers per user in memory (small dataset - max 10 users)
-      const countMap = {}
-      followCounts?.forEach(f => {
-        countMap[f.followed_id] = (countMap[f.followed_id] || 0) + 1
-      })
-
-      const usersWithCounts = data.map(user => ({
-        ...user,
-        follower_count: countMap[user.id] || 0,
-      }))
-
-      // Sort by follower count descending
-      return usersWithCounts.sort((a, b) => b.follower_count - a.follower_count)
+      // RPC returns rows shaped exactly as the consumer expects: id,
+      // display_name, avatar_url, follower_count.
+      return data || []
     } catch (err) {
       logger.error('Unexpected error in searchUsers:', err)
       throw err
