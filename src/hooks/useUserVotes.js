@@ -80,6 +80,7 @@ function computeStandoutPicks(data, communityAvgs) {
       dish_id: dishId,
       dish_name: vote.dishes.name,
       category: vote.dishes.category,
+      restaurant_id: vote.dishes.restaurants?.id,
       restaurant_name: vote.dishes.restaurants?.name,
       userRating: vote.rating_10,
       communityAvg: community.avg,
@@ -193,17 +194,21 @@ function calculateStats(data) {
     ? catValues.reduce((sum, c) => sum + Math.pow(c / catTotal, 2), 0)
     : 0
 
-  // Favorite restaurant (most votes) + visit count
+  // Favorite restaurant (most votes) + visit count + id (for linking)
   const restaurantCounts = {}
+  const restaurantIdByName = {}
   data.forEach(v => {
     const name = v.dishes.restaurants?.name
+    const id = v.dishes.restaurants?.id
     if (name) {
       restaurantCounts[name] = (restaurantCounts[name] || 0) + 1
+      if (id && !restaurantIdByName[name]) restaurantIdByName[name] = id
     }
   })
   const restaurantsSorted = Object.entries(restaurantCounts).sort((a, b) => b[1] - a[1])
   const favoriteRestaurant = restaurantsSorted.length > 0 ? restaurantsSorted[0][0] : null
   const favoriteRestaurantCount = restaurantsSorted.length > 0 ? restaurantsSorted[0][1] : 0
+  const favoriteRestaurantId = favoriteRestaurant ? restaurantIdByName[favoriteRestaurant] : null
 
   // Count unique restaurants
   const uniqueRestaurants = Object.keys(restaurantCounts).length
@@ -231,6 +236,7 @@ function calculateStats(data) {
     ratingStyle,
     favoriteRestaurant,
     favoriteRestaurantCount,
+    favoriteRestaurantId,
     uniqueRestaurants,
     categoryCounts,
     recentMeals,
@@ -247,6 +253,7 @@ const DEFAULT_STATS = {
   ratingStyle: null,
   favoriteRestaurant: null,
   favoriteRestaurantCount: 0,
+  favoriteRestaurantId: null,
   uniqueRestaurants: 0,
   categoryCounts: {},
   recentMeals: [],

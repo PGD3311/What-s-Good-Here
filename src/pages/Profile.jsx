@@ -361,31 +361,58 @@ export function Profile() {
                     </span>
                   </div>
                 )}
-                {/* Most loyal */}
+                {/* Most loyal — links to the restaurant when we have the id */}
                 {stats.favoriteRestaurant && (
-                  <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                     <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Most loyal</span>
-                    <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                      {stats.favoriteRestaurant} &middot; {stats.favoriteRestaurantCount} {stats.favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
-                    </span>
+                    {stats.favoriteRestaurantId ? (
+                      <Link
+                        to={`/restaurants/${stats.favoriteRestaurantId}`}
+                        style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
+                      >
+                        {stats.favoriteRestaurant} &middot; {stats.favoriteRestaurantCount} {stats.favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
+                      </Link>
+                    ) : (
+                      <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
+                        {stats.favoriteRestaurant} &middot; {stats.favoriteRestaurantCount} {stats.favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
+                      </span>
+                    )}
                   </div>
                 )}
-                {/* Best find */}
+                {/* Best find — links to the dish */}
                 {stats.standoutPicks && stats.standoutPicks.bestFind && (
-                  <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                     <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Best find</span>
-                    <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
-                      {stats.standoutPicks.bestFind.dish_name} &middot; {stats.standoutPicks.bestFind.userRating}
-                    </span>
+                    {stats.standoutPicks.bestFind.dish_id ? (
+                      <Link
+                        to={`/dish/${stats.standoutPicks.bestFind.dish_id}`}
+                        style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}
+                      >
+                        {stats.standoutPicks.bestFind.dish_name} &middot; {stats.standoutPicks.bestFind.userRating}
+                      </Link>
+                    ) : (
+                      <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
+                        {stats.standoutPicks.bestFind.dish_name} &middot; {stats.standoutPicks.bestFind.userRating}
+                      </span>
+                    )}
                   </div>
                 )}
-                {/* Hot take */}
+                {/* Hot take — links to the dish */}
                 {stats.standoutPicks && stats.standoutPicks.harshestTake && (
-                  <div className="flex justify-between items-baseline" style={{ padding: '5px 0' }}>
+                  <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0' }}>
                     <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Hot take</span>
-                    <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                      {stats.standoutPicks.harshestTake.dish_name} &middot; You: {stats.standoutPicks.harshestTake.userRating} &middot; Crowd: {(stats.standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
-                    </span>
+                    {stats.standoutPicks.harshestTake.dish_id ? (
+                      <Link
+                        to={`/dish/${stats.standoutPicks.harshestTake.dish_id}`}
+                        style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
+                      >
+                        {stats.standoutPicks.harshestTake.dish_name} &middot; You: {stats.standoutPicks.harshestTake.userRating} &middot; Crowd: {(stats.standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
+                      </Link>
+                    ) : (
+                      <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
+                        {stats.standoutPicks.harshestTake.dish_name} &middot; You: {stats.standoutPicks.harshestTake.userRating} &middot; Crowd: {(stats.standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

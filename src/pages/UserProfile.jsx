@@ -9,7 +9,7 @@ import { votesApi } from '../api/votesApi'
 import { FollowListModal } from '../components/FollowListModal'
 import { ProfileSkeleton } from '../components/Skeleton'
 import { DataLoadError } from '../components/DataLoadError'
-import { FoodMap, JournalFeed, LocalListCard } from '../components/profile'
+import { JournalFeed, LocalListCard } from '../components/profile'
 import { useUserPlaylists } from '../hooks/useUserPlaylists'
 import { PlaylistStripCard } from '../components/playlists/PlaylistStripCard'
 import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
@@ -257,7 +257,9 @@ export function UserProfile() {
           const comparisons = ratedVotes
             .filter(v => v.dish?.id && communityAvgs[v.dish.id]?.count >= MIN_COMMUNITY)
             .map(v => ({
+              dish_id: v.dish.id,
               dish_name: v.dish.name,
+              restaurant_id: v.dish.restaurant_id,
               restaurant_name: v.dish.restaurant_name,
               userRating: v.rating,
               communityAvg: communityAvgs[v.dish.id].avg,
@@ -342,29 +344,22 @@ export function UserProfile() {
 
   // Handle share profile
   // Compute stats from recent votes — single "My Ratings" shelf, sorted by recency.
-  const { uniqueRestaurants, foodMapStats, ratingStyle, favoriteRestaurant, favoriteRestaurantCount } = useMemo(() => {
+  const { totalVotes, ratingStyle, favoriteRestaurant, favoriteRestaurantCount, favoriteRestaurantId } = useMemo(() => {
     if (!profile?.recent_votes?.length) {
-      return { uniqueRestaurants: 0, foodMapStats: { totalVotes: 0, uniqueRestaurants: 0, categoryCounts: {} }, ratingStyle: null, favoriteRestaurant: null, favoriteRestaurantCount: 0 }
+      return { totalVotes: 0, ratingStyle: null, favoriteRestaurant: null, favoriteRestaurantCount: 0, favoriteRestaurantId: null }
     }
-    const restaurantNames = new Set()
     const restaurantCounts = {}
-    const catCounts = {}
+    const restaurantIdByName = {}
     const ratings = []
     profile.recent_votes.forEach(vote => {
       const isRated = vote.rating != null
       const restName = vote.dish?.restaurant_name
-      if (restName) {
-        // Food Map keeps the broader "visited" semantics — uniqueRestaurants
-        // is "have I been there," not "have I rated something there."
-        restaurantNames.add(restName)
-        // Most loyal counts only rated votes — photo-only / saved-only
-        // entries shouldn't read as loyalty.
-        if (isRated) {
-          restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
-        }
-      }
-      if (vote.dish?.category) {
-        catCounts[vote.dish.category] = (catCounts[vote.dish.category] || 0) + 1
+      const restId = vote.dish?.restaurant_id
+      // Most loyal counts only rated votes — photo-only / saved-only
+      // entries shouldn't read as loyalty.
+      if (restName && isRated) {
+        restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
+        if (restId && !restaurantIdByName[restName]) restaurantIdByName[restName] = restId
       }
       if (isRated) {
         ratings.push(vote.rating)
@@ -398,15 +393,11 @@ export function UserProfile() {
     }
 
     return {
-      uniqueRestaurants: restaurantNames.size,
-      foodMapStats: {
-        totalVotes: profile.recent_votes.length,
-        uniqueRestaurants: restaurantNames.size,
-        categoryCounts: catCounts,
-      },
+      totalVotes: profile.recent_votes.length,
       ratingStyle: style,
       favoriteRestaurant: favRest,
       favoriteRestaurantCount: favCount,
+      favoriteRestaurantId: favRest ? (restaurantIdByName[favRest] || null) : null,
     }
   }, [profile?.recent_votes])
 
@@ -478,8 +469,6 @@ export function UserProfile() {
       </div>
     )
   }
-
-  const totalVotes = foodMapStats.totalVotes
 
   if (viewerHasBlocked) {
     return (
@@ -795,39 +784,60 @@ export function UserProfile() {
               </div>
             )}
             {favoriteRestaurant && (
-              <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                 <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Most loyal</span>
-                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                  {favoriteRestaurant} &middot; {favoriteRestaurantCount} {favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
-                </span>
+                {favoriteRestaurantId ? (
+                  <Link
+                    to={`/restaurants/${favoriteRestaurantId}`}
+                    style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
+                  >
+                    {favoriteRestaurant} &middot; {favoriteRestaurantCount} {favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
+                  </Link>
+                ) : (
+                  <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
+                    {favoriteRestaurant} &middot; {favoriteRestaurantCount} {favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
+                  </span>
+                )}
               </div>
             )}
             {standoutPicks.bestFind && (
-              <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                 <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Best find</span>
-                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
-                  {standoutPicks.bestFind.dish_name} &middot; {standoutPicks.bestFind.userRating}
-                </span>
+                {standoutPicks.bestFind.dish_id ? (
+                  <Link
+                    to={`/dish/${standoutPicks.bestFind.dish_id}`}
+                    style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}
+                  >
+                    {standoutPicks.bestFind.dish_name} &middot; {standoutPicks.bestFind.userRating}
+                  </Link>
+                ) : (
+                  <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
+                    {standoutPicks.bestFind.dish_name} &middot; {standoutPicks.bestFind.userRating}
+                  </span>
+                )}
               </div>
             )}
             {standoutPicks.harshestTake && (
-              <div className="flex justify-between items-baseline" style={{ padding: '5px 0' }}>
+              <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0' }}>
                 <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Hot take</span>
-                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                  {standoutPicks.harshestTake.dish_name} &middot; Them: {standoutPicks.harshestTake.userRating} &middot; Crowd: {(standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
-                </span>
+                {standoutPicks.harshestTake.dish_id ? (
+                  <Link
+                    to={`/dish/${standoutPicks.harshestTake.dish_id}`}
+                    style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
+                  >
+                    {standoutPicks.harshestTake.dish_name} &middot; Them: {standoutPicks.harshestTake.userRating} &middot; Crowd: {(standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
+                  </Link>
+                ) : (
+                  <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
+                    {standoutPicks.harshestTake.dish_name} &middot; Them: {standoutPicks.harshestTake.userRating} &middot; Crowd: {(standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
+                  </span>
+                )}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Food Map */}
-      {totalVotes > 0 && (
-        <div className="px-4 pt-4">
-          <FoodMap stats={foodMapStats} title={`${profile.display_name}'s Food Map`} />
-        </div>
-      )}
 
       {/* Local List */}
       {localList.items.length > 0 && (
