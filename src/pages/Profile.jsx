@@ -447,12 +447,15 @@ export function Profile() {
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
                 </svg>
+                <label htmlFor="people-search" className="sr-only">Search people</label>
                 <input
+                  id="people-search"
                   type="text"
                   value={peopleQuery}
                   onChange={(e) => setPeopleQuery(e.target.value)}
                   placeholder="Search by name"
                   autoFocus
+                  aria-label="Search people"
                   className="w-full pl-10 pr-3 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
                   style={{
                     background: 'var(--color-surface-elevated)',
@@ -480,38 +483,39 @@ export function Profile() {
                   No one matches &ldquo;{peopleQuery.trim()}&rdquo;
                 </div>
               ) : (
-                <div className="divide-y" style={{ borderColor: 'var(--color-divider)' }}>
+                <ul className="divide-y list-none p-0 m-0" style={{ borderColor: 'var(--color-divider)' }}>
                   {peopleResults.map((u) => (
-                    <Link
-                      key={u.id}
-                      to={`/user/${u.id}`}
-                      className="w-full flex items-center gap-3 px-1 py-3.5 transition-all hover:bg-black/5 active:scale-[0.99]"
-                    >
-                      <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center font-bold flex-shrink-0"
-                        style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                    <li key={u.id}>
+                      <Link
+                        to={`/user/${u.id}`}
+                        className="w-full flex items-center gap-3 px-1 py-3.5 transition-all hover:bg-black/5 active:scale-[0.99]"
                       >
-                        {u.display_name?.charAt(0).toUpperCase() || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
-                          {u.display_name || 'Anonymous'}
-                        </p>
-                        <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-                          {u.follower_count} follower{u.follower_count === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <svg
-                        className="w-4 h-4 flex-shrink-0"
-                        style={{ color: 'var(--color-text-tertiary)' }}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                        aria-hidden="true"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
+                        <div
+                          className="w-11 h-11 rounded-full flex items-center justify-center font-bold flex-shrink-0"
+                          style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                        >
+                          {u.display_name?.charAt(0).toUpperCase() || '?'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
+                            {u.display_name || 'Anonymous'}
+                          </p>
+                          <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                            {u.follower_count} follower{u.follower_count === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                        <svg
+                          className="w-4 h-4 flex-shrink-0"
+                          style={{ color: 'var(--color-text-tertiary)' }}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                          aria-hidden="true"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
           )}
