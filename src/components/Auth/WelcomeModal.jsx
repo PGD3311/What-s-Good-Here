@@ -112,7 +112,7 @@ export function WelcomeModal() {
         <div className="relative z-10 text-center px-8">
           {/* Logo — the plate, matches splash page */}
           <div className="flex justify-center" style={{ marginBottom: '12px', position: 'relative', zIndex: 2 }}>
-            <Seal size={88} />
+            <Seal size={88} variant="icon" />
           </div>
 
           {/* Brand name — Amatic SC, matches home + login + splash */}
@@ -211,7 +211,7 @@ export function WelcomeModal() {
           {/* Step icon */}
           {currentStep.id === 'welcome' ? (
             <div className="flex justify-center mb-6">
-              <Seal size={72} />
+              <Seal size={72} variant="icon" />
             </div>
           ) : (
             <div

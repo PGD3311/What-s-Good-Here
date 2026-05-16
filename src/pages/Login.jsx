@@ -232,7 +232,7 @@ export function Login() {
             {/* Logo + Brand */}
             <div className="flex flex-col items-center mb-8">
               <div style={{ marginBottom: '14px', position: 'relative', zIndex: 2 }}>
-                <Seal size={88} ariaLabel="What's Good Here" />
+                <Seal size={88} variant="icon" ariaLabel="What's Good Here" />
               </div>
               <h1
                 style={{
@@ -346,7 +346,7 @@ export function Login() {
           <div className="flex-1 flex flex-col items-center justify-center px-6 pb-12">
             {/* Logo */}
             <div className="flex justify-center mb-6">
-              <Seal size={64} showRing={false} ariaLabel="What's Good Here" />
+              <Seal size={64} variant="icon" ariaLabel="What's Good Here" />
             </div>
 
             {/* Heading */}

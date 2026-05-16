@@ -98,7 +98,7 @@ export function ResetPassword() {
     >
       {/* Logo */}
       <div className="mb-6">
-        <Seal size={96} ariaLabel="What's Good Here" />
+        <Seal size={96} variant="icon" ariaLabel="What's Good Here" />
       </div>
 
       {/* Heading */}

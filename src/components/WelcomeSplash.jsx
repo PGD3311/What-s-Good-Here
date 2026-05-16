@@ -53,10 +53,7 @@ export function WelcomeSplash() {
       <Seal
         className="wgh-splash__seal"
         size={160}
-        plateColor="var(--color-surface)"
-        monoColor="var(--color-primary)"
-        ringColor="var(--color-surface)"
-        borderColor="var(--color-surface)"
+        variant="icon"
       />
       <div className="wgh-splash__wordmark">
         <span className="wgh-splash__line">What&rsquo;s</span>

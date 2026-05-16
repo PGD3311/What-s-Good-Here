@@ -68,7 +68,7 @@ export default function Waitlist() {
         style={{ maxWidth: '560px', margin: '0 auto', width: '100%' }}
       >
         <div className="mb-8">
-          <Seal size={88} ariaLabel="What's Good Here" />
+          <Seal size={88} variant="icon" ariaLabel="What's Good Here" />
         </div>
 
         <h1
