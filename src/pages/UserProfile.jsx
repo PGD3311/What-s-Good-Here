@@ -351,15 +351,22 @@ export function UserProfile() {
     const catCounts = {}
     const ratings = []
     profile.recent_votes.forEach(vote => {
+      const isRated = vote.rating != null
       const restName = vote.dish?.restaurant_name
       if (restName) {
+        // Food Map keeps the broader "visited" semantics — uniqueRestaurants
+        // is "have I been there," not "have I rated something there."
         restaurantNames.add(restName)
-        restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
+        // Most loyal counts only rated votes — photo-only / saved-only
+        // entries shouldn't read as loyalty.
+        if (isRated) {
+          restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
+        }
       }
       if (vote.dish?.category) {
         catCounts[vote.dish.category] = (catCounts[vote.dish.category] || 0) + 1
       }
-      if (vote.rating != null) {
+      if (isRated) {
         ratings.push(vote.rating)
       }
     })
