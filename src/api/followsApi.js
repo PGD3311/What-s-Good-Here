@@ -348,7 +348,7 @@ export const followsApi = {
       // deleted user returns null cleanly instead of an unhandled PGRST116.
       supabase
         .from('profiles')
-        .select('id, display_name, created_at')
+        .select('id, display_name, avatar_url, created_at')
         .eq('id', userId)
         .maybeSingle(),
       // 2. Get follower count
