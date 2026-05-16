@@ -50,8 +50,9 @@ blob-report/
 # Auto-generated build artifacts
 public/bundle-stats.html
 
-# Claude Code scheduled tasks
+# Claude Code scheduled tasks + session state — match at any depth
 .claude/scheduled_tasks.lock
+**/.claude/
 
 # Capacitor / iOS build artifacts
 # We commit the Xcode project, Podfile, and Podfile.lock (for reproducible
