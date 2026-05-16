@@ -99,16 +99,6 @@ export function JournalCard({ dish }) {
           >
             {rating}
           </span>
-          <span
-            style={{
-              color: 'var(--color-text-tertiary)',
-              fontSize: '10px',
-              lineHeight: '1',
-              marginTop: '2px',
-            }}
-          >
-            /10
-          </span>
         </div>
       )}
     </Link>

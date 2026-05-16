@@ -16,7 +16,6 @@ import { votesApi } from '../api/votesApi'
 import { followsApi } from '../api/followsApi'
 import { useLocationContext } from '../context/LocationContext'
 import { useDishes } from '../hooks/useDishes'
-import { useFavorites } from '../hooks/useFavorites'
 import { LoginModal } from '../components/Auth/LoginModal'
 import { RestaurantDishes, RestaurantMenu, MenuImportStatus } from '../components/restaurants'
 import { useMenuImportStatus } from '../hooks/useMenuImportStatus'
@@ -143,8 +142,6 @@ export function RestaurantDetail() {
     setActiveTab(hasVotes ? 'top' : (hasMenuSections ? 'menu' : 'top'))
   }, [dishes, dishesLoading, activeTab])
 
-  const { isFavorite, toggleFavorite } = useFavorites(user?.id)
-
   // Check if user is physically near this restaurant
   const { nearbyRestaurant } = useNearbyRestaurant()
   const isHere = nearbyRestaurant?.id === restaurantId
@@ -191,18 +188,6 @@ export function RestaurantDetail() {
 
   const handleLoginRequired = () => {
     setLoginModalOpen(true)
-  }
-
-  const handleToggleFavorite = async (dishId) => {
-    if (!user) {
-      setLoginModalOpen(true)
-      return
-    }
-    try {
-      await toggleFavorite(dishId)
-    } catch (error) {
-      logger.error('Failed to toggle favorite:', error)
-    }
   }
 
   // Loading state
@@ -628,8 +613,6 @@ export function RestaurantDetail() {
           error={dishesError}
           onVote={handleVote}
           onLoginRequired={handleLoginRequired}
-          isFavorite={isFavorite}
-          onToggleFavorite={handleToggleFavorite}
           user={user}
           searchQuery={dishSearchQuery}
           friendsVotesByDish={friendsVotesByDish}

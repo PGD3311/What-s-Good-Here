@@ -6,14 +6,12 @@ import { logger } from '../utils/logger'
 import { useAuth } from '../context/AuthContext'
 import { shareOrCopy, buildDishShareData } from '../utils/share'
 import { toast } from 'sonner'
-import { useFavorites } from '../hooks/useFavorites'
 import { useDishDetail } from '../hooks/useDishDetail'
 import { useProfile } from '../hooks/useProfile'
 import { useMyLocalList } from '../hooks/useMyLocalList'
 import { ReviewFlow } from '../components/ReviewFlow'
 import { PhotoUploadConfirmation } from '../components/PhotoUploadConfirmation'
 import { LoginModal } from '../components/Auth/LoginModal'
-import { HeartIcon } from '../components/HeartIcon'
 import { DishHero, DishEvidence } from '../components/dish'
 import { AddToPlaylistSheet } from '../components/playlists/AddToPlaylistSheet'
 import { ReportModal } from '../components/ReportModal'
@@ -53,7 +51,6 @@ export function Dish() {
   const [pendingAction, setPendingAction] = useState(null) // 'rate' | null
   const [priorVote, setPriorVote] = useState(null)
   const [existingPhoto, setExistingPhoto] = useState(null)
-  const { isFavorite, toggleFavorite } = useFavorites(user?.id)
   const { profile } = useProfile(user?.id)
   const { dishes: myListDishes, addDish, adding: addingToMyList, loading: myListLoading } = useMyLocalList()
   const isCurator = !!profile?.is_local_curator
@@ -156,18 +153,6 @@ export function Dish() {
       })
     }
     handleVote?.()
-  }
-
-  const handleToggleSave = async () => {
-    if (!user) {
-      setLoginModalOpen(true)
-      return
-    }
-    try {
-      await toggleFavorite(dishId)
-    } catch (error) {
-      logger.error('Failed to toggle favorite:', error)
-    }
   }
 
   const handleBack = () => {
@@ -295,14 +280,6 @@ export function Dish() {
               <polyline points="16 6 12 2 8 6" />
               <line x1="12" y1="2" x2="12" y2="15" />
             </svg>
-          </button>
-          <button
-            onClick={handleToggleSave}
-            aria-label={isFavorite?.(dishId) ? 'Remove from favorites' : 'Add to favorites'}
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95"
-            style={{ color: 'var(--color-text-primary)' }}
-          >
-            <HeartIcon size={22} active={isFavorite?.(dishId)} />
           </button>
           {/* Add to playlist */}
           <button

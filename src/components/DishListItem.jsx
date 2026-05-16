@@ -4,7 +4,6 @@ import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { getRatingColor } from '../utils/ranking'
 import { getCategoryNeonImage, getCategoryEmoji, getDishNameIcon } from '../constants/categories'
 import { RestaurantAvatar } from './RestaurantAvatar'
-import { HeartIcon } from './HeartIcon'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
 /**
@@ -17,8 +16,7 @@ import { openExternalLink } from '../utils/openExternalLink'
  *   showPhoto   - show photo thumbnail (default: false)
  *   showDistance - show distance badge (default: false)
  *   sortBy      - sort mode for value badge display
- *   tab         - for voted variant: 'worth-it' | 'avoid' | 'saved'
- *   onUnsave    - callback for saved tab unsave action
+ *   tab         - for voted variant: 'worth-it' | 'avoid'
  *   reviewText  - optional inline review text (voted variant)
  *   myRating    - current user's rating for comparison (voted other-profile)
  *   theirRating - the profile owner's rating (voted other-profile)
@@ -35,7 +33,6 @@ export const DishListItem = memo(function DishListItem({
   showDistance = false,
   sortBy,
   tab,
-  onUnsave,
   reviewText,
   myRating,
   theirRating,
@@ -364,14 +361,6 @@ export const DishListItem = memo(function DishListItem({
                     </span>
                   )}
                 </div>
-                {tab === 'saved' && onUnsave && (
-                  <button
-                    onClick={function (e) { e.stopPropagation(); onUnsave() }}
-                    className="transition-colors"
-                  >
-                    <HeartIcon size={22} active={true} />
-                  </button>
-                )}
               </div>
             )}
 
