@@ -195,13 +195,12 @@ export const profileApi = {
   /**
    * Upload a new avatar for the current authenticated user. Strips EXIF,
    * center-crops to a square, resizes to AVATAR_MAX_EDGE, uploads to the
-   * 'avatars' bucket at `<user_id>/avatar.jpg`, then updates
-   * profiles.avatar_url with a cache-busted public URL so browsers and the
-   * service worker don't shadow the new file.
-   *
-   * TODO: gate uploads through the photo-moderate Edge Function (already
-   * used by src/api/dishPhotosApi.js for dish photos). Avatars currently
-   * skip that pass; revisit before opening to general users at scale.
+   * 'avatars' bucket at `<user_id>/avatar.jpg`, runs the upload through the
+   * photo-moderate Edge Function (only the `is_unsafe` flag — `is_food_photo`
+   * is dish-specific), then updates profiles.avatar_url with a cache-busted
+   * public URL so browsers and the service worker don't shadow the new file.
+   * Fail-closed: any moderation error rejects the upload and removes the
+   * orphan from storage.
    *
    * @param {File} file - Image file from <input type="file"> or drop
    * @returns {Promise<{ url: string }>} The new avatar URL (cache-busted)
@@ -249,6 +248,35 @@ export const profileApi = {
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(path)
+
+      // Pre-display moderation. Sonnet fetches the URL we hand it, so we use
+      // the plain publicUrl (no cache-buster query param yet). The Edge
+      // Function's allowlist accepts URLs from the avatars bucket too (see
+      // supabase/functions/photo-moderate/index.ts). For avatars we ONLY
+      // enforce `is_unsafe` — the is_food_photo flag is a dish-specific check
+      // and would obviously reject every selfie.
+      //
+      // Fail closed: if the function errors, or the response is missing
+      // is_unsafe, treat as unsafe. Better to refuse than to publish an
+      // unmoderated avatar.
+      const { data: modResult, error: modError } = await supabase.functions.invoke(
+        'photo-moderate',
+        { body: { photo_url: publicUrl } }
+      )
+      const isUnsafe = modError || !modResult || modResult.is_unsafe === true
+      if (isUnsafe) {
+        const { error: removeError } = await supabase.storage.from('avatars').remove([path])
+        if (removeError) {
+          logger.error('photo-moderate: failed to remove rejected avatar from storage', {
+            path, removeError,
+          })
+        }
+        const userMessage = (modResult && modResult.reason)
+          || "Couldn't verify your photo. Please try a different one."
+        if (modError) logger.error('photo-moderate invoke failed (avatar):', modError)
+        else logger.warn('avatar rejected by moderation:', { reason: modResult?.reason })
+        throw new Error(userMessage)
+      }
 
       // Cache-bust on every upload — the path is stable, so without ?v=<ts>
       // browsers and the service worker keep showing the old avatar.

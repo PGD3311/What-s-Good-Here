@@ -177,23 +177,32 @@ serve(async (req) => {
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  // Allowlist: only URLs from THIS project's dish-photos bucket. Without this,
-  // any authenticated user could ask us to moderate arbitrary internet images.
-  const allowedPrefix = supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/dish-photos/` : ''
-  if (!allowedPrefix || !photoUrl.startsWith(allowedPrefix)) {
-    return new Response(JSON.stringify({ error: 'photo_url must point to the dish-photos bucket' }), {
+  // Allowlist: only URLs from THIS project's dish-photos OR avatars buckets.
+  // Without this, any authenticated user could ask us to moderate arbitrary
+  // internet images and burn Anthropic tokens.
+  const dishPrefix = supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/dish-photos/` : ''
+  const avatarPrefix = supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/avatars/` : ''
+  let matchedPrefix = ''
+  if (dishPrefix && photoUrl.startsWith(dishPrefix)) {
+    matchedPrefix = dishPrefix
+  } else if (avatarPrefix && photoUrl.startsWith(avatarPrefix)) {
+    matchedPrefix = avatarPrefix
+  }
+  if (!matchedPrefix) {
+    return new Response(JSON.stringify({ error: 'photo_url must point to the dish-photos or avatars bucket' }), {
       status: 400,
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  // Ownership check. Upload paths are `{user_id}/{dish_id}.jpg`, so the
-  // first path segment after the bucket prefix is the owner's UUID.
-  // Reject mismatches — without this, any authenticated user could ask us
-  // to moderate any other user's photo (still bucket-scoped, but they
-  // could enumerate URLs and burn tokens at someone else's expense, plus
-  // it leaks no-cost photo existence checks).
-  const tail = photoUrl.slice(allowedPrefix.length)
+  // Ownership check. Upload paths are `{user_id}/{dish_id}.jpg` (dish-photos)
+  // or `{user_id}/avatar.jpg` (avatars) — in both buckets the first path
+  // segment after the bucket prefix is the owner's UUID. Reject mismatches —
+  // without this, any authenticated user could ask us to moderate any other
+  // user's photo (still bucket-scoped, but they could enumerate URLs and burn
+  // tokens at someone else's expense, plus it leaks no-cost photo existence
+  // checks).
+  const tail = photoUrl.slice(matchedPrefix.length)
   const ownerSegment = tail.split('/')[0]
   if (ownerSegment !== authUser.id) {
     return new Response(JSON.stringify({ error: 'Photo does not belong to caller' }), {
