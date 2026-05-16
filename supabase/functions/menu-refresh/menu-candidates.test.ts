@@ -276,4 +276,79 @@ describe('findSubMenuPages', () => {
     const out = findSubMenuPages(html, 'https://x.com/')
     expect(out).toEqual([])
   })
+
+  it('matches anchor text "Menu" on non-conventional URL (Farm Neck case)', () => {
+    const html = '<a href="/Default.aspx?p=dynamicmodule&pageid=164">Menu</a>'
+    const out = findSubMenuPages(html, 'https://www.farmneck.net/cafe')
+    expect(out).toEqual(['https://www.farmneck.net/Default.aspx?p=dynamicmodule&pageid=164'])
+  })
+
+  it('preserves query string for anchor-text-matched URLs', () => {
+    const html = '<a href="/page?id=42">Lunch</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/page?id=42'])
+  })
+
+  it('still drops query string for path-matched URLs', () => {
+    const html = '<a href="/lunch?ref=nav">Lunch</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/lunch'])  // path match strips query
+  })
+
+  it('anchor text "Lunch Club" does NOT match (not a menu link)', () => {
+    const html = '<a href="/programs/lunch-program">Lunch Club</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
+  })
+
+  it('anchor text "Drinks Menu" rejected by negative-text disqualifier', () => {
+    const html = '<a href="/Default.aspx?p=drinks">Drinks Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
+  })
+
+  it('anchor text "Catering Menu" rejected by negative-text disqualifier', () => {
+    const html = '<a href="/Default.aspx?p=catering">Catering Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
+  })
+
+  it('anchor text "Lunch & Dinner" matches (multi-meal nav)', () => {
+    const html = '<a href="/Default.aspx?p=all">Lunch & Dinner</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/Default.aspx?p=all'])
+  })
+
+  it('does not follow PDF/image links as sub-pages (handled by candidate discovery)', () => {
+    const html = '<a href="/lunch-menu.pdf">Lunch Menu</a><a href="/menu.png">Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
+  })
+
+  it('treats ASPX-style URLs with different query strings as DIFFERENT pages', () => {
+    // When the base URL has a non-conventional path (Default.aspx), query
+    // string is treated as load-bearing — /Default.aspx?p=200 is NOT a
+    // self-link to /Default.aspx?p=164.
+    const html = '<a href="/Default.aspx?p=200">Lunch Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/Default.aspx?p=164')
+    expect(out).toEqual(['https://x.com/Default.aspx?p=200'])
+  })
+
+  it('skips ASPX self-link when query string matches exactly', () => {
+    const html = '<a href="/Default.aspx?p=164">Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/Default.aspx?p=164')
+    expect(out).toEqual([])
+  })
+
+  it('decodes &amp; in anchor text so multi-meal nav still matches', () => {
+    const html = '<a href="/page?type=combo">Lunch &amp; Dinner</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/page?type=combo'])
+  })
+
+  it('disqualifies "Drinks Menu" even when URL path matches /menu', () => {
+    const html = '<a href="/drinks-menu">Drinks Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual([])
+  })
 })

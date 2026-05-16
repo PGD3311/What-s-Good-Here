@@ -220,19 +220,64 @@ const SUB_MENU_PATH_PATTERNS = [
   /\/(?:[\w-]*-)?menu(?:-\d+)?\/?$/i,  // /menu-1, /our-menu — but only as standalone path
 ]
 
+// Anchor-text fallback for sites whose URLs don't follow the convention above —
+// ASP.NET (Default.aspx?p=…), classic PHP (index.php?id=…), Vue/React route
+// hashes, etc. Tighter than "contains a meal word": require either an explicit
+// 'menu' token OR a standalone meal name (≤3 trimmed tokens), so that
+// 'Lunch Club' / 'Birthday Brunch' / 'Dinner Party' don't become menu URLs.
+// Decode &amp; before matching so `Lunch &amp; Dinner` reaches the multi-meal regex.
+const SUB_MENU_ANCHOR_PATTERNS = [
+  /\bmenus?\b/i,                                              // 'Menu', 'Menus', 'Lunch Menu', 'Our menu'
+  /^\s*(brunch|lunch|dinner|breakfast)\s*$/i,                 // 'Lunch' alone
+  /^\s*(brunch|lunch|dinner|breakfast)\s+(?:&|and|\+|\/)\s*(brunch|lunch|dinner|breakfast)\s*$/i,  // 'Lunch & Dinner', 'Lunch and Dinner', 'Lunch / Dinner'
+]
+
+// Anchor text that explicitly disqualifies a link even if it contains a menu
+// word ("Drinks Menu" / "Catering Menu" / "Gift Cards Menu" / "Wine List").
+// Applied to BOTH path-match and anchor-text-match modes so a /menu URL with
+// text "Drinks Menu" doesn't sneak through.
+const SUB_MENU_NEGATIVE_TEXT = [
+  /\bbeverages?\b/i,
+  /\bdrinks?\b/i,
+  /\bcocktails?\b/i,
+  /\bwines?\b/i,
+  /\bspirits?\b/i,
+  /\bbeers?\b/i,
+  /\bbar\b/i,
+  /\bhappy[\s-]?hour\b/i,
+  /\bcatering\b/i,
+  /\bevents?\b/i,
+  /\bgift[\s-]?cards?\b/i,
+  /\bprivate\b/i,
+]
+
 /**
  * Find sub-menu page URLs on a parent menu page. Used as Pattern 1 fallback
  * when the menu page itself yielded no dishes — many restaurants split their
  * menu across /brunch, /lunch, /dinner instead of putting it all on /menu.
  *
- * Same-origin only (don't follow external links). Capped to keep cost bounded.
+ * Two match strategies:
+ *  - URL-path match (existing): `/brunch`, `/our-dinner`, etc. Dedup/output
+ *    strip query/hash because the path uniquely identifies the resource.
+ *  - Anchor-text match (new): for non-conventional URLs (Default.aspx?p=164,
+ *    /page?id=42) where the query string IS the resource identifier. The
+ *    full URL is preserved through dedup and output.
+ *
+ * Same-origin only. PDFs/images skipped (those are asset candidates).
+ * Capped to keep cost bounded.
  */
 export function findSubMenuPages(html: string, baseUrl: string, max = 4): string[] {
   const base = new URL(baseUrl)
-  const baseNormalized = base.origin + base.pathname  // strip query/hash for self-link check
-  const found = new Set<string>()
+  // Compute the base's dedup/self-link key the SAME way we compute candidate
+  // targets below, so a link to the same logical page (under either matching
+  // mode) is correctly recognised as a self-reference and skipped.
+  const baseIsPathConventional = SUB_MENU_PATH_PATTERNS.some(p => p.test(base.pathname))
+  const baseKey = baseIsPathConventional
+    ? base.origin + base.pathname                                // /menu?ref=nav and /menu are the same page
+    : base.origin + base.pathname + base.search                  // /Default.aspx?p=164 and /Default.aspx?p=200 are different
+  const found = new Set<string>([baseKey])
   const out: string[] = []
-  const anchorRegex = /<a\b[^>]*\shref=["']([^"']+)["']/gi
+  const anchorRegex = /<a\b[^>]*\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
   let m
   while ((m = anchorRegex.exec(html)) !== null) {
     let absolute: URL
@@ -242,12 +287,29 @@ export function findSubMenuPages(html: string, baseUrl: string, max = 4): string
       continue
     }
     if (absolute.origin !== base.origin) continue
-    const normalized = absolute.origin + absolute.pathname  // drop ?query #hash
-    if (normalized === baseNormalized) continue  // skip self-links (compare normalized)
-    if (!SUB_MENU_PATH_PATTERNS.some(p => p.test(absolute.pathname))) continue
-    if (found.has(normalized)) continue
-    found.add(normalized)
-    out.push(normalized)
+    if (PDF_EXT.test(absolute.href) || IMAGE_EXT.test(absolute.href)) continue  // assets, not sub-pages
+
+    // Decode &amp; / &#38; so multi-meal anchors like "Lunch &amp; Dinner"
+    // reach the regex unaltered. stripTags doesn't decode entities.
+    const innerText = stripTags(m[2]).replace(/&amp;/gi, '&').replace(/&#38;/g, '&').slice(0, 100)
+    if (SUB_MENU_NEGATIVE_TEXT.some(p => p.test(innerText))) continue  // disqualify in BOTH modes
+
+    const pathMatches = SUB_MENU_PATH_PATTERNS.some(p => p.test(absolute.pathname))
+    let target: string
+    if (pathMatches) {
+      target = absolute.origin + absolute.pathname  // drop query/hash — path uniquely identifies the resource
+    } else {
+      const textMatches = SUB_MENU_ANCHOR_PATTERNS.some(p => p.test(innerText))
+      if (!textMatches) continue
+      // Preserve query (likely load-bearing) but DROP hash (fragments only
+      // matter to the browser, not the fetcher; would otherwise burn `max`
+      // slots on /page#a + /page#b duplicates).
+      target = absolute.origin + absolute.pathname + absolute.search
+    }
+
+    if (found.has(target)) continue
+    found.add(target)
+    out.push(target)
     if (out.length >= max) break
   }
   return out
