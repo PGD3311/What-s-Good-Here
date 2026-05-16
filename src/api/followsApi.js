@@ -306,7 +306,7 @@ export const followsApi = {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name')
+        .select('id, display_name, avatar_url')
         .ilike('display_name', `%${sanitized}%`)
         .limit(limit)
 

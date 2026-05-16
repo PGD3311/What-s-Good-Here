@@ -60,7 +60,7 @@ export function Profile() {
   const [activeTab, setActiveTab] = useState('journal')
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false)
 
-  // People-tab search state
+  // People search state — always-on inline search bar above Your Food Story.
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleResults, setPeopleResults] = useState([])
   const [peopleLoading, setPeopleLoading] = useState(false)
@@ -68,7 +68,6 @@ export function Profile() {
   // Debounced people search — fires followsApi.searchUsers 350ms after typing stops.
   // Skips queries shorter than 2 chars (matches the API's own guard).
   useEffect(() => {
-    if (activeTab !== 'people') return
     const q = peopleQuery.trim()
     if (q.length < 2) {
       setPeopleResults([])
@@ -94,7 +93,7 @@ export function Profile() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [peopleQuery, activeTab])
+  }, [peopleQuery])
   const { playlists: myPlaylists } = useUserPlaylists(user?.id)
   const { playlists: savedPlaylists } = useFollowedPlaylists(!!user)
   const { data: followCounts = { followers: 0, following: 0 } } = useQuery({
@@ -229,6 +228,110 @@ export function Profile() {
             onAvatarUpdated={refetchProfile}
           />
 
+          {/* Inline people search — always visible above Your Food Story */}
+          <div style={{ padding: '12px 16px 0' }}>
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+                style={{ color: 'var(--color-text-tertiary)' }}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+              </svg>
+              <label htmlFor="people-search-top" className="sr-only">Search people</label>
+              <input
+                id="people-search-top"
+                type="text"
+                value={peopleQuery}
+                onChange={(e) => setPeopleQuery(e.target.value)}
+                placeholder="Find people on the app"
+                aria-label="Search people"
+                className="w-full pl-10 pr-9 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
+                style={{
+                  background: 'var(--color-surface-elevated)',
+                  border: '1px solid var(--color-divider)',
+                  color: 'var(--color-text-primary)',
+                }}
+              />
+              {peopleQuery && (
+                <button
+                  type="button"
+                  onClick={() => setPeopleQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)' }}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {peopleQuery.trim().length >= 2 && (
+              <div
+                className="mt-2 rounded-xl overflow-hidden"
+                style={{
+                  background: 'var(--color-surface-elevated)',
+                  border: '1px solid var(--color-divider)',
+                }}
+              >
+                {peopleLoading ? (
+                  <div className="flex items-center justify-center py-6" role="status" aria-label="Searching">
+                    <div
+                      className="w-5 h-5 border-2 rounded-full animate-spin"
+                      style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-primary)' }}
+                      aria-hidden="true"
+                    />
+                  </div>
+                ) : peopleResults.length === 0 ? (
+                  <div className="py-6 text-center" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
+                    No one matches &ldquo;{peopleQuery.trim()}&rdquo;
+                  </div>
+                ) : (
+                  <ul className="divide-y list-none p-0 m-0" style={{ borderColor: 'var(--color-divider)' }}>
+                    {peopleResults.map((u) => (
+                      <li key={u.id}>
+                        <Link
+                          to={`/user/${u.id}`}
+                          className="w-full flex items-center gap-3 px-3 py-3 transition-all hover:bg-black/5 active:scale-[0.99]"
+                        >
+                          <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0 overflow-hidden"
+                            style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                          >
+                            {u.avatar_url ? (
+                              <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{u.display_name?.charAt(0).toUpperCase() || '?'}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
+                              {u.display_name || 'Anonymous'}
+                            </p>
+                            <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                              {u.follower_count} follower{u.follower_count === 1 ? '' : 's'}
+                            </p>
+                          </div>
+                          <svg
+                            className="w-4 h-4 flex-shrink-0"
+                            style={{ color: 'var(--color-text-tertiary)' }}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                            aria-hidden="true"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Food Story chalkboard — your food identity at a glance */}
           {stats.totalVotes > 0 && (
             <div style={{ padding: '12px 16px 0' }}>
@@ -323,7 +426,7 @@ export function Profile() {
             </div>
           )}
 
-          {/* Tabs: Journal / Playlists / Saved / People */}
+          {/* Tabs: Journal / Playlists / Saved */}
           <div
             className="flex"
             style={{
@@ -334,7 +437,7 @@ export function Profile() {
               zIndex: 10,
             }}
           >
-            {['journal', 'playlists', 'saved', 'people'].map((tab) => (
+            {['journal', 'playlists', 'saved'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -436,90 +539,6 @@ export function Profile() {
             </div>
           )}
 
-          {/* --- People tab --- */}
-          {activeTab === 'people' && (
-            <div className="px-4 pt-4 pb-6">
-              <div className="relative mb-4">
-                <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-                  style={{ color: 'var(--color-text-tertiary)' }}
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                  aria-hidden="true"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-                </svg>
-                <label htmlFor="people-search" className="sr-only">Search people</label>
-                <input
-                  id="people-search"
-                  type="text"
-                  value={peopleQuery}
-                  onChange={(e) => setPeopleQuery(e.target.value)}
-                  placeholder="Search by name"
-                  autoFocus
-                  aria-label="Search people"
-                  className="w-full pl-10 pr-3 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
-                  style={{
-                    background: 'var(--color-surface-elevated)',
-                    border: '1px solid var(--color-divider)',
-                    color: 'var(--color-text-primary)',
-                  }}
-                />
-              </div>
-
-              {peopleQuery.trim().length < 2 ? (
-                <div className="py-10 text-center" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>👋</div>
-                  Type a name to find people on the app
-                </div>
-              ) : peopleLoading ? (
-                <div className="flex items-center justify-center py-10" role="status" aria-label="Searching">
-                  <div
-                    className="w-6 h-6 border-2 rounded-full animate-spin"
-                    style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-primary)' }}
-                    aria-hidden="true"
-                  />
-                </div>
-              ) : peopleResults.length === 0 ? (
-                <div className="py-10 text-center" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
-                  No one matches &ldquo;{peopleQuery.trim()}&rdquo;
-                </div>
-              ) : (
-                <ul className="divide-y list-none p-0 m-0" style={{ borderColor: 'var(--color-divider)' }}>
-                  {peopleResults.map((u) => (
-                    <li key={u.id}>
-                      <Link
-                        to={`/user/${u.id}`}
-                        className="w-full flex items-center gap-3 px-1 py-3.5 transition-all hover:bg-black/5 active:scale-[0.99]"
-                      >
-                        <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center font-bold flex-shrink-0"
-                          style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
-                        >
-                          {u.display_name?.charAt(0).toUpperCase() || '?'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
-                            {u.display_name || 'Anonymous'}
-                          </p>
-                          <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-                            {u.follower_count} follower{u.follower_count === 1 ? '' : 's'}
-                          </p>
-                        </div>
-                        <svg
-                          className="w-4 h-4 flex-shrink-0"
-                          style={{ color: 'var(--color-text-tertiary)' }}
-                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                          aria-hidden="true"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
 
 
           <CreatePlaylistModal
