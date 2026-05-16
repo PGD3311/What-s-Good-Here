@@ -473,7 +473,7 @@ export function LoginModal({ isOpen, onClose, pendingAction = null }) {
                   <p id="username-status" className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Username must be at least 2 characters</p>
                 )}
                 {usernameStatus === 'taken' && (
-                  <p id="username-status" className="text-xs mt-1" style={{ color: 'var(--color-red)' }} role="alert">This username is taken</p>
+                  <p id="username-status" className="text-xs mt-1" style={{ color: 'var(--color-red)' }} role="alert">Someone already picked that one. Try another.</p>
                 )}
                 {usernameStatus === 'available' && (
                   <p id="username-status" className="text-xs mt-1" style={{ color: 'var(--color-emerald)' }}>Username available!</p>

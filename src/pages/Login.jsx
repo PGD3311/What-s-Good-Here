@@ -584,7 +584,7 @@ export function Login() {
                     <p className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Username must be at least 2 characters</p>
                   )}
                   {usernameStatus === 'taken' && (
-                    <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>This username is taken</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>Someone already picked that one. Try another.</p>
                   )}
                   {usernameStatus === 'available' && (
                     <p className="text-xs mt-1" style={{ color: 'var(--color-success)' }}>Username available!</p>

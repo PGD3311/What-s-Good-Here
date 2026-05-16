@@ -32,6 +32,7 @@ function transformDish(data) {
     order_url: data.restaurants?.order_url,
     toast_slug: data.restaurants?.toast_slug,
     restaurant_phone: data.restaurants?.phone,
+    restaurant_is_open: data.restaurants?.is_open !== false,
   }
 }
 

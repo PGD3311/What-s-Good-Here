@@ -508,7 +508,8 @@ export const dishesApi = {
             phone,
             website_url,
             toast_slug,
-            order_url
+            order_url,
+            is_open
           )
         `)
         .eq('id', dishId)

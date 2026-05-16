@@ -333,6 +333,23 @@ export function Dish() {
             parentDish={parentDish}
           />
 
+          {dish.restaurant_is_open === false && (
+            <div
+              className="mx-4 mt-3 mb-1 px-4 py-3 rounded-xl text-sm flex items-start gap-2"
+              style={{
+                background: 'var(--color-surface-elevated)',
+                border: '1px solid var(--color-divider)',
+                color: 'var(--color-text-secondary)',
+              }}
+              role="status"
+            >
+              <span aria-hidden="true">⚑</span>
+              <span>
+                <strong style={{ color: 'var(--color-text-primary)' }}>{dish.restaurant_name}</strong> is permanently closed. You can still rate this dish if you remember it.
+              </span>
+            </div>
+          )}
+
           {/* LAYER 2: THE ACTION — Rate CTA + inline rate flow */}
           <div className="p-4 space-y-3">
             <button
