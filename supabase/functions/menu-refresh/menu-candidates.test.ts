@@ -191,6 +191,66 @@ describe('discoverMenuCandidates', () => {
     const out = discoverMenuCandidates(html, 'https://x.com/')
     expect(out.map(c => c.url)).toEqual([])
   })
+
+  // Menu-context fallback for neutral-score images (Port Hunter case)
+  it('promotes neutral-score image when on /menu page and no scored image exists', () => {
+    const html = '<img src="https://cdn.x.com/Screen+Shot+2025-05-20.png">'
+    const out = discoverMenuCandidates(html, 'https://x.com/menu')
+    expect(out).toHaveLength(1)
+    expect(out[0].url).toBe('https://cdn.x.com/Screen+Shot+2025-05-20.png')
+    expect(out[0].score).toBe(0)
+  })
+
+  it('does NOT promote neutral-score image when NOT on a menu page', () => {
+    const html = '<img src="https://cdn.x.com/Screen+Shot+2025-05-20.png">'
+    const out = discoverMenuCandidates(html, 'https://x.com/about')
+    expect(out).toEqual([])
+  })
+
+  it('does NOT promote any image when one ALREADY scored above zero', () => {
+    const html = `
+      <img src="https://cdn.x.com/dinner-menu.png">
+      <img src="https://cdn.x.com/Screen+Shot+2025-05-20.png">
+    `
+    const out = discoverMenuCandidates(html, 'https://x.com/menu')
+    expect(out.map(c => c.url)).toEqual(['https://cdn.x.com/dinner-menu.png'])
+  })
+
+  it('promotes only the TOP neutral image, not multiples (caps vision budget)', () => {
+    const html = `
+      <img src="https://cdn.x.com/photo1.jpg">
+      <img src="https://cdn.x.com/photo2.jpg">
+      <img src="https://cdn.x.com/photo3.jpg">
+    `
+    const out = discoverMenuCandidates(html, 'https://x.com/menu')
+    expect(out).toHaveLength(1)
+    expect(out[0].url).toBe('https://cdn.x.com/photo1.jpg')
+  })
+
+  it('negative-keyword image (logo) is NOT promoted by the fallback', () => {
+    const html = '<img src="https://cdn.x.com/site-logo.png">'
+    const out = discoverMenuCandidates(html, 'https://x.com/menu')
+    expect(out).toEqual([])
+  })
+
+  it('cancellation-to-zero image (positive + negative) is NOT promoted', () => {
+    // 'menu' (+5) + 'food' (+3) + 'giftcards' (-8) = 0 BUT a negative keyword
+    // fired. Don't promote — it's a gift card menu image, not a food menu.
+    const html = '<img src="https://cdn.x.com/menu-food-giftcards.png">'
+    const out = discoverMenuCandidates(html, 'https://x.com/menu')
+    expect(out).toEqual([])
+  })
+
+  it('does NOT fire neutral-image fallback when ANY PDF candidate exists', () => {
+    // PDF is cheaper per token and more likely the actual menu. Leave the
+    // image alone — extractor will fall through to text/sub-page if PDF fails.
+    const html = `
+      <a href="/uploads/menu-83fa.pdf">Menu</a>
+      <img src="https://cdn.x.com/Screen+Shot.png">
+    `
+    const out = discoverMenuCandidates(html, 'https://x.com/menu')
+    expect(out.map(c => c.url)).toEqual(['https://x.com/uploads/menu-83fa.pdf'])
+  })
 })
 
 describe('findSubMenuPages', () => {

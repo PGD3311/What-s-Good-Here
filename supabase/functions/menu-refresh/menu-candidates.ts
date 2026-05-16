@@ -107,9 +107,10 @@ function normalize(s: string): string {
   return safeDecode(s).replace(/_/g, ' ')
 }
 
-export function scoreCandidate(url: string, context: string = ''): { score: number; evidence: string } {
+export function scoreCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
   const decoded = `${normalize(url)} ${normalize(context)}`
   let score = 0
+  let hasNegative = false
   const hits: string[] = []
   for (const { pattern, weight } of POSITIVE_KEYWORDS) {
     if (pattern.test(decoded)) {
@@ -120,10 +121,11 @@ export function scoreCandidate(url: string, context: string = ''): { score: numb
   for (const { pattern, weight } of NEGATIVE_KEYWORDS) {
     if (pattern.test(decoded)) {
       score += weight
+      hasNegative = true
       hits.push(`${weight}:${pattern.source}`)
     }
   }
-  return { score, evidence: hits.join(' ') }
+  return { score, evidence: hits.join(' '), hasNegative }
 }
 
 interface RawMatch {
@@ -325,19 +327,55 @@ export function findSubMenuPages(html: string, baseUrl: string, max = 4): string
  * - Images require score > 0 (vision is per-pixel-token expensive; without a real
  *   menu signal we'd burn budget on logos/heroes/galleries).
  *
+ * Menu-context fallback (last resort): if the base URL pathname is clearly a
+ * menu page (matches SUB_MENU_PATH_PATTERNS) AND no image cleared the > 0
+ * threshold, promote the top neutral-score image (score === 0, no negative
+ * keywords). Catches restaurants who upload their menu as a screenshot to
+ * Squarespace/Wix with a generic filename like `Screen+Shot+2025-05-20.png`
+ * that has no menu keyword for the scorer to latch onto. Capped to the single
+ * top neutral image so we don't burn vision budget on gallery pages.
+ *
  * Caller decides per-type caps.
  */
 export function discoverMenuCandidates(html: string, baseUrl: string): MenuCandidate[] {
   const raw = extractRawMatches(html, baseUrl)
   const candidates: MenuCandidate[] = []
+  const neutralImages: MenuCandidate[] = []
   for (const r of raw) {
     const type = classifyType(r.url)
     if (!type) continue
-    const { score, evidence } = scoreCandidate(r.url, r.context)
+    const { score, evidence, hasNegative } = scoreCandidate(r.url, r.context)
     const passes = type === 'pdf' ? score >= 0 : score > 0
-    if (!passes) continue
-    candidates.push({ url: r.url, type, score, source: r.source, evidence })
+    if (passes) {
+      candidates.push({ url: r.url, type, score, source: r.source, evidence })
+    } else if (type === 'image' && score === 0 && !hasNegative) {
+      // Truly unsignaled image (no positive keywords AND no negative keywords
+      // matched). Eligible for the menu-context fallback below. Explicit
+      // hasNegative check matters because score === 0 could also come from
+      // positive+negative cancellation (menu+giftcards = +5-8 = -3 nope,
+      // but menu+food+giftcards = +5+3-8 = 0 — we DO NOT want to try those).
+      neutralImages.push({ url: r.url, type, score, source: r.source, evidence })
+    }
   }
+
+  // Only fire fallback when there are NO other candidates of any type. If a
+  // scored image or even a score-0 PDF exists, prefer those — they're either
+  // higher-confidence (scored image) or cheaper per token (PDF). We don't
+  // want to slot a vision-mode neutral image ahead of a real candidate on
+  // tie-break inside tryAssetExtraction.
+  if (candidates.length === 0 && neutralImages.length > 0) {
+    try {
+      const basePath = new URL(baseUrl).pathname
+      if (SUB_MENU_PATH_PATTERNS.some(p => p.test(basePath))) {
+        // Top neutral in extractor order (anchors → imgs → generic attrs).
+        // Don't burn vision budget on gallery pages — single image only.
+        candidates.push(neutralImages[0])
+      }
+    } catch {
+      // Bad baseUrl — skip the fallback rather than crash.
+    }
+  }
+
   // Sort by score desc; for tie-breaks (e.g. multiple score-0 PDFs) preserve order.
   candidates.sort((a, b) => b.score - a.score)
   return candidates
