@@ -15,6 +15,8 @@ export function TopBar() {
         <Seal
           size={36}
           variant="icon"
+          showBackground={false}
+          showRim={false}
           ariaLabel="What's Good Here"
         />
 
