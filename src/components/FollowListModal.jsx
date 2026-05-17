@@ -373,6 +373,7 @@ export function FollowListModal({ userId, type, onClose }) {
 }
 
 function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowToggle }) {
+  const displayName = user.display_name || 'Anonymous'
   const followerLabel = user.follower_count === 0
     ? 'No followers yet'
     : user.follower_count === 1
@@ -384,7 +385,7 @@ function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowTo
       <div
         role="link"
         tabIndex={0}
-        aria-label={`${user.display_name} profile`}
+        aria-label={`${displayName} profile`}
         onClick={onRowClick}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick() } }}
         className="w-full flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-black/[0.04] focus:outline-none focus-visible:bg-black/[0.04]"
@@ -397,13 +398,13 @@ function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowTo
           {user.avatar_url ? (
             <img src={user.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
           ) : (
-            <span>{user.display_name?.charAt(0).toUpperCase() || '?'}</span>
+            <span>{displayName.charAt(0).toUpperCase()}</span>
           )}
         </div>
 
         <div className="flex-1 min-w-0">
           <p className="truncate" style={{ color: 'var(--color-text-primary)', fontWeight: 500, fontSize: 16 }}>
-            {user.display_name || 'Anonymous'}
+            {displayName}
           </p>
           <p className="truncate" style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>
             {followerLabel}
@@ -418,7 +419,7 @@ function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowTo
               // Prevent Enter/Space from bubbling to row container and triggering navigation
               if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
             }}
-            aria-label={isFollowing ? `Unfollow ${user.display_name}` : `Follow ${user.display_name}`}
+            aria-label={isFollowing ? `Unfollow ${displayName}` : `Follow ${displayName}`}
             className="px-4 rounded-full transition-colors flex-shrink-0"
             style={{
               height: 32,

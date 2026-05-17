@@ -48,6 +48,19 @@ export function useFocusTrap(isOpen, onClose, { initialFocusRef } = {}) {
     }
   }, [isOpen])
 
+  // Also restore focus on unmount — many callers (e.g. FollowListModal) toggle
+  // visibility by conditional render rather than flipping `isOpen` to false,
+  // so the effect above never fires. Without this cleanup, keyboard focus is
+  // orphaned on <body> after the modal goes away.
+  useEffect(() => {
+    return () => {
+      if (previousActiveElement.current && typeof previousActiveElement.current.focus === 'function') {
+        previousActiveElement.current.focus()
+        previousActiveElement.current = null
+      }
+    }
+  }, [])
+
   // Handle keyboard events
   const handleKeyDown = useCallback((e) => {
     if (!isOpen) return
