@@ -5,11 +5,31 @@
       {
         "appIDs": ["K447QTHBR9.com.whatsgoodhere.app"],
         "paths": [
+          "/",
+          "/dish/*",
+          "/restaurants",
+          "/restaurants/*",
+          "/user/*",
+          "/profile",
+          "/playlist/*",
+          "/locals",
+          "/locals/*",
+          "/my-list",
           "/auth/*",
           "/reset-password",
           "/reset-password/*"
         ],
         "components": [
+          { "/": "/", "comment": "Homepage (map + list dual mode) — open app" },
+          { "/": "/dish/*", "comment": "Dish detail — open app" },
+          { "/": "/restaurants", "comment": "Restaurants list — open app" },
+          { "/": "/restaurants/*", "comment": "Restaurant detail / rate / reviews — open app" },
+          { "/": "/user/*", "comment": "Public user profile — open app" },
+          { "/": "/profile", "comment": "Own profile — open app" },
+          { "/": "/playlist/*", "comment": "Playlist — open app" },
+          { "/": "/locals", "comment": "Locals lists hub — open app" },
+          { "/": "/locals/*", "comment": "Locals curator page — open app" },
+          { "/": "/my-list", "comment": "My list — open app" },
           { "/": "/auth/*", "comment": "Auth callbacks — open app" },
           { "/": "/reset-password", "comment": "Password reset — open app" },
           { "/": "/reset-password/*", "comment": "Password reset with query — open app" }
