@@ -151,6 +151,31 @@ export const followsApi = {
   },
 
   /**
+   * Batch-check which of the given user IDs the current user follows.
+   * @param {string[]} userIds
+   * @returns {Promise<Set<string>>}
+   */
+  async getFollowStatuses(userIds) {
+    if (!Array.isArray(userIds) || userIds.length === 0) return new Set()
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return new Set()
+
+      const { data, error } = await supabase
+        .from('follows')
+        .select('followed_id')
+        .eq('follower_id', user.id)
+        .in('followed_id', userIds)
+
+      if (error) throw createClassifiedError(error)
+      return new Set((data || []).map(r => r.followed_id))
+    } catch (error) {
+      logger.error('getFollowStatuses error:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
    * Get followers of a user with cursor-based pagination
    * @param {string} userId - User ID
    * @param {Object} options - Pagination options
