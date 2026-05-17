@@ -274,7 +274,7 @@ export function HeroIdentityCard({
               </span>
               <div className="mt-1.5">
                 <div className="font-bold" style={{ color: 'var(--color-text-primary)', fontSize: '18px', lineHeight: 1 }}>
-                  {jitterProfile.review_count || 0}
+                  {stats?.reviewCount ?? 0}
                 </div>
                 <div style={{ color: 'var(--color-text-tertiary)', fontSize: '10px', marginTop: '2px' }}>reviews</div>
               </div>
@@ -328,19 +328,20 @@ export function HeroIdentityCard({
   )
 }
 
-// Plain-English status copy for the profile owner. Branches on review count
-// + consistency_score so a brand-new user doesn't see "you're verified" and
-// a long-time reviewer doesn't get told to "keep writing".
+// Plain-English status copy for the profile owner. Branches on rhythm-sample
+// count + consistency_score, not raw review count \u2014 short reviews don't
+// collect enough keystrokes to build a rhythm signal, so a user can write
+// many reviews and still be "Building" until their typing pattern emerges.
 function getOwnerBlurb(jitterProfile) {
-  var reviews = jitterProfile?.review_count || 0
+  var rhythmSamples = jitterProfile?.review_count || 0
   var consistency = Number(jitterProfile?.consistency_score) || 0
-  if (reviews >= 15 && consistency >= 0.6) {
+  if (rhythmSamples >= 15 && consistency >= 0.6) {
     return 'You\u2019re a Trusted Reviewer. Your votes carry extra weight in our rankings because your typing rhythm is steady and consistent.'
   }
-  if (reviews >= 5 && consistency >= 0.4) {
+  if (rhythmSamples >= 5 && consistency >= 0.4) {
     return 'You\u2019re a Verified Human. Your reviews are confirmed to be typed by a real person. Keep writing to reach Trusted Reviewer status.'
   }
-  return 'You\u2019re just getting started. Write a few more reviews and your typing rhythm will earn you a Verified Human badge.'
+  return 'You\u2019re just getting started. Write longer reviews so your typing rhythm can be captured \u2014 once we have enough rhythm samples, you\u2019ll earn a Verified Human badge.'
 }
 
 export default HeroIdentityCard

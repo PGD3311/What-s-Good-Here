@@ -152,6 +152,12 @@ function computeCategoryComparison(data, communityAvgs) {
 function calculateStats(data) {
   const totalVotes = data.length
 
+  // Real review count = votes that carried written review text. Distinct from
+  // jitter_profiles.review_count, which only increments when a review was
+  // long enough to emit a keystroke-rhythm sample. The two diverge for short
+  // reviews — see HeroIdentityCard for the user-facing split.
+  const reviewCount = data.filter(v => v.review_text && v.review_text.trim().length > 0).length
+
   // Average rating
   const ratingsWithValue = data.filter(v => v.rating_10 != null)
   const avgRating = ratingsWithValue.length > 0
@@ -228,6 +234,7 @@ function calculateStats(data) {
 
   return {
     totalVotes,
+    reviewCount,
     avgRating,
     ratingVariance,
     categoryConcentration,
@@ -245,6 +252,7 @@ function calculateStats(data) {
 
 const DEFAULT_STATS = {
   totalVotes: 0,
+  reviewCount: 0,
   avgRating: null,
   ratingVariance: 0,
   categoryConcentration: 0,

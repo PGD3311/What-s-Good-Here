@@ -63,7 +63,7 @@ export function ProfileJitterCard({ profile, user, userProfile, displayName, isP
 
         {/* Headline stats — friendly labels */}
         <div className={hasPrivateData ? 'grid grid-cols-3 gap-3 text-center mt-3' : 'grid grid-cols-2 gap-3 text-center mt-3'}>
-          <StatCell label="Reviews" value={profile.review_count || 0} />
+          <StatCell label="Verified" value={profile.review_count || 0} />
           <StatCell
             label="Rhythm"
             value={profile.consistency_score != null
@@ -138,17 +138,19 @@ function StatCell({ label, value }) {
 }
 
 // Plain-English status copy keyed to tier. Kept in sync with the matching
-// helper in HeroIdentityCard (used in the own-profile inline panel).
+// helper in HeroIdentityCard (used in the own-profile inline panel). Tier
+// thresholds count rhythm samples, not raw reviews — short reviews don't
+// emit enough keystrokes to build the signal.
 function getOwnerBlurb(profile) {
-  const reviews = profile?.review_count || 0
+  const rhythmSamples = profile?.review_count || 0
   const consistency = Number(profile?.consistency_score) || 0
-  if (reviews >= 15 && consistency >= 0.6) {
+  if (rhythmSamples >= 15 && consistency >= 0.6) {
     return 'You’re a Trusted Reviewer. Your votes carry extra weight in our rankings because your typing rhythm is steady and consistent.'
   }
-  if (reviews >= 5 && consistency >= 0.4) {
+  if (rhythmSamples >= 5 && consistency >= 0.4) {
     return 'You’re a Verified Human. Your reviews are confirmed to be typed by a real person. Keep writing to reach Trusted Reviewer status.'
   }
-  return 'You’re just getting started. Write a few more reviews and your typing rhythm will earn you a Verified Human badge.'
+  return 'You’re just getting started. Write longer reviews so your typing rhythm can be captured — once we have enough rhythm samples, you’ll earn a Verified Human badge.'
 }
 
 // Friendly rhythm label from consistency score

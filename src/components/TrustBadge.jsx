@@ -53,7 +53,7 @@ export function TrustBadge({ type, size = 'sm', profileData, warScore }) {
     },
     building: {
       label: 'Building trust',
-      blurb: 'Write a few more reviews to earn a Verified Human badge.',
+      blurb: 'Keep writing longer reviews so the typing rhythm signal can form — that’s what earns a Verified Human badge.',
       color: 'var(--color-text-tertiary)',
       bg: 'rgba(156, 163, 175, 0.12)',
     },
