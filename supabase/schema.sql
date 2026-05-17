@@ -619,14 +619,21 @@ CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE
   WITH CHECK ((select auth.uid()) = id);
 -- Protected fields (is_local_curator, follower_count, following_count) are guarded by
 -- protect_profile_fields_trigger (BEFORE UPDATE) instead of RLS to avoid infinite recursion.
--- accept_curator_invite opts in via set_config('app.allow_curator_grant', 'true', true) so
--- its is_local_curator update isn't reverted; direct client UPDATEs don't set it, so users
--- can't self-grant.
+-- Two transaction-local opt-in flags let server-side code legitimately update protected
+-- columns; direct client UPDATEs don't set the flags, so users can't self-grant:
+--   - app.allow_curator_grant     → permits is_local_curator update (accept_curator_invite)
+--   - app.allow_follow_count_update → permits follower_count/following_count update
+--                                     (update_follow_counts trigger on follows)
 CREATE OR REPLACE FUNCTION protect_profile_fields()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.follower_count := OLD.follower_count;
-  NEW.following_count := OLD.following_count;
+  -- follower_count / following_count: client-protected, but the
+  -- update_follow_counts trigger opts in via 'app.allow_follow_count_update'
+  -- when maintaining the counters on follow/unfollow.
+  IF current_setting('app.allow_follow_count_update', true) IS DISTINCT FROM 'true' THEN
+    NEW.follower_count := OLD.follower_count;
+    NEW.following_count := OLD.following_count;
+  END IF;
   IF current_setting('app.allow_curator_grant', true) IS DISTINCT FROM 'true' THEN
     NEW.is_local_curator := OLD.is_local_curator;
   END IF;
@@ -2238,9 +2245,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 -- =============================================
 
 -- 13a. Update follow counts on follow/unfollow
+-- Opts into the protect_profile_fields bypass via the
+-- 'app.allow_follow_count_update' transaction-local flag.
 CREATE OR REPLACE FUNCTION update_follow_counts()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
+  PERFORM set_config('app.allow_follow_count_update', 'true', true);
   IF TG_OP = 'INSERT' THEN
     UPDATE profiles SET following_count = following_count + 1 WHERE id = NEW.follower_id;
     UPDATE profiles SET follower_count = follower_count + 1 WHERE id = NEW.followed_id;
