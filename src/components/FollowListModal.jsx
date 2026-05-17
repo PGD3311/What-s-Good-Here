@@ -77,6 +77,113 @@ export function FollowListModal({ userId, type, onClose }) {
   const searchInputRef = useRef(null)
   const modalRef = useFocusTrap(true, onClose, { initialFocusRef: searchInputRef })
 
+  // Sheet detents
+  const [sheetState, setSheetState] = useState('half') // 'half' | 'full' | 'closing'
+  const [dragOffset, setDragOffset] = useState(0)
+  const dragStartRef = useRef({ y: 0, t: 0, state: 'half', active: false, didDrag: false })
+  const closeTimerRef = useRef(null)
+
+  const SHEET_HEIGHTS = { half: '75vh', full: '95vh' }
+  const SHEET_TRANSITION_MS = 280
+  const DRAG_THRESHOLD_PX = 50
+  const DRAG_THRESHOLD_VELOCITY = 0.3 // px/ms
+  // Drag must move at least this far before we suppress the synthetic click.
+  // Below this threshold we treat the gesture as a tap, letting onGrabberClick fire.
+  const DRAG_CLICK_SUPPRESS_PX = 6
+
+  // Clear any pending close timer on unmount to prevent stale onClose firing
+  // after the parent has already torn the modal down.
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const resetDragState = useCallback(() => {
+    dragStartRef.current = { ...dragStartRef.current, active: false }
+    setDragOffset(0)
+  }, [])
+
+  const handleDragStart = useCallback((clientY) => {
+    dragStartRef.current = {
+      y: clientY,
+      t: performance.now(),
+      state: sheetState,
+      active: true,
+      didDrag: false,
+    }
+    setDragOffset(0)
+  }, [sheetState])
+
+  const handleDragMove = useCallback((clientY) => {
+    if (!dragStartRef.current.active) return
+    const delta = clientY - dragStartRef.current.y
+    if (Math.abs(delta) > DRAG_CLICK_SUPPRESS_PX) {
+      dragStartRef.current.didDrag = true
+    }
+    setDragOffset(delta)
+  }, [])
+
+  const handleDragEnd = useCallback((clientY) => {
+    if (!dragStartRef.current.active) {
+      setDragOffset(0)
+      return
+    }
+    const delta = clientY - dragStartRef.current.y
+    const elapsed = performance.now() - dragStartRef.current.t
+    const velocity = elapsed > 0 ? Math.abs(delta) / elapsed : 0
+    const startState = dragStartRef.current.state
+    const crossed = Math.abs(delta) >= DRAG_THRESHOLD_PX || velocity >= DRAG_THRESHOLD_VELOCITY
+
+    if (crossed) {
+      if (delta < 0) {
+        // Dragged up
+        if (startState === 'half') setSheetState('full')
+        // already full → stay full
+      } else {
+        // Dragged down
+        if (startState === 'full') setSheetState('half')
+        else if (startState === 'half') {
+          setSheetState('closing')
+          if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+          closeTimerRef.current = setTimeout(() => {
+            closeTimerRef.current = null
+            onClose()
+          }, SHEET_TRANSITION_MS)
+        }
+      }
+    }
+    dragStartRef.current.active = false
+    setDragOffset(0)
+  }, [onClose])
+
+  const onTouchStart = (e) => handleDragStart(e.touches[0].clientY)
+  const onTouchMove = (e) => handleDragMove(e.touches[0].clientY)
+  const onTouchEnd = (e) => handleDragEnd(e.changedTouches[0].clientY)
+  // Reset cleanly if the OS aborts the gesture (e.g., system swipe, call).
+  const onTouchCancel = () => resetDragState()
+
+  const onGrabberClick = () => {
+    // Suppress synthetic click that follows a touch drag on the same element.
+    if (dragStartRef.current.didDrag) {
+      dragStartRef.current.didDrag = false
+      return
+    }
+    setSheetState(prev => prev === 'half' ? 'full' : 'half')
+  }
+
+  const onGrabberKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setSheetState(prev => prev === 'half' ? 'full' : 'half')
+    } else if (e.key === 'Escape') {
+      onClose()
+    }
+  }
+
   // Infinite scroll observer, rooted on the scroll container. The effect
   // re-creates the observer on each settle so it can immediately re-evaluate
   // whether the sentinel is still in view; this auto-chains pagination when
@@ -111,19 +218,51 @@ export function FollowListModal({ userId, type, onClose }) {
         className="absolute left-0 right-0 bottom-0 rounded-t-2xl flex flex-col"
         style={{
           background: 'var(--color-surface-elevated)',
-          height: '75vh',
+          height: SHEET_HEIGHTS[sheetState === 'closing' ? 'half' : sheetState],
+          transform: sheetState === 'closing'
+            ? 'translateY(100%)'
+            : `translateY(${Math.max(0, dragOffset)}px)`,
+          transition: dragOffset === 0
+            ? 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1), height 280ms cubic-bezier(0.32, 0.72, 0, 1)'
+            : 'none',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{ width: 40, height: 4, background: 'var(--color-divider)', borderRadius: 2, margin: '8px auto 4px', flex: '0 0 auto' }}
-          aria-hidden="true"
-        />
+        <button
+          type="button"
+          onClick={onGrabberClick}
+          onKeyDown={onGrabberKeyDown}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchCancel}
+          style={{
+            flex: '0 0 auto',
+            padding: '8px 0 4px',
+            cursor: 'grab',
+            touchAction: 'none',
+            background: 'transparent',
+            border: 'none',
+            width: '100%',
+            display: 'block',
+          }}
+          aria-label={sheetState === 'full' ? 'Collapse sheet' : 'Expand sheet'}
+          aria-expanded={sheetState === 'full'}
+        >
+          <div
+            style={{ width: 40, height: 4, background: 'var(--color-divider)', borderRadius: 2, margin: '0 auto' }}
+            aria-hidden="true"
+          />
+        </button>
 
         <div
           className="flex items-center justify-between px-4 py-3 border-b"
-          style={{ borderColor: 'var(--color-divider)', flex: '0 0 auto' }}
+          style={{ borderColor: 'var(--color-divider)', flex: '0 0 auto', touchAction: 'none' }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchCancel}
         >
           <h2 id="follow-list-title" className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>
             {title}
