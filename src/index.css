@@ -1187,7 +1187,8 @@
   .animate-badge-bounce-in,
   .animate-rank-fade-out,
   .animate-rarity-glow,
-  .animate-legendary-shimmer {
+  .animate-legendary-shimmer,
+  .skeleton-shimmer {
     animation: none;
   }
 
@@ -1270,4 +1271,20 @@ input.outline-none:focus-visible {
    =========================== */
 .wgh-map-tiles {
   filter: brightness(1.0) contrast(1.02);
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-divider) 0%,
+    var(--color-surface) 50%,
+    var(--color-divider) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s linear infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
