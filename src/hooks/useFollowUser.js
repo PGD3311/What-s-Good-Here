@@ -13,20 +13,24 @@ import { followsApi } from '../api/followsApi'
 export function useFollowUser() {
   const qc = useQueryClient()
 
-  const invalidateFollowCounts = () => {
+  const invalidateOnFollowChange = () => {
     // Prefix match: invalidates ['followCounts', currentUserId] AND
     // ['followCounts', targetUserId] without needing either id in scope.
     qc.invalidateQueries({ queryKey: ['followCounts'] })
+    // Also invalidate batched follow-status lookups (FollowListModal etc.).
+    // Without this, follow buttons inside the modal stay stale until staleTime
+    // expires (30s) or window refocuses.
+    qc.invalidateQueries({ queryKey: ['followStatuses'] })
   }
 
   return {
     follow: useMutation({
       mutationFn: (targetUserId) => followsApi.follow(targetUserId),
-      onSuccess: invalidateFollowCounts,
+      onSuccess: invalidateOnFollowChange,
     }),
     unfollow: useMutation({
       mutationFn: (targetUserId) => followsApi.unfollow(targetUserId),
-      onSuccess: invalidateFollowCounts,
+      onSuccess: invalidateOnFollowChange,
     }),
   }
 }
