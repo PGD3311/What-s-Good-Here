@@ -67,6 +67,53 @@ async function _paginateFollows(userId, direction, { limit = 20, cursor = null }
 }
 
 /**
+ * Server-side ranked search of a user's followers/following list.
+ * Uses search_user_follows RPC with (display_name, id) cursor pagination.
+ * @param {string} userId - User whose follow list to search
+ * @param {'followers'|'following'} direction - Which side of the follows table
+ * @param {Object} options
+ * @param {string} options.query - Raw user-typed query
+ * @param {{display_name: string, id: string}|null} options.cursor - Cursor from prior page
+ * @param {number} options.limit - Page size (default 20)
+ * @returns {Promise<{users: Array, hasMore: boolean}>}
+ */
+async function _searchFollows(userId, direction, { query, cursor = null, limit = 20 } = {}) {
+  try {
+    if (!query?.trim()) return { users: [], hasMore: false }
+    const sanitized = sanitizeSearchQuery(query, 50)
+    // After sanitization, % and _ become \% / \_. If the only "content" is escape
+    // sequences (no real searchable characters), there's nothing to match — bail
+    // out before hitting the RPC. Strip escaped LIKE/ILIKE metachars to check.
+    const searchable = sanitized.replace(/\\[%_\\]/g, '')
+    if (!sanitized || !searchable) return { users: [], hasMore: false }
+
+    const { data, error } = await supabase.rpc('search_user_follows', {
+      p_user_id: userId,
+      p_direction: direction,
+      p_query: sanitized,
+      p_cursor_name: cursor?.display_name || null,
+      p_cursor_id: cursor?.id || null,
+      p_limit: limit + 1,
+    })
+    if (error) throw createClassifiedError(error)
+
+    const rows = data || []
+    const hasMore = rows.length > limit
+    const users = (hasMore ? rows.slice(0, limit) : rows).map(r => ({
+      id: r.id,
+      display_name: r.display_name || 'Anonymous',
+      avatar_url: r.avatar_url || null,
+      follower_count: r.follower_count || 0,
+      followed_at: r.followed_at,
+    }))
+    return { users, hasMore }
+  } catch (error) {
+    logger.error('searchFollows error:', error)
+    throw error.type ? error : createClassifiedError(error)
+  }
+}
+
+/**
  * Follows API - Social connections
  */
 
@@ -176,26 +223,51 @@ export const followsApi = {
   },
 
   /**
-   * Get followers of a user with cursor-based pagination
+   * Get followers of a user with cursor-based pagination.
+   * When options.searchQuery is provided, routes to ranked server-side search
+   * (search_user_follows RPC); otherwise returns recency-ordered followers.
    * @param {string} userId - User ID
    * @param {Object} options - Pagination options
    * @param {number} options.limit - Max results per page (default 20)
-   * @param {string} options.cursor - Cursor for pagination (created_at of last item)
+   * @param {string} options.cursor - Cursor for pagination (created_at of last item, or {display_name, id} for search)
+   * @param {string} options.searchQuery - Optional query to filter the follow list
    * @returns {Promise<{users: Array, hasMore: boolean}>}
    */
   async getFollowers(userId, options) {
+    // String-presence check (not truthy) so callers can signal "search mode,
+    // empty input" by passing searchQuery: '' (a typed-then-cleared input
+    // box should not silently fall back to the unfiltered list).
+    // Explicit undefined/null still falls through to recency pagination —
+    // useful for hooks that conditionally build options objects.
+    if (options && typeof options.searchQuery === 'string') {
+      return _searchFollows(userId, 'followers', {
+        query: options.searchQuery,
+        cursor: options.cursor,
+        limit: options.limit,
+      })
+    }
     return _paginateFollows(userId, 'followers', options)
   },
 
   /**
-   * Get users that a user follows with cursor-based pagination
+   * Get users that a user follows with cursor-based pagination.
+   * When options.searchQuery is provided, routes to ranked server-side search
+   * (search_user_follows RPC); otherwise returns recency-ordered following list.
    * @param {string} userId - User ID
    * @param {Object} options - Pagination options
    * @param {number} options.limit - Max results per page (default 20)
-   * @param {string} options.cursor - Cursor for pagination (created_at of last item)
+   * @param {string} options.cursor - Cursor for pagination (created_at of last item, or {display_name, id} for search)
+   * @param {string} options.searchQuery - Optional query to filter the follow list
    * @returns {Promise<{users: Array, hasMore: boolean}>}
    */
   async getFollowing(userId, options) {
+    if (options && typeof options.searchQuery === 'string') {
+      return _searchFollows(userId, 'following', {
+        query: options.searchQuery,
+        cursor: options.cursor,
+        limit: options.limit,
+      })
+    }
     return _paginateFollows(userId, 'following', options)
   },
 
