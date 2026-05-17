@@ -74,34 +74,39 @@ export function FollowListModal({ userId, type, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50"
       onClick={onClose}
       role="presentation"
     >
       {/* Backdrop */}
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.6)' }} aria-hidden="true" />
 
-      {/* Modal */}
+      {/* Bottom sheet */}
       <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="follow-list-title"
-        className="relative w-full max-w-md rounded-2xl overflow-hidden flex flex-col border"
+        className="absolute left-0 right-0 bottom-0 rounded-t-2xl flex flex-col"
         style={{
           background: 'var(--color-surface-elevated)',
-          maxHeight: 'calc(100vh - 120px)',
-          borderColor: 'var(--color-divider)',
-          boxShadow: 'none'
+          maxHeight: '85vh',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Grabber */}
+        <div
+          style={{ width: 40, height: 4, background: 'var(--color-divider)', borderRadius: 2, margin: '8px auto 4px', flex: '0 0 auto' }}
+          aria-hidden="true"
+        />
+
         {/* Header */}
         <div
-          className="flex items-center justify-between px-4 py-4 border-b"
+          className="flex items-center justify-between px-4 py-3 border-b"
           style={{
             borderColor: 'var(--color-divider)',
-            background: 'var(--color-primary-muted)'
+            flex: '0 0 auto',
           }}
         >
           <h2 id="follow-list-title" className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>
@@ -119,8 +124,17 @@ export function FollowListModal({ userId, type, onClose }) {
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Scrollable body */}
+        <div
+          style={{
+            flex: '1 1 auto',
+            minHeight: 0,
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+            touchAction: 'pan-y',
+          }}
+        >
           {loading ? (
             <div className="flex items-center justify-center py-12" role="status" aria-label="Loading">
               <div
