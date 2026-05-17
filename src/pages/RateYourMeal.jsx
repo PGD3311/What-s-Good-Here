@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
@@ -14,6 +14,9 @@ import { LoginModal } from '../components/Auth/LoginModal'
 import { DishSelector, buildDishSections } from '../components/rate-meal/DishSelector'
 import { BatchRatingCard } from '../components/rate-meal/BatchRatingCard'
 import { BatchSummary } from '../components/rate-meal/BatchSummary'
+import { AddPhotoNudge } from '../components/AddPhotoNudge'
+import { useProfile } from '../hooks/useProfile'
+import { getStorageItem, STORAGE_KEYS } from '../lib/storage'
 
 function getDishClientId(dishId) {
   return 'dish-' + dishId
@@ -38,8 +41,11 @@ export function RateYourMeal() {
   var { user } = useAuth()
   var { location, radius } = useLocationContext()
   var { uploadPhoto, uploading, analyzing } = useDishPhotos()
+  var { profile, refetch: refetchProfile } = useProfile(user?.id)
 
   var [step, setStep] = useState('select')
+  var [photoNudgeOpen, setPhotoNudgeOpen] = useState(false)
+  var photoNudgeTimerRef = useRef(null)
   var [currentIndex, setCurrentIndex] = useState(0)
   var [searchQuery, setSearchQuery] = useState('')
   var [loginModalOpen, setLoginModalOpen] = useState(false)
@@ -67,6 +73,12 @@ export function RateYourMeal() {
       setLoginModalOpen(true)
     }
   }, [user])
+
+  useEffect(function () {
+    return function () {
+      if (photoNudgeTimerRef.current) clearTimeout(photoNudgeTimerRef.current)
+    }
+  }, [])
 
   var submitMutation = useMutation({
     mutationFn: async function () {
@@ -131,6 +143,10 @@ export function RateYourMeal() {
 
       queryClient.invalidateQueries({ queryKey: ['dishes'] })
       queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] })
+
+      if (user && profile && !profile.avatar_url && !getStorageItem(STORAGE_KEYS.HAS_SEEN_PHOTO_NUDGE)) {
+        photoNudgeTimerRef.current = setTimeout(function () { setPhotoNudgeOpen(true) }, 700)
+      }
     },
     onError: function (error) {
       setUploadStatus('')
@@ -496,6 +512,11 @@ export function RateYourMeal() {
       <LoginModal
         isOpen={loginModalOpen}
         onClose={function () { setLoginModalOpen(false) }}
+      />
+      <AddPhotoNudge
+        isOpen={photoNudgeOpen}
+        onClose={function () { setPhotoNudgeOpen(false) }}
+        onUploaded={refetchProfile}
       />
     </>
   )

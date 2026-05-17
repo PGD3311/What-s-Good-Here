@@ -12,10 +12,14 @@ import { MAX_REVIEW_LENGTH } from '../constants/app'
 import {
   getPendingVoteFromStorage,
   clearPendingVoteStorage,
+  getStorageItem,
+  STORAGE_KEYS,
 } from '../lib/storage'
 import { logger } from '../utils/logger'
 import { hapticLight, hapticSuccess } from '../utils/haptics'
 import { PhotoUploadButton } from './PhotoUploadButton'
+import { AddPhotoNudge } from './AddPhotoNudge'
+import { useProfile } from '../hooks/useProfile'
 import { setBackButtonInterceptor, clearBackButtonInterceptor } from '../utils/backButtonInterceptor'
 import { validateUserContent } from '../lib/reviewBlocklist'
 
@@ -40,8 +44,11 @@ export function ReviewFlow({
   const navigate = useNavigate()
   const { user } = useAuth()
   const { submitVote, submitting } = useVote()
+  const { profile, refetch: refetchProfile } = useProfile(user?.id)
   const { getPurity, getJitterProfile, attachToTextarea, reset: resetPurity } = usePurityTracker()
   const jitterBoxRef = useRef(null)
+  const [photoNudgeOpen, setPhotoNudgeOpen] = useState(false)
+  const photoNudgeTimerRef = useRef(null)
 
   // Prior-vote state: used to prefill and to decide "Update" vs "Submit" label.
   const [priorRating, setPriorRating] = useState(null)
@@ -122,6 +129,14 @@ export function ReviewFlow({
       }
     }
   }, [reviewExpanded])
+
+  // Cancel pending photo-nudge timer on unmount so it doesn't fire into
+  // a torn-down component.
+  useEffect(() => {
+    return () => {
+      if (photoNudgeTimerRef.current) clearTimeout(photoNudgeTimerRef.current)
+    }
+  }, [])
 
   // Intercept browser back during unsaved drafts: prompt before leaving.
   useEffect(() => {
@@ -229,6 +244,15 @@ export function ReviewFlow({
     hapticSuccess()
     setAnnouncement('Rating saved')
     setTimeout(() => setAnnouncement(''), 1000)
+
+    // Identity scaffolding nudge: logged-in users without an avatar get one
+    // soft prompt to add a face after a successful rating. Delayed so the
+    // haptic + "Rating saved" announcement land first. The timer ref lets
+    // the unmount effect cancel a pending nudge if the user navigates away
+    // before it fires.
+    if (user && profile && !profile.avatar_url && !getStorageItem(STORAGE_KEYS.HAS_SEEN_PHOTO_NUDGE)) {
+      photoNudgeTimerRef.current = setTimeout(() => setPhotoNudgeOpen(true), 700)
+    }
 
     onVote?.()
   }
@@ -445,6 +469,12 @@ export function ReviewFlow({
           </svg>
         </button>
       )}
+
+      <AddPhotoNudge
+        isOpen={photoNudgeOpen}
+        onClose={() => setPhotoNudgeOpen(false)}
+        onUploaded={refetchProfile}
+      />
     </div>
   )
 }

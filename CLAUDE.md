@@ -316,6 +316,7 @@ Defined in `src/index.css`. Light theme only ("Appetite"). Use `var(--color-*)` 
 | `whats-good-here-auth` | (Supabase SDK) | Supabase auth session |
 | `whats-good-here-location-permission` | `LOCATION_PERMISSION` | Geolocation permission state |
 | `whats-good-here-email` | `EMAIL_CACHE` | Cached email for auth |
+| `wgh_has_seen_photo_nudge` | `HAS_SEEN_PHOTO_NUDGE` | Post-rating profile-photo nudge has been shown |
 
 ### 4.10 All Hooks (check before building new ones)
 | Hook | Purpose |
