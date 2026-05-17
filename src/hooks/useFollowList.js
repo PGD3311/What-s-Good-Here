@@ -1,6 +1,6 @@
+import { useMemo } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { followsApi } from '../api/followsApi'
-import { sanitizeSearchQuery } from '../utils/sanitize'
 import { useAuth } from '../context/AuthContext'
 
 /**
@@ -12,18 +12,12 @@ import { useAuth } from '../context/AuthContext'
  * @param {{ userId: string, type: 'followers' | 'following', searchQuery: string }} params
  */
 export function useFollowList({ userId, type, searchQuery }) {
-  const direction = type // 'followers' | 'following'
-  // Sanitizer is used here ONLY to decide whether the input contains anything
-  // searchable (after trim + LIKE-escape, is there real content?). The raw
-  // trimmed query is what we pass to the API — `_searchFollows` sanitizes
-  // again before hitting Postgres, and double-sanitizing would over-escape
-  // backslashes (`a_b` → `a\_b` → `a\\\_b`).
+  const direction = type
+  // We pass the trimmed (un-escaped) query to the API; _searchFollows is the
+  // single source of truth for LIKE-escape and wildcard-only short-circuit.
+  // Double-sanitizing would over-escape backslashes (`a_b` → `a\_b` → `a\\\_b`).
   const trimmedSearch = (searchQuery ?? '').trim()
-  const sanitizedProbe = sanitizeSearchQuery(trimmedSearch, 50)
-  // Strip escaped LIKE metachars: if nothing is left, the input was purely
-  // wildcards like `%%` — treat as not-searching and fall back to recency.
-  const searchableProbe = sanitizedProbe.replace(/\\[%_\\]/g, '')
-  const isSearching = !!searchableProbe && searchableProbe.length >= 1
+  const isSearching = trimmedSearch.length > 0
 
   // Recency list mode (no search) — cursor on followed_at
   const listQuery = useInfiniteQuery({
@@ -40,8 +34,7 @@ export function useFollowList({ userId, type, searchQuery }) {
     },
   })
 
-  // Search mode — alphabetical (display_name, id) cursor. Pass the TRIMMED
-  // (un-escaped) query — API sanitizes for LIKE before hitting Postgres.
+  // Search mode — alphabetical (display_name, id) cursor
   const searchQueryResult = useInfiniteQuery({
     queryKey: ['followList', userId, direction, 'search', trimmedSearch],
     enabled: isSearching && !!userId,
@@ -58,12 +51,14 @@ export function useFollowList({ userId, type, searchQuery }) {
   })
 
   const active = isSearching ? searchQueryResult : listQuery
-  const users = active.data?.pages.flatMap(p => p.users) ?? []
+  const pages = active.data?.pages
+  const users = useMemo(() => pages?.flatMap(p => p.users) ?? [], [pages])
 
-  // Follow statuses for visible users — keyed on viewer + sorted IDs for stable cache
+  // Follow statuses for visible users — keyed on viewer + sorted IDs so the
+  // cache key is stable across result reorderings.
   const { user: viewer } = useAuth()
   const viewerId = viewer?.id ?? 'anon'
-  const sortedUserIds = users.map(u => u.id).slice().sort()
+  const sortedUserIds = useMemo(() => users.map(u => u.id).sort(), [users])
   const statusesQuery = useQuery({
     queryKey: ['followStatuses', viewerId, sortedUserIds],
     enabled: sortedUserIds.length > 0 && !!viewer,
@@ -76,7 +71,7 @@ export function useFollowList({ userId, type, searchQuery }) {
     followingSet: statusesQuery.data ?? new Set(),
     loading: active.isLoading,
     loadingMore: active.isFetchingNextPage,
-    searching: isSearching && active.isFetching,
+    searchFetching: isSearching && active.isFetching,
     error: active.error,
     hasMore: !!active.hasNextPage,
     fetchMore: active.fetchNextPage,

@@ -229,7 +229,7 @@ export const followsApi = {
    * @param {string} userId - User ID
    * @param {Object} options - Pagination options
    * @param {number} options.limit - Max results per page (default 20)
-   * @param {string} options.cursor - Cursor for pagination (created_at of last item, or {display_name, id} for search)
+   * @param {string|{display_name: string, id: string}} options.cursor - Recency mode: created_at timestamp of last item. Search mode: {display_name, id} of last item.
    * @param {string} options.searchQuery - Optional query to filter the follow list
    * @returns {Promise<{users: Array, hasMore: boolean}>}
    */
@@ -256,7 +256,7 @@ export const followsApi = {
    * @param {string} userId - User ID
    * @param {Object} options - Pagination options
    * @param {number} options.limit - Max results per page (default 20)
-   * @param {string} options.cursor - Cursor for pagination (created_at of last item, or {display_name, id} for search)
+   * @param {string|{display_name: string, id: string}} options.cursor - Recency mode: created_at timestamp of last item. Search mode: {display_name, id} of last item.
    * @param {string} options.searchQuery - Optional query to filter the follow list
    * @returns {Promise<{users: Array, hasMore: boolean}>}
    */

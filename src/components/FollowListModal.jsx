@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { memo, useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useFollowList } from '../hooks/useFollowList'
@@ -6,6 +6,15 @@ import { useFollowUser } from '../hooks/useFollowUser'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useAuth } from '../context/AuthContext'
 import { getUserMessage } from '../utils/errorHandler'
+import { EmptyState } from './EmptyState'
+
+const SHEET_HEIGHTS = { half: '75vh', full: '95vh' }
+const SHEET_TRANSITION_MS = 280
+const DRAG_THRESHOLD_PX = 50
+const DRAG_THRESHOLD_VELOCITY = 0.3 // px/ms
+// Drag must move at least this far before we suppress the synthetic click.
+// Below this threshold we treat the gesture as a tap, letting onGrabberClick fire.
+const DRAG_CLICK_SUPPRESS_PX = 6
 
 export function FollowListModal({ userId, type, onClose }) {
   const navigate = useNavigate()
@@ -28,7 +37,7 @@ export function FollowListModal({ userId, type, onClose }) {
   }, [searchInput])
 
   const {
-    users, followingSet, loading, loadingMore, searching,
+    users, followingSet, loading, loadingMore, searchFetching,
     error, hasMore, fetchMore, refetch, isSearching,
   } = useFollowList({ userId, type, searchQuery: debouncedQuery })
 
@@ -49,28 +58,31 @@ export function FollowListModal({ userId, type, onClose }) {
     inFlightRef.current.delete(id)
   }, [])
 
-  const handleFollowToggle = useCallback((user) => {
+  const handleFollowToggle = useCallback((id) => {
     if (!viewer) return
-    if (inFlightRef.current.has(user.id)) return // ignore rapid double-clicks
-    const currentlyFollowing = isFollowing(user.id)
+    if (inFlightRef.current.has(id)) return // ignore rapid double-clicks
+    const currentlyFollowing = isFollowing(id)
     const nextState = !currentlyFollowing
-    inFlightRef.current.add(user.id)
+    inFlightRef.current.add(id)
     setPendingTargets(prev => {
       const next = new Map(prev)
-      next.set(user.id, nextState)
+      next.set(id, nextState)
       return next
     })
     const mutation = nextState ? follow : unfollow
-    mutation.mutate(user.id, {
-      onSuccess: () => clearPendingTarget(user.id),
+    mutation.mutate(id, {
+      onSuccess: () => clearPendingTarget(id),
       onError: (err) => {
-        clearPendingTarget(user.id)
+        clearPendingTarget(id)
         toast.error(getUserMessage(err, nextState ? 'following' : 'unfollowing'))
       },
     })
   }, [viewer, isFollowing, clearPendingTarget, follow, unfollow])
 
-  const handleUserClick = (user) => { onClose(); navigate(`/user/${user.id}`) }
+  const handleRowNavigate = useCallback((id) => {
+    onClose()
+    navigate(`/user/${id}`)
+  }, [onClose, navigate])
 
   const scrollContainerRef = useRef(null)
   const sentinelRef = useRef(null)
@@ -82,14 +94,6 @@ export function FollowListModal({ userId, type, onClose }) {
   const [dragOffset, setDragOffset] = useState(0)
   const dragStartRef = useRef({ y: 0, t: 0, state: 'half', active: false, didDrag: false })
   const closeTimerRef = useRef(null)
-
-  const SHEET_HEIGHTS = { half: '75vh', full: '95vh' }
-  const SHEET_TRANSITION_MS = 280
-  const DRAG_THRESHOLD_PX = 50
-  const DRAG_THRESHOLD_VELOCITY = 0.3 // px/ms
-  // Drag must move at least this far before we suppress the synthetic click.
-  // Below this threshold we treat the gesture as a tap, letting onGrabberClick fire.
-  const DRAG_CLICK_SUPPRESS_PX = 6
 
   // Clear any pending close timer on unmount to prevent stale onClose firing
   // after the parent has already torn the modal down.
@@ -303,7 +307,7 @@ export function FollowListModal({ userId, type, onClose }) {
                 boxShadow: 'inset 0 1px 0 rgba(0,0,0,0.05)',
               }}
             >
-              {searching ? (
+              {searchFetching ? (
                 <div
                   className="w-4 h-4 border-2 rounded-full animate-spin flex-shrink-0"
                   style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-text-tertiary)' }}
@@ -323,7 +327,6 @@ export function FollowListModal({ userId, type, onClose }) {
                 placeholder={isFollowers ? 'Search followers' : 'Search following'}
                 className="flex-1 bg-transparent outline-none"
                 style={{ color: 'var(--color-text-primary)', fontSize: 16 }}
-                aria-label={`Search ${title.toLowerCase()}`}
               />
               {searchInput && (
                 <button
@@ -346,7 +349,7 @@ export function FollowListModal({ userId, type, onClose }) {
           ) : error && users.length === 0 ? (
             <ErrorState onRetry={refetch} />
           ) : users.length === 0 ? (
-            <EmptyState type={type} isSearching={isSearching} query={debouncedQuery} />
+            <FollowListEmpty type={type} isSearching={isSearching} query={debouncedQuery} />
           ) : (
             <>
               <ul className="divide-y" style={{ borderColor: 'var(--color-divider)' }}>
@@ -356,8 +359,8 @@ export function FollowListModal({ userId, type, onClose }) {
                     user={user}
                     isFollowing={isFollowing(user.id)}
                     showFollowButton={!!viewer && viewer.id !== user.id}
-                    onRowClick={() => handleUserClick(user)}
-                    onFollowToggle={() => handleFollowToggle(user)}
+                    onRowClick={handleRowNavigate}
+                    onFollowToggle={handleFollowToggle}
                   />
                 ))}
               </ul>
@@ -372,7 +375,7 @@ export function FollowListModal({ userId, type, onClose }) {
   )
 }
 
-function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowToggle }) {
+const FollowRow = memo(function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowToggle }) {
   const displayName = user.display_name || 'Anonymous'
   const followerLabel = user.follower_count === 0
     ? 'No followers yet'
@@ -380,14 +383,17 @@ function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowTo
       ? '1 follower'
       : `${user.follower_count.toLocaleString()} followers`
 
+  const handleClick = () => onRowClick(user.id)
+  const handleFollow = (e) => { e.stopPropagation(); onFollowToggle(user.id) }
+
   return (
     <li>
       <div
         role="link"
         tabIndex={0}
         aria-label={`${displayName} profile`}
-        onClick={onRowClick}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick() } }}
+        onClick={handleClick}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(user.id) } }}
         className="w-full flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-black/[0.04] focus:outline-none focus-visible:bg-black/[0.04]"
         style={{ minHeight: 64 }}
       >
@@ -414,7 +420,7 @@ function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowTo
         {showFollowButton && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onFollowToggle() }}
+            onClick={handleFollow}
             onKeyDown={(e) => {
               // Prevent Enter/Space from bubbling to row container and triggering navigation
               if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
@@ -436,7 +442,7 @@ function FollowRow({ user, isFollowing, showFollowButton, onRowClick, onFollowTo
       </div>
     </li>
   )
-}
+})
 
 function SkeletonRows() {
   return (
@@ -454,29 +460,21 @@ function SkeletonRows() {
   )
 }
 
-function EmptyState({ type, isSearching, query }) {
+function FollowListEmpty({ type, isSearching, query }) {
   if (isSearching) {
     return (
-      <div className="py-12 px-6 text-center">
-        <p className="font-medium" style={{ color: 'var(--color-text-primary)', fontSize: 16 }}>
-          No one matches &quot;{query}&quot;
-        </p>
-        <p className="mt-1" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
-          Try a different name.
-        </p>
-      </div>
+      <EmptyState
+        title={`No one matches "${query}"`}
+        subtitle="Try a different name."
+      />
     )
   }
   const isFollowers = type === 'followers'
   return (
-    <div className="py-12 px-6 text-center">
-      <p className="font-medium" style={{ color: 'var(--color-text-primary)', fontSize: 16 }}>
-        {isFollowers ? 'No followers yet' : 'Not following anyone yet'}
-      </p>
-      <p className="mt-1" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
-        {isFollowers ? 'Share your profile to get discovered.' : 'Find people whose taste you trust on dish pages.'}
-      </p>
-    </div>
+    <EmptyState
+      title={isFollowers ? 'No followers yet' : 'Not following anyone yet'}
+      subtitle={isFollowers ? 'Share your profile to get discovered.' : 'Find people whose taste you trust on dish pages.'}
+    />
   )
 }
 
@@ -525,7 +523,7 @@ function LoadMoreErrorBanner({ onRetry }) {
     <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--color-divider)' }}>
       <button
         type="button"
-        onClick={() => onRetry()}
+        onClick={onRetry}
         className="w-full py-2 rounded-lg text-sm font-medium"
         style={{
           background: 'var(--color-bg)',
