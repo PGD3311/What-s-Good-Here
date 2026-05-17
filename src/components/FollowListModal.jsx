@@ -84,6 +84,15 @@ export function FollowListModal({ userId, type, onClose }) {
     navigate(`/user/${id}`)
   }, [onClose, navigate])
 
+  // The Follow button reflects whether YOU follow each row. On YOUR OWN
+  // Following list every row is followed by definition — the label adds no
+  // information, so hide it; unfollowing requires navigating to the profile.
+  const viewerOwnsFollowingList = type === 'following' && viewer?.id === userId
+  const showFollowButton = useCallback(
+    (rowUserId) => !!viewer && viewer.id !== rowUserId && !viewerOwnsFollowingList,
+    [viewer, viewerOwnsFollowingList],
+  )
+
   const scrollContainerRef = useRef(null)
   const sentinelRef = useRef(null)
   const searchInputRef = useRef(null)
@@ -358,7 +367,7 @@ export function FollowListModal({ userId, type, onClose }) {
                     key={user.id}
                     user={user}
                     isFollowing={isFollowing(user.id)}
-                    showFollowButton={!!viewer && viewer.id !== user.id}
+                    showFollowButton={showFollowButton(user.id)}
                     onRowClick={handleRowNavigate}
                     onFollowToggle={handleFollowToggle}
                   />
