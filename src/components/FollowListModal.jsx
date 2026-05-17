@@ -77,7 +77,11 @@ export function FollowListModal({ userId, type, onClose }) {
   const searchInputRef = useRef(null)
   const modalRef = useFocusTrap(true, onClose, { initialFocusRef: searchInputRef })
 
-  // Infinite scroll observer rooted on the scroll container
+  // Infinite scroll observer, rooted on the scroll container. The effect
+  // re-creates the observer on each settle so it can immediately re-evaluate
+  // whether the sentinel is still in view; this auto-chains pagination when
+  // the user is anchored at the bottom of a short list. The !loadingMore
+  // guard inside the callback prevents stacking duplicate fetches mid-flight.
   useEffect(() => {
     if (!scrollContainerRef.current || !sentinelRef.current) return
     if (error || !hasMore) return
@@ -206,7 +210,7 @@ export function FollowListModal({ userId, type, onClose }) {
             <EmptyState type={type} isSearching={isSearching} query={debouncedQuery} />
           ) : (
             <>
-              <ul className="divide-y" style={{ borderColor: 'var(--color-divider)' }} aria-live="polite">
+              <ul className="divide-y" style={{ borderColor: 'var(--color-divider)' }}>
                 {users.map((user) => (
                   <FollowRow
                     key={user.id}
@@ -361,10 +365,16 @@ function ErrorState({ onRetry }) {
 
 function LoadingMoreIndicator() {
   return (
-    <div className="flex items-center justify-center py-4" aria-hidden="true">
+    <div
+      className="flex items-center justify-center py-4"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading more"
+    >
       <div
         className="w-5 h-5 border-2 rounded-full animate-spin"
         style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-primary)' }}
+        aria-hidden="true"
       />
     </div>
   )
