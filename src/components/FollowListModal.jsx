@@ -223,7 +223,7 @@ export function FollowListModal({ userId, type, onClose }) {
             ? 'translateY(100%)'
             : `translateY(${Math.max(0, dragOffset)}px)`,
           transition: dragOffset === 0
-            ? 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1), height 280ms cubic-bezier(0.32, 0.72, 0, 1)'
+            ? `transform ${SHEET_TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), height ${SHEET_TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`
             : 'none',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
