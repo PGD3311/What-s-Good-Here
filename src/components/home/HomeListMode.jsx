@@ -237,7 +237,7 @@ function ChalkboardCard({ tag, title, titleSize, sub, stat, cta, onClick, icon, 
             {icon && <img src={icon} alt="" style={BOARD_ICON_STYLE} />}
             <span>{tag}</span>
           </p>
-          <p style={Object.assign({}, CHALK_BIG, { fontSize: titleSize || '30px', fontWeight: 700, lineHeight: 0.95, margin: '2px 0 0' })}>{title}</p>
+          <p style={Object.assign({}, CHALK_BIG, { fontSize: titleSize || '36px', fontWeight: 700, lineHeight: 0.95, margin: '2px 0 0' })}>{title}</p>
           {sub && <p style={Object.assign({}, CHALK_MED, { fontSize: '15px', margin: 0 })}>{sub}</p>}
           <div style={CHALK_LINE} />
           {stat && <p style={Object.assign({}, CHALK_BRIGHT, { fontSize: '16px', margin: 0 })}>{stat}</p>}
@@ -311,7 +311,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           icon="/categories/icons/speech-bubble.png"
           tag={'most talked about'}
           title={mostVotedDish.dish_name || mostVotedDish.name}
-          titleSize="28px"
+          titleSize="32px"
           sub={mostVotedDish.restaurant_name}
           stat={(mostVotedDish.total_votes || 0) + ' votes'}
           cta={'see why \u2192'}
@@ -325,7 +325,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           icon="/categories/icons/money-bag.png"
           tag={'best value'}
           title={bestValueMeal.dish_name || bestValueMeal.name}
-          titleSize="28px"
+          titleSize="32px"
           sub={bestValueMeal.restaurant_name}
           stat={'$' + Number(bestValueMeal.price).toFixed(0) + ' \u00B7 rated ' + Number(bestValueMeal.avg_rating || 0).toFixed(1)}
           cta={'best meal under $15 \u2192'}
@@ -339,7 +339,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           icon="/categories/icons/ice-cream-clean.png"
           tag={'island scoops'}
           title={bestIceCream.dish_name || bestIceCream.name}
-          titleSize="28px"
+          titleSize="32px"
           sub={bestIceCream.restaurant_name}
           stat={(bestIceCream.total_votes || 0) + ' votes \u00B7 rated ' + Number(bestIceCream.avg_rating || 0).toFixed(1)}
           cta={'best ice cream \u2192'}

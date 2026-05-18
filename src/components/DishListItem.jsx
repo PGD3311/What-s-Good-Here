@@ -141,7 +141,7 @@ export const DishListItem = memo(function DishListItem({
       {showPhoto && photoUrl && (
         <div
           className="flex-shrink-0 rounded-lg overflow-hidden"
-          style={{ width: '48px', height: '48px', marginLeft: '6px', background: 'var(--color-surface)' }}
+          style={{ width: '56px', height: '56px', marginLeft: '6px', background: 'var(--color-surface)' }}
         >
           <img src={photoUrl} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
         </div>
@@ -149,9 +149,9 @@ export const DishListItem = memo(function DishListItem({
       {showPhoto && !photoUrl && (
         <div
           className="flex-shrink-0 rounded-lg overflow-hidden relative"
-          style={{ width: '48px', height: '48px', marginLeft: '6px' }}
+          style={{ width: '56px', height: '56px', marginLeft: '6px' }}
         >
-          <RestaurantAvatar name={restaurantName} town={restaurantTown} dishCategory={category} fill />
+          <RestaurantAvatar name={restaurantName} town={restaurantTown} dishCategory={category} size={56} fill />
         </div>
       )}
 

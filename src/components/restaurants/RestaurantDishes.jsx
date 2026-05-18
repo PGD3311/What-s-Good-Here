@@ -1,14 +1,17 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { MIN_VOTES_FOR_RANKING } from '../../constants/app'
 import { DishListItem } from '../DishListItem'
 import { SectionHeader } from '../SectionHeader'
+import { FriendVisitsModal } from './FriendVisitsModal'
+import { FriendsHereListModal } from './FriendsHereListModal'
 
 const TOP_DISHES_COUNT = 5
 
 // Restaurant dishes component - Job #2: "What should I order?"
-export function RestaurantDishes({ dishes, loading, error, searchQuery = '', friendsVotesByDish = {} }) {
+export function RestaurantDishes({ dishes, loading, error, searchQuery = '', friendsVotesByDish = {}, restaurantName = '' }) {
   const [showAllDishes, setShowAllDishes] = useState(false)
+  const [friendsListOpen, setFriendsListOpen] = useState(false)
+  const [selectedFriend, setSelectedFriend] = useState(null)
 
   // Filter and sort dishes
   const sortedDishes = useMemo(() => {
@@ -50,14 +53,50 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
 
   const rankedCount = dishes?.filter(d => (d.total_votes || 0) >= MIN_VOTES_FOR_RANKING).length || 0
 
-  // Count unique friends who rated dishes here
-  const uniqueFriends = useMemo(() => {
-    const friendIds = new Set()
+  // Aggregate friends-here data: one row per friend with their full visit list.
+  // dish_count + avg_rating power the list view; votes power the per-friend popup.
+  const friendsHere = useMemo(() => {
+    const byFriend = new Map()
     Object.values(friendsVotesByDish).forEach(votes => {
-      votes.forEach(v => friendIds.add(v.user_id))
+      votes.forEach(v => {
+        let entry = byFriend.get(v.user_id)
+        if (!entry) {
+          entry = {
+            user_id: v.user_id,
+            display_name: v.display_name,
+            avatar_url: v.avatar_url,
+            votes: [],
+          }
+          byFriend.set(v.user_id, entry)
+        }
+        entry.votes.push(v)
+      })
     })
-    return friendIds.size
+    return Array.from(byFriend.values()).map(f => {
+      const ratings = f.votes
+        .map(v => Number(v.rating_10))
+        .filter(r => Number.isFinite(r))
+      const avg = ratings.length
+        ? ratings.reduce((s, r) => s + r, 0) / ratings.length
+        : null
+      return {
+        ...f,
+        dish_count: f.votes.length,
+        avg_rating: avg,
+      }
+    })
   }, [friendsVotesByDish])
+
+  const uniqueFriends = friendsHere.length
+
+  const handleSelectFriend = (friend) => {
+    setFriendsListOpen(false)
+    setSelectedFriend(friend)
+  }
+
+  const handleCloseVisits = () => setSelectedFriend(null)
+  const handleCloseList = () => setFriendsListOpen(false)
+  const handleOpenList = () => setFriendsListOpen(true)
 
   if (loading) {
     return (
@@ -105,52 +144,63 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
         />
       </div>
 
-      {/* Friends banner */}
+      {/* Friends banner — tap avatar = open that friend's visits popup;
+          tap the rest of the row = open the full friends-here list. */}
       {uniqueFriends > 0 && (
         <div
-          className="mb-4 px-3.5 py-3 rounded-xl flex items-center gap-3"
+          className="mb-4 rounded-xl flex items-center"
           style={{
             background: 'var(--color-surface-elevated)',
             border: '1.5px solid var(--color-primary)',
           }}
         >
-          {/* Stacked avatars */}
-          <div className="flex -space-x-2 flex-shrink-0">
-            {(() => {
-              const seen = new Set()
-              const friendList = []
-              Object.values(friendsVotesByDish).forEach(votes => {
-                votes.forEach(v => {
-                  if (!seen.has(v.user_id)) {
-                    seen.add(v.user_id)
-                    friendList.push(v)
-                  }
-                })
-              })
-              return friendList.slice(0, 3).map((friend, i) => (
-                <Link
-                  key={friend.user_id}
-                  to={`/user/${friend.user_id}`}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ring-2 overflow-hidden"
-                  style={{
-                    background: 'var(--color-primary)',
-                    color: 'var(--color-text-on-primary)',
-                    ringColor: 'var(--color-surface-elevated)',
-                    zIndex: 3 - i,
-                  }}
-                >
-                  {friend.avatar_url ? (
-                    <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
-                  ) : (
-                    <span>{friend.display_name?.charAt(0).toUpperCase() || '?'}</span>
-                  )}
-                </Link>
-              ))
-            })()}
+          {/* Stacked avatars (tappable per-friend) */}
+          <div className="flex -space-x-2 flex-shrink-0 pl-3.5 py-3">
+            {friendsHere.slice(0, 3).map((friend, i) => (
+              <button
+                type="button"
+                key={friend.user_id}
+                onClick={() => setSelectedFriend(friend)}
+                aria-label={`See what ${friend.display_name || 'friend'} ordered`}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold overflow-hidden active:scale-95 transition-transform"
+                style={{
+                  background: 'var(--color-primary)',
+                  color: 'var(--color-text-on-primary, white)',
+                  boxShadow: '0 0 0 2px var(--color-surface-elevated)',
+                  zIndex: 3 - i,
+                  position: 'relative',
+                  cursor: 'pointer',
+                }}
+              >
+                {friend.avatar_url ? (
+                  <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" draggable={false} />
+                ) : (
+                  <span>{friend.display_name?.charAt(0).toUpperCase() || '?'}</span>
+                )}
+              </button>
+            ))}
           </div>
-          <p className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>
-            {uniqueFriends} {uniqueFriends === 1 ? 'friend has' : 'friends have'} been here
-          </p>
+          {/* Rest of row (tappable → opens friends list) */}
+          <button
+            type="button"
+            onClick={handleOpenList}
+            className="flex-1 flex items-center justify-between gap-2 pl-3 pr-3.5 py-3 text-left active:bg-black/5"
+            style={{ cursor: 'pointer', background: 'transparent', border: 'none' }}
+          >
+            <p className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>
+              {uniqueFriends} {uniqueFriends === 1 ? 'friend has' : 'friends have'} been here
+            </p>
+            <svg
+              className="w-4 h-4 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="var(--color-text-tertiary)"
+              strokeWidth={2}
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -232,6 +282,24 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
             </div>
           )}
         </div>
+      )}
+
+      {friendsListOpen && (
+        <FriendsHereListModal
+          friends={friendsHere}
+          restaurantName={restaurantName}
+          onSelectFriend={handleSelectFriend}
+          onClose={handleCloseList}
+        />
+      )}
+
+      {selectedFriend && (
+        <FriendVisitsModal
+          friend={selectedFriend}
+          votes={selectedFriend.votes}
+          restaurantName={restaurantName}
+          onClose={handleCloseVisits}
+        />
       )}
     </div>
   )

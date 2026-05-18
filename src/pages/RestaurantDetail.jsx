@@ -616,6 +616,7 @@ export function RestaurantDetail() {
           user={user}
           searchQuery={dishSearchQuery}
           friendsVotesByDish={friendsVotesByDish}
+          restaurantName={restaurant?.name || ''}
         />
       ) : (
         <RestaurantMenu

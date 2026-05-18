@@ -1530,7 +1530,9 @@ LANGUAGE SQL STABLE SET search_path = public AS $$
   ORDER BY v.created_at DESC;
 $$;
 
--- Get friends' votes for a restaurant (with category expertise)
+-- Get friends' votes for a restaurant (with category expertise, review, photo)
+-- Authoritative shape lives in the SECURITY DEFINER variant lower in this file
+-- (around line 5263). Kept in sync; the lower copy is what callers hit.
 CREATE OR REPLACE FUNCTION get_friends_votes_for_restaurant(
   p_user_id UUID,
   p_restaurant_id UUID
@@ -1538,25 +1540,34 @@ CREATE OR REPLACE FUNCTION get_friends_votes_for_restaurant(
 RETURNS TABLE (
   user_id UUID,
   display_name TEXT,
+  avatar_url TEXT,
   dish_id UUID,
   dish_name TEXT,
   rating_10 DECIMAL(3, 1),
   voted_at TIMESTAMPTZ,
-  category_expertise TEXT
+  category_expertise TEXT,
+  review_text TEXT,
+  photo_url TEXT
 )
 LANGUAGE SQL STABLE SET search_path = public AS $$
   SELECT
-    p.id AS user_id, p.display_name, d.id AS dish_id, d.name AS dish_name,
+    p.id AS user_id, p.display_name, p.avatar_url,
+    d.id AS dish_id, d.name AS dish_name,
     v.rating_10, v.created_at AS voted_at,
     CASE
       WHEN EXISTS (SELECT 1 FROM user_badges ub WHERE ub.user_id = p.id AND ub.badge_key = 'authority_' || REPLACE(d.category, ' ', '_')) THEN 'authority'
       WHEN EXISTS (SELECT 1 FROM user_badges ub WHERE ub.user_id = p.id AND ub.badge_key = 'specialist_' || REPLACE(d.category, ' ', '_')) THEN 'specialist'
       ELSE NULL
-    END AS category_expertise
+    END AS category_expertise,
+    v.review_text,
+    dp.photo_url
   FROM follows f
   JOIN profiles p ON p.id = f.followed_id
   JOIN votes v ON v.user_id = f.followed_id
   JOIN dishes d ON d.id = v.dish_id AND d.restaurant_id = p_restaurant_id
+  LEFT JOIN dish_photos dp ON dp.dish_id = d.id
+    AND dp.user_id = f.followed_id
+    AND dp.status IN ('featured', 'community')
   WHERE f.follower_id = p_user_id
   ORDER BY d.name, v.created_at DESC;
 $$;
@@ -5259,14 +5270,15 @@ END;
 $$;
 
 
--- get_friends_votes_for_restaurant — caller guard + block filter
+-- get_friends_votes_for_restaurant — caller guard + block filter + review/photo
 CREATE OR REPLACE FUNCTION get_friends_votes_for_restaurant(
   p_user_id UUID,
   p_restaurant_id UUID
 )
 RETURNS TABLE (
-  user_id UUID, display_name TEXT, dish_id UUID, dish_name TEXT,
-  rating_10 DECIMAL(3, 1), voted_at TIMESTAMPTZ, category_expertise TEXT
+  user_id UUID, display_name TEXT, avatar_url TEXT, dish_id UUID, dish_name TEXT,
+  rating_10 DECIMAL(3, 1), voted_at TIMESTAMPTZ, category_expertise TEXT,
+  review_text TEXT, photo_url TEXT
 )
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
 BEGIN
@@ -5275,18 +5287,23 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  SELECT p.id, p.display_name, d.id, d.name, v.rating_10, v.created_at,
+  SELECT p.id, p.display_name, p.avatar_url, d.id, d.name, v.rating_10, v.created_at,
     CASE
       WHEN EXISTS (SELECT 1 FROM user_badges ub WHERE ub.user_id = p.id
                    AND ub.badge_key = 'authority_' || REPLACE(d.category, ' ', '_')) THEN 'authority'
       WHEN EXISTS (SELECT 1 FROM user_badges ub WHERE ub.user_id = p.id
                    AND ub.badge_key = 'specialist_' || REPLACE(d.category, ' ', '_')) THEN 'specialist'
       ELSE NULL
-    END
+    END,
+    v.review_text,
+    dp.photo_url
   FROM follows f
   JOIN profiles p ON p.id = f.followed_id
   JOIN votes v ON v.user_id = f.followed_id
   JOIN dishes d ON d.id = v.dish_id AND d.restaurant_id = p_restaurant_id
+  LEFT JOIN dish_photos dp ON dp.dish_id = d.id
+    AND dp.user_id = f.followed_id
+    AND dp.status IN ('featured', 'community')
   WHERE f.follower_id = p_user_id
     AND NOT is_blocked_pair(p_user_id, f.followed_id)
   ORDER BY d.name, v.created_at DESC;
