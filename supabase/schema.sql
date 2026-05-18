@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS dishes (
   value_score DECIMAL(6, 2),
   value_percentile DECIMAL(5, 2),
   category_median_price DECIMAL(6, 2),
+  description TEXT,
+  dietary_tags TEXT[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -451,6 +453,8 @@ CREATE INDEX IF NOT EXISTS idx_dishes_restaurant_category ON dishes(restaurant_i
 CREATE INDEX IF NOT EXISTS idx_dishes_created_by ON dishes(created_by);
 CREATE INDEX IF NOT EXISTS idx_dishes_restaurant_toplevel ON dishes(restaurant_id) WHERE parent_dish_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_dishes_consensus_eligible ON dishes(id) WHERE total_votes >= 5 AND avg_rating IS NOT NULL;
+CREATE INDEX IF NOT EXISTS dishes_dietary_tags_idx ON dishes USING GIN (dietary_tags);
+CREATE INDEX IF NOT EXISTS dishes_description_trgm_idx ON dishes USING GIN (description gin_trgm_ops);
 
 -- votes
 CREATE INDEX IF NOT EXISTS idx_votes_dish ON votes(dish_id);
@@ -1069,7 +1073,8 @@ CREATE OR REPLACE FUNCTION get_ranked_dishes(
   user_lng DECIMAL,
   radius_miles INT DEFAULT 50,
   filter_category TEXT DEFAULT NULL,
-  filter_town TEXT DEFAULT NULL
+  filter_town TEXT DEFAULT NULL,
+  filter_dietary_tags TEXT[] DEFAULT NULL
 )
 RETURNS TABLE (
   dish_id UUID,
@@ -1099,7 +1104,9 @@ RETURNS TABLE (
   restaurant_phone TEXT,
   restaurant_website_url TEXT,
   toast_slug TEXT,
-  order_url TEXT
+  order_url TEXT,
+  description TEXT,
+  dietary_tags TEXT[]
 ) AS $$
 DECLARE
   lat_delta DECIMAL := radius_miles / 69.0;
@@ -1244,7 +1251,9 @@ BEGIN
     fr.phone AS restaurant_phone,
     fr.website_url AS restaurant_website_url,
     fr.toast_slug,
-    fr.order_url
+    fr.order_url,
+    d.description,
+    d.dietary_tags
   FROM dishes d
   INNER JOIN filtered_restaurants fr ON d.restaurant_id = fr.id
   LEFT JOIN votes v ON d.id = v.dish_id
@@ -1254,6 +1263,11 @@ BEGIN
   LEFT JOIN best_photos bp ON bp.dish_id = d.id
   WHERE (filter_category IS NULL OR d.category = filter_category)
     AND d.parent_dish_id IS NULL
+    AND (
+      filter_dietary_tags IS NULL
+      OR array_length(filter_dietary_tags, 1) IS NULL
+      OR d.dietary_tags @> filter_dietary_tags
+    )
   GROUP BY d.id, d.name, fr.id, fr.name, fr.town, d.category, d.tags, fr.cuisine,
            d.price, d.photo_url, fr.distance, fr.lat, fr.lng,
            fr.address, fr.phone, fr.website_url, fr.toast_slug, fr.order_url,
@@ -1261,7 +1275,8 @@ BEGIN
            bv.best_name, bv.best_rating,
            d.value_score, d.value_percentile,
            rvc.recent_votes,
-           bp.photo_url
+           bp.photo_url,
+           d.description, d.dietary_tags
   ORDER BY search_score DESC NULLS LAST, total_votes DESC;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;
@@ -1286,7 +1301,9 @@ RETURNS TABLE (
   best_variant_id UUID,
   best_variant_name TEXT,
   best_variant_rating DECIMAL,
-  tags TEXT[]
+  tags TEXT[],
+  description TEXT,
+  dietary_tags TEXT[]
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -1336,7 +1353,9 @@ BEGIN
     (vs.child_count IS NOT NULL AND vs.child_count > 0) AS has_variants,
     COALESCE(vs.child_count, 0)::INT AS variant_count,
     bv.best_id AS best_variant_id, bv.best_name AS best_variant_name, bv.best_rating AS best_variant_rating,
-    d.tags
+    d.tags,
+    d.description,
+    d.dietary_tags
   FROM dishes d
   INNER JOIN restaurants r ON d.restaurant_id = r.id
   LEFT JOIN variant_stats vs ON vs.parent_dish_id = d.id
@@ -1348,7 +1367,8 @@ BEGIN
   GROUP BY d.id, d.name, r.id, r.name, d.category, d.menu_section, d.price, d.photo_url, d.tags,
            vs.total_child_votes, vs.combined_avg_rating, vs.child_count,
            dvs.direct_votes, dvs.direct_avg,
-           bv.best_id, bv.best_name, bv.best_rating
+           bv.best_id, bv.best_name, bv.best_rating,
+           d.description, d.dietary_tags
   ORDER BY
     CASE WHEN COALESCE(vs.total_child_votes, dvs.direct_votes, 0) >= 5 THEN 0 ELSE 1 END,
     COALESCE(vs.combined_avg_rating, dvs.direct_avg) DESC NULLS LAST,
@@ -1367,18 +1387,22 @@ RETURNS TABLE (
   photo_url TEXT,
   display_order INT,
   total_votes BIGINT,
-  avg_rating DECIMAL
+  avg_rating DECIMAL,
+  description TEXT,
+  dietary_tags TEXT[]
 ) AS $$
 BEGIN
   RETURN QUERY
   SELECT
     d.id AS dish_id, d.name AS dish_name, d.price, d.photo_url, d.display_order,
     COUNT(v.id)::BIGINT AS total_votes,
-    ROUND(AVG(v.rating_10)::NUMERIC, 1) AS avg_rating
+    ROUND(AVG(v.rating_10)::NUMERIC, 1) AS avg_rating,
+    d.description,
+    d.dietary_tags
   FROM dishes d
   LEFT JOIN votes v ON d.id = v.dish_id
   WHERE d.parent_dish_id = p_parent_dish_id
-  GROUP BY d.id, d.name, d.price, d.photo_url, d.display_order
+  GROUP BY d.id, d.name, d.price, d.photo_url, d.display_order, d.description, d.dietary_tags
   ORDER BY d.display_order, d.name;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
@@ -3657,6 +3681,9 @@ GRANT EXECUTE ON FUNCTION find_nearby_restaurants TO authenticated;
 GRANT EXECUTE ON FUNCTION find_nearby_restaurants TO anon;
 GRANT EXECUTE ON FUNCTION get_restaurants_within_radius(DECIMAL, DECIMAL, INT) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_restaurants_within_radius(DECIMAL, DECIMAL, INT) TO anon;
+GRANT EXECUTE ON FUNCTION get_ranked_dishes(DECIMAL, DECIMAL, INT, TEXT, TEXT, TEXT[]) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_restaurant_dishes(UUID) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_dish_variants(UUID) TO anon, authenticated;
 
 
 -- =============================================
