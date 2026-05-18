@@ -35,7 +35,7 @@ const VALID_CATEGORIES = [
   'calamari', 'crab', 'curry', 'lobster', 'mussels', 'onion rings',
   'pancakes', 'scallops', 'shrimp', 'waffles', 'wrap',
   'fish-and-chips', 'fish-sandwich', 'eggs-benedict',
-  'oysters', 'pastry',
+  'oysters', 'pastry', 'coffee',
 ]
 
 const MENU_EXTRACTION_PROMPT = `You are extracting a restaurant menu for a food discovery app. Your job is to produce output that mirrors the restaurant's actual menu — a user reading it should feel like they're looking at the real thing.
@@ -109,12 +109,13 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
 | pokebowl | Poke bowls |
 | asian | Asian entrees (pad thai, stir-fry) |
 | curry | Curry dishes |
+| coffee | Coffee drinks: drip, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee |
 | entree | Catch-all for entrees that don't fit any specific category |
 
 ## Rules
 
 1. **Extract EVERY food dish on the menu** — be thorough, don't skip items
-2. **Skip ALL drinks** — no cocktails, beer, wine, coffee, soda, juice, or any beverages
+2. **Coffee drinks ARE included** — categorize as `coffee`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur). **Skip all other drinks** — no cocktails, beer, wine, soda, juice, plain water, or non-coffee beverages.
 3. **Skip kids meals**
 4. **Skip condiments** — extra sauce, side of dressing, bread roll
 5. **Skip side dishes** — mashed potatoes, green beans, rice, coleslaw, steamed veggies, etc. NOT rateable.

@@ -24,6 +24,8 @@ export const BROWSE_CATEGORIES = [
   { id: 'wings', label: 'Wings', emoji: '🍗' },
   { id: 'chicken', label: 'Chicken', emoji: '🐔' },
   { id: 'pork', label: 'Pork', emoji: '🐷' },
+  { id: 'coffee', label: 'Coffee', emoji: '☕' },
+  { id: 'drinks', label: 'Drinks', emoji: '🍸' },
 ]
 
 // Main categories shown in category picker (singular labels)
@@ -48,6 +50,8 @@ export const MAIN_CATEGORIES = [
   { id: 'wings', label: 'Wings', emoji: '🍗' },
   { id: 'chicken', label: 'Chicken', emoji: '🐔' },
   { id: 'pork', label: 'Pork', emoji: '🐷' },
+  { id: 'coffee', label: 'Coffee', emoji: '☕' },
+  { id: 'drinks', label: 'Drinks', emoji: '🍸' },
 ]
 
 // All categories in the system (including sub-categories)
