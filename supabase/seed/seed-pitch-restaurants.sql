@@ -82,7 +82,7 @@ BEGIN
         v_base_rating := 6.5 + random() * 1.5;      -- 6.5-8.0
       ELSIF LOWER(v_dish.category) IN ('beer') THEN
         v_base_rating := 7.0 + random() * 2.0;      -- 7.0-9.0 (brewery specialty)
-      ELSIF LOWER(v_dish.category) IN ('cocktails') THEN
+      ELSIF LOWER(v_dish.category) IN ('drinks') THEN
         v_base_rating := 7.0 + random() * 1.5;      -- 7.0-8.5
       ELSIF LOWER(v_dish.category) IN ('salad', 'breakfast') THEN
         v_base_rating := 6.5 + random() * 1.5;      -- 6.5-8.0

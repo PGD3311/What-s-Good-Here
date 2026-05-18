@@ -11,7 +11,7 @@ const VALID_CATEGORIES = [
   'apps', 'fries', 'entree', 'dessert', 'donuts', 'pokebowl',
   'asian', 'chicken', 'quesadilla', 'soup',
   'ribs', 'sides', 'duck', 'lamb', 'pork', 'clams',
-  'oysters', 'coffee', 'cocktails', 'ice cream', 'beer',
+  'oysters', 'coffee', 'drinks', 'ice cream', 'beer',
 ]
 
 const MENU_EXTRACTION_PROMPT = `You are a menu data extraction assistant for a food discovery app.
@@ -55,7 +55,7 @@ Given raw menu text from a restaurant, extract every food AND drink item and ret
 | pokebowl | Poke bowls |
 | asian | Asian entrees (pad thai, curry, stir-fry) |
 | soup | Soups (non-chowder) |
-| cocktails | Cocktails, mixed drinks, signature drinks |
+| drinks | Cocktails, mixed drinks, signature drinks, frozen drinks |
 | coffee | Coffee drinks, espresso, lattes |
 | ice cream | Ice cream, gelato, frozen treats, milkshakes |
 | beer | Craft beer, beer flights, specialty brews |
@@ -63,7 +63,7 @@ Given raw menu text from a restaurant, extract every food AND drink item and ret
 
 ## Rules
 
-1. **Include cocktails, coffee, beer, and specialty drinks** — these are important categories
+1. **Include drinks, coffee, beer, and specialty drinks** — these are important categories (use the `drinks` category for cocktails, mixed drinks, frozen drinks)
 2. **Skip generic beverages** — no soda, no plain water/juice, no wine by the glass lists
 3. **Skip condiment-level items under ~$4** — extra sauce, bread roll, etc.
 4. **Include substantive sides $4+**

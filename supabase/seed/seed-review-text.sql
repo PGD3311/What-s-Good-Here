@@ -636,7 +636,7 @@ category_mapping AS (
     WHEN category = 'salad' THEN 'salad'
     WHEN category IN ('pasta', 'asian', 'pokebowl', 'entree') THEN 'pasta'
     WHEN category = 'sushi' THEN 'sushi'
-    WHEN category IN ('coffee', 'cocktails', 'beer') THEN 'drinks'
+    WHEN category IN ('coffee', 'drinks', 'beer') THEN 'drinks'
     WHEN category IN ('dessert', 'donuts') THEN 'dessert'
     ELSE 'generic'
   END AS cat_group

@@ -48,7 +48,7 @@ INSERT INTO dishes (restaurant_id, name, category, price) VALUES
 ((SELECT id FROM restaurants WHERE name = 'Bad Martha Farmer''s Brewery'), 'Bog Head Cranberry Seltzer', 'beer', 9.00),
 
 -- Cocktails (rum-based taproom specials)
-((SELECT id FROM restaurants WHERE name = 'Bad Martha Farmer''s Brewery'), 'Bad Martha Rum Punch', 'cocktails', 14.00);
+((SELECT id FROM restaurants WHERE name = 'Bad Martha Farmer''s Brewery'), 'Bad Martha Rum Punch', 'drinks', 14.00);
 
 -- Verify import
 SELECT COUNT(*) as dish_count

@@ -10,9 +10,9 @@
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('Dark & Stormy', 'cocktails', 'Cocktails', 14.00),
-  ('Offshore Mule', 'cocktails', 'Cocktails', 15.00),
-  ('Espresso Martini', 'cocktails', 'Cocktails', 16.00)
+  ('Dark & Stormy', 'drinks', 'Cocktails', 14.00),
+  ('Offshore Mule', 'drinks', 'Cocktails', 15.00),
+  ('Espresso Martini', 'drinks', 'Cocktails', 16.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name = 'Offshore Ale Company'
 AND NOT EXISTS (
@@ -23,10 +23,10 @@ AND NOT EXISTS (
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('Lookout Margarita', 'cocktails', 'Cocktails', 15.00),
-  ('Frozen Mudslide', 'cocktails', 'Cocktails', 14.00),
-  ('Rum Punch', 'cocktails', 'Cocktails', 14.00),
-  ('Aperol Spritz', 'cocktails', 'Cocktails', 15.00)
+  ('Lookout Margarita', 'drinks', 'Cocktails', 15.00),
+  ('Frozen Mudslide', 'drinks', 'Cocktails', 14.00),
+  ('Rum Punch', 'drinks', 'Cocktails', 14.00),
+  ('Aperol Spritz', 'drinks', 'Cocktails', 15.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name = 'Lookout Tavern'
 AND NOT EXISTS (
@@ -37,9 +37,9 @@ AND NOT EXISTS (
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('Negroni', 'cocktails', 'Cocktails', 16.00),
-  ('Old Fashioned', 'cocktails', 'Cocktails', 17.00),
-  ('Paloma', 'cocktails', 'Cocktails', 16.00)
+  ('Negroni', 'drinks', 'Cocktails', 16.00),
+  ('Old Fashioned', 'drinks', 'Cocktails', 17.00),
+  ('Paloma', 'drinks', 'Cocktails', 16.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name = 'Beach Road'
 AND NOT EXISTS (
@@ -50,9 +50,9 @@ AND NOT EXISTS (
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('Dirty Martini', 'cocktails', 'Cocktails', 16.00),
-  ('Whiskey Sour', 'cocktails', 'Cocktails', 15.00),
-  ('Island Mojito', 'cocktails', 'Cocktails', 16.00)
+  ('Dirty Martini', 'drinks', 'Cocktails', 16.00),
+  ('Whiskey Sour', 'drinks', 'Cocktails', 15.00),
+  ('Island Mojito', 'drinks', 'Cocktails', 16.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name = 'Rockfish'
 AND NOT EXISTS (
@@ -63,8 +63,8 @@ AND NOT EXISTS (
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('Spicy Margarita', 'cocktails', 'Cocktails', 16.00),
-  ('French 75', 'cocktails', 'Cocktails', 17.00)
+  ('Spicy Margarita', 'drinks', 'Cocktails', 16.00),
+  ('French 75', 'drinks', 'Cocktails', 17.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name = 'The Attic'
 AND NOT EXISTS (
@@ -75,9 +75,9 @@ AND NOT EXISTS (
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('Cucumber Gimlet', 'cocktails', 'Cocktails', 16.00),
-  ('Espresso Martini', 'cocktails', 'Cocktails', 17.00),
-  ('Mezcal Mule', 'cocktails', 'Cocktails', 16.00)
+  ('Cucumber Gimlet', 'drinks', 'Cocktails', 16.00),
+  ('Espresso Martini', 'drinks', 'Cocktails', 17.00),
+  ('Mezcal Mule', 'drinks', 'Cocktails', 16.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name = 'Town Bar'
 AND NOT EXISTS (
@@ -88,9 +88,9 @@ AND NOT EXISTS (
 INSERT INTO dishes (restaurant_id, name, category, menu_section, price)
 SELECT id, dish.name, dish.category, dish.menu_section, dish.price
 FROM restaurants, (VALUES
-  ('House Margarita', 'cocktails', 'Cocktails', 13.00),
-  ('Mango Margarita', 'cocktails', 'Cocktails', 15.00),
-  ('Paloma', 'cocktails', 'Cocktails', 14.00)
+  ('House Margarita', 'drinks', 'Cocktails', 13.00),
+  ('Mango Margarita', 'drinks', 'Cocktails', 15.00),
+  ('Paloma', 'drinks', 'Cocktails', 14.00)
 ) AS dish(name, category, menu_section, price)
 WHERE restaurants.name ILIKE '%sharky%'
 AND NOT EXISTS (
@@ -136,5 +136,5 @@ AND NOT EXISTS (
 SELECT d.name, d.category, r.name as restaurant
 FROM dishes d
 JOIN restaurants r ON d.restaurant_id = r.id
-WHERE d.category IN ('cocktails', 'coffee', 'oysters', 'ice cream')
+WHERE d.category IN ('drinks', 'coffee', 'oysters', 'ice cream')
 ORDER BY d.category, r.name, d.name;

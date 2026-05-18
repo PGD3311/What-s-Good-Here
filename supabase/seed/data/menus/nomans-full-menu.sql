@@ -51,13 +51,13 @@ INSERT INTO dishes (restaurant_id, name, category, price) VALUES
 ((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'House-Made Salsa & Chips', 'apps', 7.00),
 
 -- Cocktails (all rum-forward, house Noman's rum)
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Pineapple Mint Daiquiri', 'cocktails', 14.00),
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Painkiller', 'cocktails', 14.00),
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'The Vibe', 'cocktails', 14.00),
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Jungle Bird', 'cocktails', 14.00),
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Mai Tai', 'cocktails', 14.00),
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Rum Runner', 'cocktails', 14.00),
-((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'OB Peach Tea', 'cocktails', 14.00);
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Pineapple Mint Daiquiri', 'drinks', 14.00),
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Painkiller', 'drinks', 14.00),
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'The Vibe', 'drinks', 14.00),
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Jungle Bird', 'drinks', 14.00),
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Mai Tai', 'drinks', 14.00),
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'Rum Runner', 'drinks', 14.00),
+((SELECT id FROM restaurants WHERE name = 'Noman''s'), 'OB Peach Tea', 'drinks', 14.00);
 
 -- Verify import
 SELECT COUNT(*) as dish_count

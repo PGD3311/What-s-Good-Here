@@ -24,7 +24,9 @@ const categoryIcons = {
   chicken: '/categories/icons/chicken.png',
   pork: '/categories/icons/pork.png',
   'ice cream': '/categories/icons/ice-cream.png',
-  // Missing poster icons: oysters, coffee, cocktails (use SVG fallback)
+  coffee: '/categories/icons/coffee.png',
+  drinks: '/categories/icons/drinks.png',
+  // Missing poster icons: oysters (use SVG fallback)
 
   // === SUB-CATEGORIES ===
   'fried chicken': '/categories/icons/fried-chicken.png', // grittier texture, slightly off-coral
