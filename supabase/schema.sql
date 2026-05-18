@@ -469,6 +469,12 @@ CREATE INDEX IF NOT EXISTS idx_votes_source_created ON votes(source, created_at 
 
 -- profiles
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_display_name_unique ON profiles(LOWER(display_name)) WHERE display_name IS NOT NULL;
+-- Trigram GIN index accelerates ILIKE '%foo%' substring search used by
+-- search_user_follows (and searchUsers). Becomes load-bearing once any
+-- user accumulates ~5K+ follows; cheap to maintain at smaller scale.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_profiles_display_name_trgm
+  ON profiles USING gin (display_name gin_trgm_ops);
 
 -- dish_photos
 CREATE INDEX IF NOT EXISTS idx_dish_photos_dish ON dish_photos(dish_id);

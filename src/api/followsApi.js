@@ -86,6 +86,9 @@ async function _searchFollows(userId, direction, { query, cursor = null, limit =
     // out before hitting the RPC. Strip escaped LIKE/ILIKE metachars to check.
     const searchable = sanitized.replace(/\\[%_\\]/g, '')
     if (!sanitized || !searchable) return { users: [], hasMore: false }
+    // Min 2 chars (matches searchUsers convention). Single-char queries are
+    // ambiguous and don't benefit from the trigram index — degrade to scan.
+    if (searchable.length < 2) return { users: [], hasMore: false }
 
     const { data, error } = await supabase.rpc('search_user_follows', {
       p_user_id: userId,
