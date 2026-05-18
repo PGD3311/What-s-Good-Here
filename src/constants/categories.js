@@ -194,6 +194,7 @@ const CATEGORY_IMAGES = {
   wrap: '/categories/icons/wrap.png',
   pokebowl: '/categories/icons/pokebowl.png',
   'lobster benedict': '/categories/icons/eggs-benedict.png',
+  donuts: '/categories/icons/donuts.png',
 }
 
 // Dish name keyword → icon mapping
@@ -278,6 +279,8 @@ const DISH_NAME_ICON_RULES = [
   { keyword: 'curry', icon: '/categories/icons/curry.png' },
   { keyword: 'soup', icon: '/categories/icons/soup.png' },
   { keyword: 'bruschetta', icon: '/categories/icons/bruschetta.png' },
+  { keyword: 'donut', icon: '/categories/icons/donuts.png' },
+  { keyword: 'doughnut', icon: '/categories/icons/donuts.png' },
   { keyword: 'muffin', icon: '/categories/icons/dessert.png' },
   { keyword: 'scone', icon: '/categories/icons/dessert.png' },
   { keyword: 'croissant', icon: '/categories/icons/dessert.png' },
