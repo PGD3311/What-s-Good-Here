@@ -73,7 +73,7 @@ export function FriendVisitsModal({ friend, votes, restaurantName, onClose }) {
         className="absolute left-0 right-0 bottom-0 rounded-t-2xl flex flex-col"
         style={{
           background: 'var(--color-surface-elevated)',
-          maxHeight: '85vh',
+          height: '75vh',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
         onClick={(e) => e.stopPropagation()}

@@ -55,7 +55,7 @@ export function FriendsHereListModal({ friends, restaurantName, onSelectFriend, 
         className="absolute left-0 right-0 bottom-0 rounded-t-2xl flex flex-col"
         style={{
           background: 'var(--color-surface-elevated)',
-          maxHeight: '75vh',
+          height: '65vh',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
         onClick={(e) => e.stopPropagation()}
