@@ -4,9 +4,9 @@
 // Browse shortcuts - curated high-frequency categories for Browse page
 // Note: Categories are shortcuts, NOT containers. All dishes are searchable regardless of category.
 export const BROWSE_CATEGORIES = [
+  { id: 'lobster roll', label: 'Lobster Rolls', emoji: '🦞' },
   { id: 'pizza', label: 'Pizza', emoji: '🍕' },
   { id: 'burger', label: 'Burgers', emoji: '🍔' },
-  { id: 'lobster roll', label: 'Lobster Rolls', emoji: '🦞' },
   { id: 'clams', label: 'Clams', emoji: '🐚' },
   { id: 'fish', label: 'Fish', emoji: '🐟' },
   { id: 'sushi', label: 'Sushi', emoji: '🍣' },
@@ -16,6 +16,7 @@ export const BROWSE_CATEGORIES = [
   { id: 'pasta', label: 'Pasta', emoji: '🍝' },
   { id: 'steak', label: 'Steak', emoji: '🥩' },
   { id: 'coffee', label: 'Coffee', emoji: '☕' },
+  { id: 'donuts', label: 'Donuts', emoji: '🍩' },
   { id: 'drinks', label: 'Drinks', emoji: '🍸' },
   { id: 'sandwich', label: 'Sandwiches', emoji: '🥪' },
   { id: 'salad', label: 'Salads', emoji: '🥗' },
@@ -51,6 +52,7 @@ export const MAIN_CATEGORIES = [
   { id: 'chicken', label: 'Chicken', emoji: '🐔' },
   { id: 'pork', label: 'Pork', emoji: '🐷' },
   { id: 'coffee', label: 'Coffee', emoji: '☕' },
+  { id: 'donuts', label: 'Donuts', emoji: '🍩' },
   { id: 'drinks', label: 'Drinks', emoji: '🍸' },
 ]
 
@@ -64,7 +66,6 @@ export const ALL_CATEGORIES = [
   { id: 'apps', label: 'Appetizers', emoji: '🍤' },
   { id: 'fried chicken', label: 'Fried Chicken', emoji: '🍗' },
   { id: 'entree', label: 'Entree', emoji: '🍽️' },
-  { id: 'donuts', label: 'Donuts', emoji: '🍩' },
   { id: 'asian', label: 'Asian', emoji: '🥢' },
   { id: 'quesadilla', label: 'Quesadilla', emoji: '🫓' },
   { id: 'breakfast sandwich', label: 'Breakfast Sandwich', emoji: '🥯' },
