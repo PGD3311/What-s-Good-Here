@@ -1,98 +1,101 @@
 /**
- * Simple content moderation for reviews.
- * Uses a blocklist approach to catch obvious inappropriate content.
+ * Client-side content moderation for reviews + UGC. Mirrors the server-side
+ * is_offensive() Postgres function (supabase/migrations/20260424... and
+ * 20260517_is_offensive_word_boundaries.sql) so the client catches the
+ * obvious cases before the DB check constraint trips.
  */
 
-// Common profanity, slurs, and spam phrases
-// Based on commonly used profanity lists - includes variations and common misspellings
-const BLOCKED_WORDS = [
-  // Profanity
-  'fuck', 'fucking', 'fucked', 'fucker', 'fck', 'f*ck',
-  'shit', 'shitty', 'bullshit', 'sh*t',
-  'ass', 'asshole', 'a**hole',
-  'bitch', 'b*tch',
-  'damn', 'dammit',
-  'crap',
-  'bastard',
-  'dick', 'd*ck',
-  'piss', 'pissed',
-  'cunt', 'c*nt',
-
-  // Slurs (racial, ethnic, sexual orientation, disability)
-  'nigger', 'nigga', 'n*gger', 'n*gga',
-  'faggot', 'fag', 'f*ggot', 'f*g',
-  'retard', 'retarded', 'r*tard',
-  'spic', 'sp*c',
-  'chink', 'ch*nk',
-  'kike', 'k*ke',
-  'wetback',
-  'beaner',
-  'cracker',
-  'honky',
-  'dyke', 'd*ke',
-  'tranny', 'tr*nny',
-
-  // Hate speech
-  'nazi', 'hitler',
+// Tokens with substring false-positive risk in normal English / food context.
+// Matched with word boundaries — "spicy" / "crappie" / "shiitake" / "Dickens"
+// won't trigger.
+const BLOCKED_WHOLE_WORDS = [
+  // Short profanity / slur abbreviations
+  'ass',
+  'fag', 'f*g',
+  'fggt',
+  'fck',
   'kkk',
+  'nft',
+  'sex', 's*x',
+  'xxx',
+  // 4-letter slurs / profanity with food/English substring risk
+  'spic', 'sp*c',
+  'crap',
+  'piss',
+  'dick', 'd*ck',
+  'dyke', 'd*ke',
+  'kike', 'k*ke',
+  'nazi',
+  'nude',
+  'shit', 'sh*t',
+  'chink', 'ch*nk',
+  'beaner',
+]
 
-  // Spam/scam phrases
+// Tokens safe to substring-match because they're unlikely to appear inside
+// innocent English or food words.
+const BLOCKED_SUBSTRINGS = [
+  // Profanity (longer forms)
+  'fuck', 'fucking', 'fucked', 'fucker', 'f*ck',
+  'shitty', 'bullshit',
+  'asshole', 'a**hole',
+  'bitch', 'b*tch',
+  'bastard',
+  'pissed',
+  'cunt', 'c*nt',
+  // Slurs (longer forms)
+  'nigger', 'nigga', 'n*gger', 'n*gga',
+  'faggot', 'f*ggot',
+  'retard', 'retarded', 'r*tard',
+  'wetback',
+  'honky',
+  'tranny', 'tr*nny',
+  // Hate speech
+  'hitler',
+  // Spam / scam phrases
   'buy now', 'click here', 'free money',
   'make money fast', 'work from home',
-  'bitcoin', 'crypto', 'nft',
+  'bitcoin', 'crypto',
   'www.', 'http://', 'https://',
   '.com', '.net', '.org',
-
   // Sexual content
   'porn', 'p*rn',
-  'sex', 's*x',
-  'nude', 'naked',
-  'xxx',
-];
+]
 
 /**
  * Check if review text contains blocked content.
- * @param {string} text - The review text to check
- * @returns {boolean} - True if blocked content found
+ * @param {string} text
+ * @returns {boolean}
  */
 export function containsBlockedContent(text) {
-  if (!text || typeof text !== 'string') {
-    return false;
+  if (!text || typeof text !== 'string') return false
+  const lower = text.toLowerCase()
+
+  for (const word of BLOCKED_WHOLE_WORDS) {
+    const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'i')
+    if (regex.test(lower)) return true
   }
-
-  const lower = text.toLowerCase();
-
-  // Check for exact word matches (with word boundaries to avoid false positives)
-  // e.g., "class" shouldn't match "ass"
-  return BLOCKED_WORDS.some(word => {
-    // For short words (3 chars or less), require word boundaries
-    if (word.length <= 3) {
-      const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'i');
-      return regex.test(lower);
-    }
-    // For longer words, simple includes is fine
-    return lower.includes(word);
-  });
+  for (const phrase of BLOCKED_SUBSTRINGS) {
+    if (lower.includes(phrase)) return true
+  }
+  return false
 }
 
 /**
- * Validate any user-generated text for blocked content.
- * Returns an error message string if blocked, or null if clean.
- * @param {string} text - Text to validate
- * @param {string} fieldName - Human-readable field name for error message
- * @returns {string|null} Error message or null
+ * Validate any user-generated text. Returns an error message if blocked,
+ * or null if clean.
+ * @param {string} text
+ * @param {string} fieldName
+ * @returns {string|null}
  */
 export function validateUserContent(text, fieldName = 'Content') {
-  if (!text?.trim()) return null;
+  if (!text?.trim()) return null
   if (containsBlockedContent(text)) {
-    return `${fieldName} contains inappropriate content. Please revise.`;
+    return `${fieldName} contains inappropriate content. Please revise.`
   }
-  return null;
+  return null
 }
 
-/**
- * Escape special regex characters in a string
- */
 function escapeRegex(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

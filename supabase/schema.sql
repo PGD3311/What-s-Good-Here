@@ -839,6 +839,10 @@ $$ LANGUAGE plpgsql IMMUTABLE SET search_path = public;
 -- Server-side UGC content filter. Mirrors src/lib/reviewBlocklist.js exactly:
 -- blocklist entries with length <= 3 use boundary matching; longer entries use
 -- plain case-insensitive substring matching. Asterisks are literal.
+-- 4-letter tokens with substring false-positive risk live in short_terms so
+-- they get word-boundary regex protection (e.g. 'spic' won't match 'spicy',
+-- 'crap' won't match 'crappie', 'dick' won't match 'Dickens'). Longer
+-- tokens stay in long_terms substring mode.
 CREATE OR REPLACE FUNCTION public.is_offensive(p_text TEXT)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -864,7 +868,25 @@ AS $$
             ('nft'),
             ('sex'),
             ('s\*x'),
-            ('xxx')
+            ('xxx'),
+            ('spic'),
+            ('sp\*c'),
+            ('crap'),
+            ('piss'),
+            ('dick'),
+            ('d\*ck'),
+            ('dyke'),
+            ('d\*ke'),
+            ('kike'),
+            ('k\*ke'),
+            ('nazi'),
+            ('nude'),
+            ('shit'),
+            ('sh\*t'),
+            ('fggt'),
+            ('chink'),
+            ('ch\*nk'),
+            ('beaner')
         ) AS short_terms(pattern)
         WHERE normalized.value ~ ('(^|[^a-z0-9_])' || short_terms.pattern || '($|[^a-z0-9_])')
       )
@@ -878,21 +900,13 @@ AS $$
             ('fucked'),
             ('fucker'),
             ('f*ck'),
-            ('shit'),
             ('shitty'),
             ('bullshit'),
-            ('sh*t'),
             ('asshole'),
             ('a**hole'),
             ('bitch'),
             ('b*tch'),
-            ('damn'),
-            ('dammit'),
-            ('crap'),
             ('bastard'),
-            ('dick'),
-            ('d*ck'),
-            ('piss'),
             ('pissed'),
             ('cunt'),
             ('c*nt'),
@@ -905,21 +919,10 @@ AS $$
             ('retard'),
             ('retarded'),
             ('r*tard'),
-            ('spic'),
-            ('sp*c'),
-            ('chink'),
-            ('ch*nk'),
-            ('kike'),
-            ('k*ke'),
             ('wetback'),
-            ('beaner'),
-            ('cracker'),
             ('honky'),
-            ('dyke'),
-            ('d*ke'),
             ('tranny'),
             ('tr*nny'),
-            ('nazi'),
             ('hitler'),
             ('buy now'),
             ('click here'),
@@ -935,9 +938,7 @@ AS $$
             ('.net'),
             ('.org'),
             ('porn'),
-            ('p*rn'),
-            ('nude'),
-            ('naked')
+            ('p*rn')
         ) AS long_terms(term)
         WHERE position(long_terms.term IN normalized.value) > 0
       )
