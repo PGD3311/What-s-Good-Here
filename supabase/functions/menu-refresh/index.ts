@@ -115,7 +115,7 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
 ## Rules
 
 1. **Extract EVERY food dish on the menu** — be thorough, don't skip items
-2. **Coffee drinks ARE included** — categorize as `coffee`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur). **Skip all other drinks** — no cocktails, beer, wine, soda, juice, plain water, or non-coffee beverages.
+2. **Coffee drinks ARE included** — categorize as \`coffee\`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur). **Skip all other drinks** — no cocktails, beer, wine, soda, juice, plain water, or non-coffee beverages.
 3. **Skip kids meals**
 4. **Skip condiments** — extra sauce, side of dressing, bread roll
 5. **Skip side dishes** — mashed potatoes, green beans, rice, coleslaw, steamed veggies, etc. NOT rateable.
