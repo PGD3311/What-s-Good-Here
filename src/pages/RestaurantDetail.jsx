@@ -41,6 +41,7 @@ export function RestaurantDetail() {
   const [dishSearchQuery, setDishSearchQuery] = useState('')
   const [loginModalOpen, setLoginModalOpen] = useState(false)
   const [friendsVotesByDish, setFriendsVotesByDish] = useState({})
+  const [tasteCompatByFriend, setTasteCompatByFriend] = useState({})
   const [expandedReview, setExpandedReview] = useState(null)
 
   // Fetch restaurant by ID
@@ -153,10 +154,13 @@ export function RestaurantDetail() {
 
   // Fetch friend votes
   useEffect(() => {
-    if (!restaurantId || !user) {
-      setFriendsVotesByDish({})
-      return
-    }
+    // Clear synchronously on restaurantId change so the stale
+    // restaurant's friends data doesn't leak into the new view while
+    // the new RPC is in flight.
+    setFriendsVotesByDish({})
+    setTasteCompatByFriend({})
+
+    if (!restaurantId || !user) return
 
     let cancelled = false
 
@@ -165,16 +169,38 @@ export function RestaurantDetail() {
         const votes = await followsApi.getFriendsVotesForRestaurant(restaurantId)
         if (cancelled) return
         const byDish = {}
+        const friendIds = new Set()
         votes.forEach(vote => {
           if (!byDish[vote.dish_id]) {
             byDish[vote.dish_id] = []
           }
           byDish[vote.dish_id].push(vote)
+          friendIds.add(vote.user_id)
         })
         setFriendsVotesByDish(byDish)
+
+        // Fan out compatibility for the same friend set — one batch RPC.
+        // Failure here is non-fatal: chip just hides, votes still render.
+        if (friendIds.size > 0) {
+          try {
+            const compatMap = await followsApi.getTasteCompatibilityForFriends(Array.from(friendIds))
+            if (cancelled) return
+            const obj = {}
+            compatMap.forEach((value, key) => { obj[key] = value })
+            setTasteCompatByFriend(obj)
+          } catch (err) {
+            logger.warn('Failed to fetch taste compatibility for friends:', err)
+            if (!cancelled) setTasteCompatByFriend({})
+          }
+        } else {
+          setTasteCompatByFriend({})
+        }
       } catch (err) {
         logger.error('Failed to fetch friends votes for restaurant:', err)
-        if (!cancelled) setFriendsVotesByDish({})
+        if (!cancelled) {
+          setFriendsVotesByDish({})
+          setTasteCompatByFriend({})
+        }
       }
     }
 
@@ -616,6 +642,7 @@ export function RestaurantDetail() {
           user={user}
           searchQuery={dishSearchQuery}
           friendsVotesByDish={friendsVotesByDish}
+          tasteCompatByFriend={tasteCompatByFriend}
           restaurantName={restaurant?.name || ''}
         />
       ) : (

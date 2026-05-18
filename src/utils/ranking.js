@@ -22,6 +22,19 @@ export function getRatingColor(rating) {
 }
 
 /**
+ * Get color for taste-compatibility percentage (0-100). Same warm palette
+ * as getRatingColor, scaled to the percentage domain.
+ * @param {number|null} pct - Compatibility 0-100, or null
+ * @returns {string} CSS color value
+ */
+export function getMatchColor(pct) {
+  if (pct === null || pct === undefined) return 'var(--color-text-tertiary)'
+  if (pct >= 80) return 'var(--color-success)'
+  if (pct >= 60) return 'var(--color-accent-gold)'
+  return 'var(--color-text-tertiary)'
+}
+
+/**
  * Get the left-border accent color used on review cards.
  * Distinct from getRatingColor — uses theme accent tokens, not badge colors.
  * @param {number} rating - Rating on 1-10 scale

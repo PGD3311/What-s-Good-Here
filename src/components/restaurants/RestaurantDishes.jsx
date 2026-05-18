@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { MIN_VOTES_FOR_RANKING } from '../../constants/app'
 import { DishListItem } from '../DishListItem'
 import { SectionHeader } from '../SectionHeader'
@@ -8,10 +8,18 @@ import { FriendsHereListModal } from './FriendsHereListModal'
 const TOP_DISHES_COUNT = 5
 
 // Restaurant dishes component - Job #2: "What should I order?"
-export function RestaurantDishes({ dishes, loading, error, searchQuery = '', friendsVotesByDish = {}, restaurantName = '' }) {
+export function RestaurantDishes({ dishes, loading, error, searchQuery = '', friendsVotesByDish = {}, tasteCompatByFriend = {}, restaurantName = '' }) {
   const [showAllDishes, setShowAllDishes] = useState(false)
   const [friendsListOpen, setFriendsListOpen] = useState(false)
   const [selectedFriend, setSelectedFriend] = useState(null)
+
+  // Close any open friends modals when the restaurant context changes,
+  // so a stale selectedFriend from the previous restaurant can't render
+  // against this restaurant's name.
+  useEffect(() => {
+    setFriendsListOpen(false)
+    setSelectedFriend(null)
+  }, [restaurantName])
 
   // Filter and sort dishes
   const sortedDishes = useMemo(() => {
@@ -79,13 +87,16 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
       const avg = ratings.length
         ? ratings.reduce((s, r) => s + r, 0) / ratings.length
         : null
+      const compat = tasteCompatByFriend[f.user_id] || null
       return {
         ...f,
         dish_count: f.votes.length,
         avg_rating: avg,
+        compatibility_pct: compat?.compatibility_pct ?? null,
+        shared_dishes: compat?.shared_dishes ?? 0,
       }
     })
-  }, [friendsVotesByDish])
+  }, [friendsVotesByDish, tasteCompatByFriend])
 
   const uniqueFriends = friendsHere.length
 

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
-import { getRatingColor } from '../../utils/ranking'
+import { getRatingColor, getMatchColor } from '../../utils/ranking'
 import { getCategoryNeonImage, getDishNameIcon } from '../../constants/categories'
 import { EmptyState } from '../EmptyState'
 
@@ -60,6 +60,7 @@ export function FriendVisitsModal({ friend, votes, restaurantName, onClose }) {
 
   const dishCount = sortedVotes.length
   const expertise = sortedVotes.find(v => v.category_expertise)?.category_expertise
+  const matchPct = Number.isFinite(friend?.compatibility_pct) ? friend.compatibility_pct : null
 
   return (
     <div className="fixed inset-0 z-50" onClick={onClose} role="presentation">
@@ -102,6 +103,14 @@ export function FriendVisitsModal({ friend, votes, restaurantName, onClose }) {
             </h2>
             <p style={{ color: 'var(--color-text-tertiary)', fontSize: '12px', marginTop: '2px' }}>
               {dishCount} {dishCount === 1 ? 'dish' : 'dishes'} at {restaurantName}
+              {matchPct != null && (
+                <>
+                  {' · '}
+                  <span style={{ color: getMatchColor(matchPct), fontWeight: 700 }}>
+                    {matchPct}% taste match
+                  </span>
+                </>
+              )}
               {expertise && (
                 <>
                   {' · '}

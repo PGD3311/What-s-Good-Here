@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
-import { getRatingColor } from '../../utils/ranking'
+import { getRatingColor, getMatchColor } from '../../utils/ranking'
 import { EmptyState } from '../EmptyState'
 
 function FriendAvatar({ friend, size = 44 }) {
@@ -118,6 +118,7 @@ export function FriendsHereListModal({ friends, restaurantName, onSelectFriend, 
             const ratingDisplay = Number.isFinite(avgRating)
               ? (avgRating % 1 === 0 ? avgRating.toFixed(0) : avgRating.toFixed(1))
               : null
+            const matchPct = Number.isFinite(friend.compatibility_pct) ? friend.compatibility_pct : null
             return (
               <li key={friend.user_id}>
                 <button
@@ -131,12 +132,26 @@ export function FriendsHereListModal({ friends, restaurantName, onSelectFriend, 
                 >
                   <FriendAvatar friend={friend} size={44} />
                   <div className="flex-1 min-w-0">
-                    <p
-                      className="font-bold truncate"
-                      style={{ color: 'var(--color-text-primary)', fontSize: '14px' }}
-                    >
-                      {friend.display_name || 'Friend'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p
+                        className="font-bold truncate flex-1 min-w-0"
+                        style={{ color: 'var(--color-text-primary)', fontSize: '14px' }}
+                      >
+                        {friend.display_name || 'Friend'}
+                      </p>
+                      {matchPct != null && (
+                        <span
+                          className="font-bold flex-shrink-0"
+                          style={{
+                            color: getMatchColor(matchPct),
+                            fontSize: '12px',
+                            letterSpacing: '-0.01em',
+                          }}
+                        >
+                          {matchPct}% match
+                        </span>
+                      )}
+                    </div>
                     <p style={{ color: 'var(--color-text-tertiary)', fontSize: '12px', marginTop: '2px' }}>
                       {friend.dish_count} {friend.dish_count === 1 ? 'dish' : 'dishes'}
                       {ratingDisplay && (

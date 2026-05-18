@@ -336,6 +336,43 @@ export const followsApi = {
   },
 
   /**
+   * Batch taste compatibility for a list of friends. One RPC for the whole
+   * friends-here surface so the per-friend chip renders without N+1.
+   * @param {string[]} friendIds - Array of user IDs
+   * @returns {Promise<Map<string, { shared_dishes: number, compatibility_pct: number|null }>>}
+   */
+  async getTasteCompatibilityForFriends(friendIds) {
+    if (!Array.isArray(friendIds) || friendIds.length === 0) return new Map()
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return new Map()
+
+      const { data, error } = await supabase
+        .rpc('get_taste_compatibility_for_friends', {
+          p_user_id: user.id,
+          p_friend_ids: friendIds,
+        })
+
+      if (error) {
+        logger.error('Error fetching batch taste compatibility:', error)
+        throw createClassifiedError(error)
+      }
+
+      const map = new Map()
+      ;(data || []).forEach(row => {
+        map.set(row.user_id, {
+          shared_dishes: row.shared_dishes,
+          compatibility_pct: row.compatibility_pct,
+        })
+      })
+      return map
+    } catch (err) {
+      logger.error('Unexpected error in getTasteCompatibilityForFriends:', err)
+      throw err
+    }
+  },
+
+  /**
    * Get friends (people you follow) who voted on dishes at a restaurant
    * @param {string} restaurantId - Restaurant ID
    * @returns {Promise<Array>}
