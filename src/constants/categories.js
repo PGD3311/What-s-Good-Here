@@ -342,6 +342,7 @@ export const CATEGORY_INFO = {
   'entree': { emoji: '🥩', label: 'Entrees' },
   'steak': { emoji: '🥩', label: 'Steak' },
   'dessert': { emoji: '🍰', label: 'Desserts' },
+  'donuts': { emoji: '🍩', label: 'Donuts' },
   'ribs': { emoji: '🍖', label: 'Ribs' },
   'sides': { emoji: '🥦', label: 'Sides' },
   'duck': { emoji: '🦆', label: 'Duck' },
