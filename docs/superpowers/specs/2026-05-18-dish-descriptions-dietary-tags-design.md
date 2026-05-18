@@ -35,7 +35,7 @@ Add two new fields to every dish: a terse one-line **description** and an array 
 
 ### Schema migration
 
-One additive migration. New file: `supabase/migrations/add-dish-descriptions-and-dietary-tags.sql` (matches the kebab-case naming pattern used by existing migrations — no date prefix).
+One additive migration. New file: `supabase/migrations/2026-05-18-dish-descriptions-and-dietary-tags.sql` (matches the date-prefixed naming pattern used by all migrations since April 2026).
 
 ```sql
 ALTER TABLE dishes
@@ -189,24 +189,52 @@ export const DIETARY_DISCLAIMER = 'Tags reflect menu labels. Always confirm with
 
 ---
 
-## Section 3 — Search
+## Section 3 — Search + RPC changes
 
-`dishesApi.search()` (in `src/api/dishesApi.js`) extends to match against description:
+### Search (client-side, not server-side)
 
-- Add `description` to the `selectFields` string
-- Add description to the search filter:
-  ```js
-  .or(`name.ilike.%${term}%,description.ilike.%${term}%`)
-  ```
-- Trigram index from the migration keeps this fast at 6,380 dishes
+Homepage search is **client-side** today via `getAllSearchable()` → `useDishSearch()` hook, not a server-side `dishesApi.search()`. To make descriptions searchable:
 
-**Dietary filter** in `get_ranked_dishes` (or equivalent main feed RPC):
-- Accept a new optional parameter `p_dietary_tags TEXT[]`
-- When non-empty, add: `AND dishes.dietary_tags @> p_dietary_tags` (contains-all semantics: vegan AND GF = both required)
-- When empty/null, behavior unchanged
-- RPC changes deploy via Supabase SQL Editor per CLAUDE.md
+- Extend `dishesApi.getAllSearchable()` to include `description` in the returned row shape
+- Extend the `useDishSearch` client-side filter to match the search term against `name`, `restaurant_name`, **and `description`**
+- The trigram index from the migration earns its keep for the RPC-side dietary filter and future server-side description search; not used by the client-side path
 
-URL parameter `?diet=vegan,gluten_free` parsed by the homepage and passed to the hook → API.
+### RPC changes — `get_ranked_dishes` (and equivalent feed RPCs)
+
+Current `get_ranked_dishes` (`schema.sql:1067`) returns 28 columns but NOT `description` or `dietary_tags`. The card preview needs both. Extend signature + return:
+
+**Add param** (new, with default for backwards-compatibility):
+```sql
+filter_dietary_tags TEXT[] DEFAULT NULL
+```
+
+**Add to RETURNS TABLE**:
+```sql
+description TEXT,
+dietary_tags TEXT[],
+```
+
+**Filter logic** in body:
+```sql
+AND (
+  filter_dietary_tags IS NULL
+  OR array_length(filter_dietary_tags, 1) IS NULL
+  OR dishes.dietary_tags @> filter_dietary_tags
+)
+```
+
+**Semantics:** `@>` is **contains-all** (AND). Multi-select `[Vegan, Gluten-free]` returns dishes tagged BOTH. Helper copy under the bottom sheet chips: "All selected restrictions must apply".
+
+**Other RPCs to audit** at implementation time — run `grep -n "RETURNS TABLE" supabase/schema.sql` and add description + dietary_tags to any RPC that powers a dish list/card. Known candidates: `get_restaurant_dishes`, `get_dish_variants`. Any RPC consumed by `DishListItem` needs the new return columns.
+
+### URL state
+
+`?diet=vegan,gluten_free` parsed by the homepage. Required handling:
+
+- **Sanitize:** drop any tag not in `ALLOWED_DIETARY_TAGS` (defends against tampered URLs)
+- **Dedupe:** Set-coerce after split
+- **Empty/malformed:** treat `?diet=`, `?diet=,,`, or any unparseable form as no filter
+- **Critical reactivity bug fix:** `src/pages/Map.jsx` currently seeds URL params into local state once at mount and does NOT react to later URL changes. Implementation must add `useSearchParams` reactivity so the dish-detail-tap-tag → `/?diet=vegan` flow actually re-applies the filter on return to homepage.
 
 ---
 
@@ -214,35 +242,44 @@ URL parameter `?diet=vegan,gluten_free` parsed by the homepage and passed to the
 
 ### PR sequence (each through `codex-cli` before commit)
 
-1. **PR 1 — Schema migration**
-   - Update `supabase/schema.sql`
-   - Create migration file with `ALTER TABLE` + indexes
-   - Run in Supabase SQL Editor
-   - Verify with `\d dishes` that columns + indexes exist
-   - Additive only → no breakage
+**Ordering is load-bearing:** SQL function signature changes must deploy in production BEFORE the UI ships, or RPC calls from the new UI will fail with "function does not exist" because the live function won't accept the new `filter_dietary_tags` param.
 
-2. **PR 2 — Extractor + backfill flag**
-   - Update `menu-refresh/index.ts` interfaces, prompt rules, output validator
-   - Add `?force_all=true&limit=N` query support that bypasses the `STALE_DAYS` staleness filter and processes up to `N` restaurants in one invocation (capped at 50 to stay under Edge Function timeout). When `force_all` is absent, behavior is unchanged. This is the mechanism the backfill (step 4) needs — `menu-refresh` today has no force flag, so without this addition the eager backfill can't happen.
-   - Add `src/constants/dietaryTags.js`
-   - Deploy Edge Function (via Dashboard "Edit" UI per memory — Dan's MCP only sees the old project)
-   - Verify on one test restaurant (run menu-refresh manually with `?force_all=true&limit=1&restaurant_id=<id>`, inspect output)
-   - 14-day cron starts populating new fields naturally from this point
+1. **PR 1 — Schema migration + RPC signature updates**
+   - Update `supabase/schema.sql`: new columns on `dishes` + extended RPC signatures (`get_ranked_dishes`, `get_restaurant_dishes`, `get_dish_variants`, plus any other RPC feeding the dish UI — audit at impl time)
+   - Create migration file with `ALTER TABLE` + indexes + `CREATE OR REPLACE FUNCTION` for each touched RPC
+   - Run BOTH the ALTER TABLE and all CREATE OR REPLACE FUNCTION blocks in Supabase SQL Editor
+   - Verify: `\d dishes` shows new columns; spot-call each RPC with default args, confirm new columns return NULL/empty
+   - Additive only → safe to ship before extractor or UI
+
+2. **PR 2 — Extractor + upsert + backfill flag**
+   - Update `menu-refresh/index.ts` interfaces, prompt rules, output validator (drop tag values not in `ALLOWED_DIETARY_TAGS`, truncate description to 80 chars, coerce empty-string description to null)
+   - **Critical: extend `upsertDishes()` to persist `description` and `dietary_tags`.** Today it only compares/writes `category, menu_section, price`. Without this change new fields never reach the DB. Overwrite policy: replace existing values on every refresh (Sonnet is source of truth).
+   - Add `?force_all=true&limit=N` query support that bypasses the `STALE_DAYS` filter and processes up to `N` restaurants per invocation (cap at 50 to stay under Edge Function timeout). Absent flag = unchanged behavior.
+   - Add `src/constants/dietaryTags.js` with `ALLOWED_DIETARY_TAGS`, `DIETARY_TAG_LABELS`, `DIETARY_DISCLAIMER`
+   - Backfill mechanics (used by step 4):
+     - Endpoint: **POST** (existing handler is POST-only)
+     - Auth header: `Authorization: Bearer <CRON_SECRET>` — required for any manual invocation
+     - Convention for `force_all` + `limit`: pick body OR query string in the implementation and document it inline so step 4 invocations match
+   - Deploy Edge Function via Supabase Dashboard "Edit" UI (per `reference_supabase_mcp_limitation`)
+   - Verify on ONE test restaurant before bulk run
 
 3. **PR 3 — UI**
    - Card preview line in `DishListItem.jsx`
    - Detail page description block + tag pills + disclaimer in `Dish.jsx`
-   - Diet button + bottom sheet on homepage
-   - URL parameter parsing
-   - Search includes description
-   - Dietary filter passed through to RPC
-   - Renders nothing when fields are null/empty — safe to ship before backfill completes
+   - Tag pill tap → navigate to `/?diet=<tag>`
+   - Diet button + multi-select bottom sheet on homepage (routes through `frontend-design` skill)
+   - URL parameter parsing + sanitization + **reactivity fix** in `Map.jsx` (replace one-shot mount-time read with `useSearchParams` reactivity)
+   - Extend `dishesApi.getAllSearchable` to include `description`
+   - Extend `useDishSearch` client-side filter to match against description
+   - `dishesApi.getRankedDishes` (and equivalent feed-RPC callers) updated to pass `filter_dietary_tags`
+   - All UI renders nothing when fields are null/empty → safe to ship before backfill completes
 
-4. **Backfill run** (after PR 2 deployed)
-   - Manually invoke `menu-refresh?force_all=true&limit=50` four times in sequence (each call processes up to 50 restaurants, 4 × 50 = 200 covers all 177)
-   - Or write a tiny bash loop that calls the endpoint until it returns `{ processed: 0 }`
-   - Total time: ~30-60 min
+4. **Backfill run** (after PR 2 deployed; can be before or after PR 3 — UI handles empty fields gracefully)
+   - POST to `menu-refresh` with `force_all=true` + `limit=50`, `Authorization: Bearer $CRON_SECRET`
+   - Invoke 4 times in sequence (4 × 50 = 200 covers all 177), or run a bash loop until response is `{ processed: 0 }`
+   - Total time: ~30-60 min depending on per-restaurant Sonnet latency
    - Total cost: ~$5-6
+   - **Mid-flight prompt change risk:** if PR 2's prompt is tuned between batches (e.g., validation pass finds tags are too aggressive), restart the backfill — already-extracted restaurants get re-extracted with the new prompt. Sonnet output is the source of truth; overwrites are safe.
 
 5. **Validation pass**
    - Spot-check 10 random restaurants in Supabase Dashboard:
@@ -258,6 +295,27 @@ URL parameter `?diet=vegan,gluten_free` parsed by the homepage and passed to the
 | Extractor produces garbage | Revert PR 2; new dishes get no description until prompt fixed; existing populated data harmless |
 | UI breaks | Revert PR 3; data stays in columns, just not rendered |
 | Backfill cost surprise | Stop the batch; the partial-populated state is fine (mixed cards render correctly because of null-safe UI) |
+
+---
+
+## Testing
+
+Each PR must add or extend tests for the surfaces it touches:
+
+**PR 1 (Schema + RPC):**
+- No JS tests; verification via SQL Editor spot calls on each RPC after deploy
+
+**PR 2 (Extractor + upsert + backfill flag):**
+- `supabase/functions/menu-refresh/cms-detect.test.ts` — existing test file; add unit tests for the output validator: tags outside `ALLOWED_DIETARY_TAGS` are dropped; description >80 chars is truncated; empty-string description becomes null
+- New tests covering `upsertDishes` persisting description + dietary_tags
+- New tests for `force_all` query behavior: with flag = bypass staleness filter; without = unchanged behavior
+
+**PR 3 (UI):**
+- `src/api/dishesApi.test.js` — extend tests for `getRankedDishes` passing the new `filter_dietary_tags` param through; `getAllSearchable` returning description
+- New tests for URL sanitization in `Map.jsx` (or its query-param helper): invalid tag values dropped, deduped, empty/malformed handled
+- New tests for `useDishSearch` matching against description
+- Component test: `DishListItem` renders description line when present, omits when null
+- Component test: dish detail page renders tag pills when array non-empty, omits disclaimer when array empty
 
 ---
 
