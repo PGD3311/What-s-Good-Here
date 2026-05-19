@@ -78,12 +78,14 @@ export const DishListItem = memo(function DishListItem({
   var isPodium = rank != null && rank <= 3
 
   return (
+    // Passive container — NOT an ARIA control. Keeps `onClick` for the
+    // mouse-anywhere convenience but no `role="button"`/`tabIndex`/`onKeyDown`,
+    // so its interactive children (dish-name button, restaurant link, Order /
+    // Directions / ingredients toggle) are siblings of controls, not nested
+    // inside one. Keyboard activation goes through the dish-name button below.
     <div
       data-dish-id={dishId}
-      role="button"
-      tabIndex={0}
       onClick={handleClick}
-      onKeyDown={function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(e) } }}
       className={'w-full text-left active:scale-[0.98]' + (isPodium ? ' rounded-xl' : '')}
       style={{
         background: highlighted
@@ -160,18 +162,35 @@ export const DishListItem = memo(function DishListItem({
 
       {/* Name + restaurant + distance */}
       <div className="flex-1 min-w-0" style={{ marginLeft: showPhoto ? '6px' : (isPodium ? '8px' : '6px') }}>
-        <p
-          className="font-bold line-clamp-2"
+        {/* Dish name is the keyboard-accessible primary navigation control.
+            It's a real <button> so screen readers announce it as an
+            activatable element. Mouse-anywhere navigation still works via
+            the outer container's onClick; this button's onClick stops the
+            click from double-firing the parent. */}
+        <button
+          type="button"
+          onClick={function (e) { e.stopPropagation(); handleClick(e) }}
+          onKeyDown={function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation()
+            }
+          }}
+          className="font-bold line-clamp-2 text-left w-full block"
           style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
             fontSize: isPodium ? '15px' : '14px',
             fontWeight: isPodium ? 800 : 700,
             color: 'var(--color-text-primary)',
             lineHeight: 1.3,
             letterSpacing: '-0.01em',
+            fontFamily: 'inherit',
           }}
         >
           {dishName}
-        </p>
+        </button>
         <div className="flex items-center gap-1.5" style={{ marginTop: '2px' }}>
           <p
             className="truncate"
@@ -360,16 +379,21 @@ export const DishListItem = memo(function DishListItem({
     var hasMyRating = myRating !== undefined && myRating !== null && myRatingNum >= 1 && myRatingNum <= 10
     var communityAvg = avgRating ? Number(avgRating) : null
 
-    var CardTag = isOtherProfile ? 'button' : 'div'
+    // Voted card outer is always a passive <div>. When viewing another
+    // user's profile, the card is mouse-clickable via onClick + cursor,
+    // but it's no longer marked as an ARIA control — keyboard activation
+    // routes through the dish-name button inside, so the restaurant link
+    // (role="link") and any future controls aren't nested inside a button.
     var cardProps = isOtherProfile ? { onClick: handleClick } : {}
 
     return (
-      <CardTag
+      <div
         {...cardProps}
         className={'rounded-xl border overflow-hidden' + (isOtherProfile ? ' w-full text-left hover:shadow-md transition-all active:scale-[0.99]' : ' transition-all')}
         style={{
           background: 'var(--color-card)',
           borderColor: 'var(--color-divider)',
+          cursor: isOtherProfile ? 'pointer' : 'default',
         }}
       >
         <div className="flex">
@@ -400,16 +424,46 @@ export const DishListItem = memo(function DishListItem({
                 {restaurantId ? (
                   <span
                     role="link"
+                    tabIndex={0}
                     onClick={function (e) { e.stopPropagation(); navigate('/restaurants/' + restaurantId) }}
-                    style={{ color: 'var(--color-accent-gold)' }}
+                    onKeyDown={function (e) {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault(); e.stopPropagation()
+                        navigate('/restaurants/' + restaurantId)
+                      }
+                    }}
+                    style={{ color: 'var(--color-accent-gold)', cursor: 'pointer' }}
                   >
                     {restaurantName}
                   </span>
                 ) : restaurantName}
               </h3>
-              <p className="text-sm truncate" style={{ color: 'var(--color-text-secondary)' }}>
-                {dishName}
-              </p>
+              {isOtherProfile ? (
+                <button
+                  type="button"
+                  onClick={function (e) { e.stopPropagation(); handleClick(e) }}
+                  onKeyDown={function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation()
+                    }
+                  }}
+                  className="text-sm truncate text-left w-full block"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: 'var(--color-text-secondary)',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {dishName}
+                </button>
+              ) : (
+                <p className="text-sm truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                  {dishName}
+                </p>
+              )}
             </div>
 
             {/* Own Profile Rating */}
@@ -480,7 +534,7 @@ export const DishListItem = memo(function DishListItem({
             </p>
           </div>
         )}
-      </CardTag>
+      </div>
     )
   }
 })

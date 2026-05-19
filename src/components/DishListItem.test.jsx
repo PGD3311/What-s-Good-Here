@@ -103,3 +103,30 @@ describe('DishListItem description toggle', () => {
     expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
   })
 })
+
+describe('DishListItem accessibility — no nested interactive controls', () => {
+  it('outer container is NOT a button (no role="button" or tabIndex)', () => {
+    renderItem({ ...BASE, description: null })
+    const outer = document.querySelector('[data-dish-id="' + BASE.dish_id + '"]')
+    expect(outer).not.toBeNull()
+    expect(outer.getAttribute('role')).toBeNull()
+    expect(outer.getAttribute('tabindex')).toBeNull()
+  })
+
+  it('dish name is a real <button> for keyboard navigation', () => {
+    renderItem({ ...BASE, description: null })
+    const dishNameButton = screen.getByRole('button', { name: BASE.dish_name })
+    expect(dishNameButton.tagName).toBe('BUTTON')
+  })
+
+  it('clicking the dish name button navigates without double-firing the parent', () => {
+    let clicks = 0
+    renderItem(
+      { ...BASE, description: null },
+      { onClick: () => { clicks++ } }
+    )
+    const dishNameButton = screen.getByRole('button', { name: BASE.dish_name })
+    fireEvent.click(dishNameButton)
+    expect(clicks).toBe(1)
+  })
+})
