@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { DishListItem } from './DishListItem'
 
@@ -13,54 +13,93 @@ function renderItem(dish, extra = {}) {
   )
 }
 
-describe('DishListItem description preview', () => {
-  it('renders description line when description is non-null', () => {
+const BASE = {
+  dish_id: 'd1',
+  dish_name: 'Lobster Roll',
+  restaurant_name: 'Coast Cafe',
+  category: 'lobster roll',
+  avg_rating: 8.4,
+  total_votes: 12,
+}
+
+describe('DishListItem description toggle', () => {
+  it('shows an "ingredients" toggle when description is non-null', () => {
     renderItem({
-      dish_id: 'd1',
-      dish_name: 'Lobster Roll',
-      restaurant_name: 'Coast Cafe',
-      category: 'lobster roll',
-      avg_rating: 8.4,
-      total_votes: 12,
+      ...BASE,
       description: 'Hot lobster meat, drawn butter, split-top bun',
     })
-    expect(screen.getByText(/hot lobster meat, drawn butter, split-top bun/i)).toBeInTheDocument()
+    expect(screen.getByTestId('dish-description-toggle')).toBeInTheDocument()
+    // Collapsed by default — description body is not rendered yet.
+    expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
+  })
+
+  it('tapping the toggle reveals the description inline', () => {
+    renderItem({
+      ...BASE,
+      description: 'Hot lobster meat, drawn butter, split-top bun',
+    })
+    fireEvent.click(screen.getByTestId('dish-description-toggle'))
     expect(screen.getByTestId('dish-description-preview')).toBeInTheDocument()
+    expect(screen.getByText(/hot lobster meat, drawn butter, split-top bun/i)).toBeInTheDocument()
   })
 
-  it('omits description line when description is null', () => {
+  it('tapping the toggle a second time collapses the description', () => {
     renderItem({
-      dish_id: 'd1',
-      dish_name: 'Lobster Roll',
-      restaurant_name: 'Coast Cafe',
-      category: 'lobster roll',
-      avg_rating: 8.4,
-      total_votes: 12,
-      description: null,
+      ...BASE,
+      description: 'Hot lobster meat, drawn butter',
     })
+    const toggle = screen.getByTestId('dish-description-toggle')
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
     expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
   })
 
-  it('omits description line when description is undefined', () => {
+  it('toggle reflects aria-expanded state', () => {
     renderItem({
-      dish_id: 'd1',
-      dish_name: 'Lobster Roll',
-      restaurant_name: 'Coast Cafe',
-      category: 'lobster roll',
-      avg_rating: 8.4,
-      total_votes: 12,
+      ...BASE,
+      description: 'Anchovy, lemon, breadcrumb',
     })
+    const toggle = screen.getByTestId('dish-description-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('clicking the toggle does NOT navigate to the dish (stopPropagation)', () => {
+    let cardClicks = 0
+    renderItem(
+      { ...BASE, description: 'Some ingredients' },
+      { onClick: () => { cardClicks++ } }
+    )
+    fireEvent.click(screen.getByTestId('dish-description-toggle'))
+    expect(cardClicks).toBe(0)
+  })
+
+  it('keyboard-activating the toggle does NOT bubble Enter/Space to the card', () => {
+    let cardClicks = 0
+    renderItem(
+      { ...BASE, description: 'Some ingredients' },
+      { onClick: () => { cardClicks++ } }
+    )
+    const toggle = screen.getByTestId('dish-description-toggle')
+    fireEvent.keyDown(toggle, { key: 'Enter' })
+    fireEvent.keyDown(toggle, { key: ' ' })
+    expect(cardClicks).toBe(0)
+  })
+
+  it('omits the toggle entirely when description is null', () => {
+    renderItem({ ...BASE, description: null })
+    expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
     expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
   })
 
-  it('omits description line when description is empty/whitespace string', () => {
-    renderItem({
-      dish_id: 'd1',
-      dish_name: 'Lobster Roll',
-      restaurant_name: 'Coast Cafe',
-      category: 'lobster roll',
-      description: '   ',
-    })
-    expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
+  it('omits the toggle when description is undefined', () => {
+    renderItem({ ...BASE })
+    expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
+  })
+
+  it('omits the toggle when description is whitespace only', () => {
+    renderItem({ ...BASE, description: '   ' })
+    expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
   })
 })
