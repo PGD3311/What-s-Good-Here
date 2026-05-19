@@ -1778,13 +1778,24 @@ serve(async (req) => {
       total_dishes?: number
     }> = []
 
-    // Stamp menu_last_checked = now on EVERY processed restaurant, regardless
-    // of outcome. The column doubles as the rotation key for ORDER BY above:
-    // if failure paths leave it stale, the same broken-URL rows get re-picked
-    // every call and the backfill loops forever on a bad cluster (this is the
-    // bug that motivated this whole change). The cost is that the 14-day
-    // staleness cron sees failed rows as "fresh" for ~14 days — acceptable
-    // because Path A's queue retry/backoff handles short-term retries.
+    // Pre-stamp menu_last_checked BEFORE attempting each restaurant. The
+    // column is the rotation key for ORDER BY menu_last_checked NULLS FIRST
+    // above, so a row that hasn't been stamped sits at the front of the
+    // queue forever. Pre-stamping guarantees rotation even when the function
+    // is force-killed mid-processing — e.g. a single slow restaurant
+    // (heavy Browserless render, oversized HTML, huge Sonnet response)
+    // blowing past the edge-function 150s IDLE_TIMEOUT. Without this, that
+    // restaurant would re-appear at the front of every subsequent batch and
+    // block the entire backfill.
+    //
+    // Success and closed paths overwrite this stamp with a slightly newer
+    // timestamp alongside their hash / fingerprint / is_open updates — that
+    // overlap is fine. Skip and error paths leave the pre-stamp in place.
+    //
+    // Cost: the 14-day staleness cron sees failed rows as "fresh" for ~14
+    // days. Acceptable — Path A's queue retry/backoff handles short-term
+    // retries, and burning Sonnet on the same broken URL every cron cycle
+    // would be worse.
     const stampChecked = async (restaurantId: string) => {
       await supabase
         .from('restaurants')
@@ -1794,12 +1805,18 @@ serve(async (req) => {
 
     for (const restaurant of restaurants) {
       try {
+        // Pre-stamp inside the try so a transient DB write failure here is
+        // caught and recorded as a single-restaurant error rather than
+        // aborting the whole batch. The stamp still commits before any of
+        // the slow work (fetch / Sonnet / Browserless render), which is all
+        // we need for the IDLE_TIMEOUT rotation guarantee.
+        await stampChecked(restaurant.id)
+
         console.log(`Processing menu for: ${restaurant.name}`)
 
         // Fetch menu content
         const content = await fetchMenuContent(restaurant.menu_url)
         if (content.length < 50) {
-          await stampChecked(restaurant.id)
           results.push({ restaurant_id: restaurant.id, name: restaurant.name, status: 'skipped: page too short' })
           continue
         }
@@ -1815,7 +1832,6 @@ serve(async (req) => {
           restaurant.extractor_fingerprint === CURRENT_EXTRACTOR_FINGERPRINT
         ) {
           console.log(`${restaurant.name}: content + extractor unchanged, skipping`)
-          await stampChecked(restaurant.id)
           results.push({ restaurant_id: restaurant.id, name: restaurant.name, status: 'unchanged (hash match)' })
           continue
         }
@@ -1839,7 +1855,6 @@ serve(async (req) => {
         // Extract dishes with Claude
         const extracted = await extractMenuWithClaude(content, restaurant.name)
         if (extracted.dishes.length === 0) {
-          await stampChecked(restaurant.id)
           results.push({ restaurant_id: restaurant.id, name: restaurant.name, status: 'skipped: no dishes found' })
           continue
         }
@@ -1867,7 +1882,6 @@ serve(async (req) => {
           total_dishes: extracted.dishes.length,
         })
       } catch (err) {
-        await stampChecked(restaurant.id)
         console.error(`Error processing ${restaurant.name}:`, err)
         results.push({
           restaurant_id: restaurant.id,
