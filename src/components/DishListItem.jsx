@@ -41,6 +41,7 @@ export const DishListItem = memo(function DishListItem({
   onClick,
   isLast = false,
   hideVotes = false,
+  hideRestaurantName = false,
 }) {
   const navigate = useNavigate()
 
@@ -188,34 +189,46 @@ export const DishListItem = memo(function DishListItem({
         >
           {dishName}
         </button>
-        <div className="flex items-center gap-1.5" style={{ marginTop: '2px' }}>
-          <p
-            className="truncate"
-            style={{
-              fontSize: isPodium ? '12px' : '11px',
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
-            {restaurantId ? (
-              <span
-                role="link"
-                tabIndex={0}
-                onClick={function (e) { e.stopPropagation(); navigate('/restaurants/' + restaurantId) }}
-                onKeyDown={function (e) {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault(); e.stopPropagation();
-                    navigate('/restaurants/' + restaurantId)
-                  }
-                }}
-                style={{ color: 'var(--color-accent-gold)', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {restaurantName}
-              </span>
-            ) : restaurantName}
-            {sortBy === 'best_value' && price != null && ' \u00b7 $' + Number(price).toFixed(0)}
-            {showDistance && distanceMiles != null && ' \u00b7 ' + Number(distanceMiles).toFixed(1) + ' mi'}
-          </p>
-        </div>
+        {/* Meta line: restaurant + price + distance. Skipped entirely when
+            on a single-restaurant page (hideRestaurantName) and no price/
+            distance to show \u2014 avoids an empty muted line under the name. */}
+        {(!hideRestaurantName
+          || (sortBy === 'best_value' && price != null)
+          || (showDistance && distanceMiles != null)) && (
+          <div className="flex items-center gap-1.5" style={{ marginTop: '2px' }}>
+            <p
+              className="truncate"
+              style={{
+                fontSize: isPodium ? '12px' : '11px',
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
+              {!hideRestaurantName && (restaurantId ? (
+                <span
+                  role="link"
+                  tabIndex={0}
+                  onClick={function (e) { e.stopPropagation(); navigate('/restaurants/' + restaurantId) }}
+                  onKeyDown={function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault(); e.stopPropagation();
+                      navigate('/restaurants/' + restaurantId)
+                    }
+                  }}
+                  style={{ color: 'var(--color-accent-gold)', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {restaurantName}
+                </span>
+              ) : restaurantName)}
+              {sortBy === 'best_value' && price != null && (
+                (!hideRestaurantName ? ' \u00b7 ' : '') + '$' + Number(price).toFixed(0)
+              )}
+              {showDistance && distanceMiles != null && (
+                ((!hideRestaurantName || (sortBy === 'best_value' && price != null)) ? ' \u00b7 ' : '')
+                + Number(distanceMiles).toFixed(1) + ' mi'
+              )}
+            </p>
+          </div>
+        )}
         {/* Description preview \u2014 terse Sonnet ingredient line. Omitted entirely
             when null/empty so cards render exactly as before backfill. */}
         {/* Dish description lives on the detail page only (rendered by

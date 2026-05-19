@@ -73,3 +73,35 @@ describe('DishListItem accessibility — no nested interactive controls', () => 
     expect(clicks).toBe(1)
   })
 })
+
+describe('DishListItem hideRestaurantName', () => {
+  it('hides the restaurant name when hideRestaurantName is true', () => {
+    renderItem({ ...BASE }, { hideRestaurantName: true })
+    expect(screen.queryByText(BASE.restaurant_name)).not.toBeInTheDocument()
+  })
+
+  it('still shows the restaurant name by default', () => {
+    renderItem({ ...BASE })
+    expect(screen.getByText(BASE.restaurant_name)).toBeInTheDocument()
+  })
+
+  it('hides the meta line entirely when restaurant is hidden and no price/distance', () => {
+    // hideRestaurantName + no best_value sort + no showDistance = empty meta line.
+    // It should NOT render an empty <div>/<p>.
+    const { container } = renderItem({ ...BASE }, { hideRestaurantName: true })
+    // The restaurant text was the only content of the meta line; with it gone,
+    // a hidden line means no occurrence of the muted tertiary-color <p>.
+    expect(screen.queryByText(BASE.restaurant_name)).not.toBeInTheDocument()
+    // Sanity — dish name still renders.
+    expect(screen.getByRole('button', { name: BASE.dish_name })).toBeInTheDocument()
+  })
+
+  it('still renders the meta line with distance even when restaurant is hidden', () => {
+    renderItem(
+      { ...BASE, distance_miles: 0.3 },
+      { hideRestaurantName: true, showDistance: true }
+    )
+    expect(screen.queryByText(BASE.restaurant_name)).not.toBeInTheDocument()
+    expect(screen.getByText(/0\.3 mi/)).toBeInTheDocument()
+  })
+})
