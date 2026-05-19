@@ -3,7 +3,42 @@ import { encode as encodeBase64 } from 'https://deno.land/std@0.177.0/encoding/b
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
-import { discoverMenuCandidates, findSubMenuPages, type MenuCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+
+// v1.3 dietary tag + description sanitizers (kept in sync with
+// ./extractors.ts which exists for Vitest test coverage — Vitest can't
+// import from this file because of the Deno URL imports above).
+// Spec: docs/superpowers/specs/2026-05-18-dish-descriptions-dietary-tags-design.md
+const ALLOWED_DIETARY_TAGS_INLINE = ['vegan', 'vegetarian', 'gluten_free', 'dairy_free', 'nut_free'] as const
+type AllowedDietaryTag = typeof ALLOWED_DIETARY_TAGS_INLINE[number]
+
+function sanitizeDietaryTags(raw: unknown): AllowedDietaryTag[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<AllowedDietaryTag>()
+  for (const t of raw) {
+    if (typeof t === 'string' && (ALLOWED_DIETARY_TAGS_INLINE as readonly string[]).includes(t)) {
+      seen.add(t as AllowedDietaryTag)
+    }
+  }
+  return Array.from(seen)
+}
+
+function sanitizeDescription(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return null
+  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed
+}
+
+function sortedArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sa = [...a].sort()
+  const sb = [...b].sort()
+  for (let i = 0; i < sa.length; i++) {
+    if (sa[i] !== sb[i]) return false
+  }
+  return true
+}
 
 /**
  * Menu Refresh Edge Function
@@ -127,6 +162,13 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
    - **When in doubt:** if two dishes in the same section have names that a normal human would read as "the same dish at different prices," collapse them. Better to under-count than to duplicate.
 8. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
 9. **One category per dish** — pick the most specific match
+10. **Description rule:** Output a terse ingredient/preparation line, 80 chars or fewer, as \`description\`. Format: comma-separated nouns. Examples: "Hot lobster meat, drawn butter, split-top bun" / "Pepperoni, mozzarella, San Marzano tomato" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
+11. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively states the dish IS that diet.** This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free, not "can be modified."
+    - **Emit** when the dish itself is unambiguously labeled: "Vegan Buddha Bowl", "GF Pasta", "Gluten-Free Penne", "Dairy-Free Ice Cream", a definitive "V" or "GF" badge attached directly to the dish.
+    - **Do NOT emit** for "available", "on request", "can be made", "ask your server" qualifiers — those mean modifiable, not the dish as listed. "Gluten-Free Available" → do NOT emit \`gluten_free\`.
+    - **Do NOT emit** when shorthand markers are ambiguous (e.g., "V" could mean vegan or vegetarian and the menu has no legend). When in doubt, emit \`[]\`.
+    - **Do NOT infer from ingredients** — a tofu stir-fry with no animal products does NOT get \`vegan\` unless the menu labels it.
+    - Empty array \`[]\` when nothing is labeled, ambiguous, or only "available". Never invent tags.
 
 ## CRITICAL: Reject placeholder/template content
 
@@ -143,7 +185,14 @@ When in doubt: if dish names don't tell you what the actual dish IS (unique name
 Return ONLY valid JSON (no markdown, no code fences):
 {
   "dishes": [
-    { "name": "Dish Name", "category": "category_id", "menu_section": "Section Name", "price": 18.00 }
+    {
+      "name": "Dish Name",
+      "category": "category_id",
+      "menu_section": "Section Name",
+      "price": 18.00,
+      "description": "ingredient, ingredient, prep",
+      "dietary_tags": ["vegan"]
+    }
   ],
   "menu_section_order": ["Section 1", "Section 2"]
 }`
@@ -153,6 +202,8 @@ interface ExtractedDish {
   category: string
   menu_section: string
   price: number | null
+  description: string | null
+  dietary_tags: string[]
 }
 
 interface MenuExtractionResult {
@@ -344,33 +395,95 @@ const PDF_URL_EXT = /\.pdf(\?|#|$)/i
  * some hosts (and some CDNs that strip mime types) serve PDFs as
  * application/octet-stream.
  */
+// Maximum redirect hops we'll follow manually. Each hop is validated against
+// isBlockedHostname before fetching, which is the SSRF defense that
+// `redirect: 'follow'` doesn't give us.
+const MAX_REDIRECT_HOPS = 5
+
 async function fetchRawHtml(url: string): Promise<MenuFetchResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 20000)
 
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-MenuBot/1.0)',
-        'Accept': 'text/html,application/xhtml+xml,application/pdf',
-      },
-    })
+    let currentUrl = url
+    let response: Response | null = null
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+    // Manual redirect loop: validate each hop's hostname BEFORE issuing the
+    // fetch, so a public iframe URL that 302s to a private/loopback/metadata
+    // host never actually reaches that host. The default `redirect: 'follow'`
+    // does the redirect internally before we can inspect it — too late.
+    for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+      let parsed: URL
+      try {
+        parsed = new URL(currentUrl)
+      } catch {
+        throw new Error('invalid_url')
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error(`bad_scheme:${parsed.protocol}`)
+      }
+      if (isBlockedHostname(parsed.hostname)) {
+        throw new Error(`blocked_host:${parsed.hostname}`)
+      }
+
+      response = await fetch(currentUrl, {
+        signal: controller.signal,
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-MenuBot/1.0)',
+          'Accept': 'text/html,application/xhtml+xml,application/pdf',
+        },
+      })
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location')
+        await response.body?.cancel()
+        if (!location) throw new Error(`redirect_no_location:${response.status}`)
+        try {
+          currentUrl = new URL(location, currentUrl).href
+        } catch {
+          throw new Error('invalid_redirect_location')
+        }
+        continue
+      }
+      break
+    }
+    if (!response) throw new Error('no_response')
+    if (response.status >= 300 && response.status < 400) {
+      throw new Error('too_many_redirects')
     }
 
-    const finalUrl = response.url || url
+    const finalUrl = response.url || currentUrl
     const contentType = (response.headers.get('content-type') || '').toLowerCase()
     const looksLikePdf = contentType.includes('application/pdf') || PDF_URL_EXT.test(finalUrl)
     if (looksLikePdf) {
-      // Discard the body — we'll pass the URL itself to Sonnet's PDF tool.
+      // PDF: the URL itself is what gets passed to Sonnet's PDF tool, so a
+      // non-2xx response means Sonnet would also fail to fetch it. Strict.
+      if (!response.ok) {
+        await response.body?.cancel()
+        throw new Error(`HTTP ${response.status}`)
+      }
       await response.body?.cancel()
       return { type: 'pdf', pdfUrl: finalUrl }
     }
 
-    return { type: 'html', html: await response.text() }
+    // HTML: tolerate non-2xx if the response actually looks like HTML AND has
+    // real body content. Some third-party menu hosts (e.g. checkle.menu) return
+    // 500 status with full menu HTML in the body — a framework fluke, not an
+    // actual server error. The content-type / sniff gate prevents us from
+    // accepting long JSON error payloads or branded error pages as menu HTML.
+    const html = await response.text()
+    if (!response.ok) {
+      const isHtmlContentType = contentType.includes('text/html') || contentType.includes('application/xhtml')
+      const sniffsAsHtml = !contentType && /^\s*(<!doctype|<html)/i.test(html.slice(0, 200))
+      if (!isHtmlContentType && !sniffsAsHtml) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      if (html.length < 200) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+    }
+    return { type: 'html', html }
   } finally {
     clearTimeout(timeout)
   }
@@ -435,18 +548,19 @@ async function fetchMenuContent(url: string): Promise<string> {
 }
 
 interface ExtractionAttempt {
-  strategy: 'image' | 'pdf' | 'html' | 'sub-page'
+  strategy: 'image' | 'pdf' | 'html' | 'sub-page' | 'iframe'
   url_count: number
   top_score?: number
   dishes_found: number
   error?: string
-  url?: string  // for sub-page attempts, which sub-URL was tried
+  url?: string  // for sub-page / iframe attempts, which URL was tried
 }
 
 // Caps per strategy. Vision is per-pixel-token expensive — keep image batches small.
 const MAX_IMAGE_CANDIDATES = 3
 const MAX_PDF_CANDIDATES = 6
 const MAX_SUB_PAGES = 4
+const MAX_MENU_IFRAMES = 2
 // Render fallback #2 fires more broadly than fallback #1: even on plain HTML
 // sites without a CMS signature, if everything else returned 0 dishes the page
 // might just be a JS-loaded shell. One Browserless call per failed job is cheap
@@ -538,6 +652,8 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
     .map((d: ExtractedDish) => ({
       ...d,
       category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+      description: sanitizeDescription(d.description),
+      dietary_tags: sanitizeDietaryTags(d.dietary_tags),
     }))
 
   return {
@@ -674,6 +790,8 @@ async function extractMenuFromImagesWithClaude(
     .map((d: ExtractedDish) => ({
       ...d,
       category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+      description: sanitizeDescription(d.description),
+      dietary_tags: sanitizeDietaryTags(d.dietary_tags),
     }))
 
   return {
@@ -744,6 +862,8 @@ async function extractMenuFromPdfsWithClaude(
     .map((d: ExtractedDish) => ({
       ...d,
       category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+      description: sanitizeDescription(d.description),
+      dietary_tags: sanitizeDietaryTags(d.dietary_tags),
     }))
 
   return {
@@ -763,7 +883,7 @@ async function upsertDishes(
   // Get existing dishes
   const { data: existingDishes, error: fetchErr } = await supabase
     .from('dishes')
-    .select('id, name, category, menu_section, price, photo_url')
+    .select('id, name, category, menu_section, price, photo_url, description, dietary_tags')
     .eq('restaurant_id', restaurantId)
 
   if (fetchErr) {
@@ -787,12 +907,16 @@ async function upsertDishes(
       const priceChanged = dish.price !== null && dish.price !== existing.price
       const categoryChanged = dish.category !== existing.category
       const sectionChanged = dish.menu_section !== existing.menu_section
+      const descriptionChanged = (dish.description ?? null) !== (existing.description ?? null)
+      const tagsChanged = !sortedArraysEqual(dish.dietary_tags || [], existing.dietary_tags || [])
 
-      if (priceChanged || categoryChanged || sectionChanged) {
+      if (priceChanged || categoryChanged || sectionChanged || descriptionChanged || tagsChanged) {
         const updates: Record<string, unknown> = {}
         if (categoryChanged) updates.category = dish.category
         if (sectionChanged) updates.menu_section = dish.menu_section
         if (priceChanged) updates.price = dish.price
+        if (descriptionChanged) updates.description = dish.description
+        if (tagsChanged) updates.dietary_tags = dish.dietary_tags
 
         const { error } = await supabase
           .from('dishes')
@@ -813,6 +937,8 @@ async function upsertDishes(
           category: dish.category,
           menu_section: dish.menu_section || null,
           price: dish.price || null,
+          description: dish.description ?? null,
+          dietary_tags: dish.dietary_tags || [],
         })
 
       if (!error) inserted++
@@ -865,6 +991,15 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // v1.3 backfill flag: ?force_all=true bypasses the STALE_DAYS filter so
+    // a backfill operator can sweep every open restaurant with a menu_url in
+    // a few batched invocations. ?limit=N caps per-invocation work (default
+    // MAX_RESTAURANTS_PER_RUN, hard ceiling 50 to stay under edge timeout).
+    const reqUrl = new URL(req.url)
+    const forceAll = reqUrl.searchParams.get('force_all') === 'true'
+    const forceLimitRaw = parseInt(reqUrl.searchParams.get('limit') || `${MAX_RESTAURANTS_PER_RUN}`, 10)
+    const forceLimit = Math.min(50, Math.max(1, isNaN(forceLimitRaw) ? MAX_RESTAURANTS_PER_RUN : forceLimitRaw))
 
     // Check if single restaurant mode
     let body: Record<string, unknown> = {}
@@ -1263,10 +1398,20 @@ serve(async (req) => {
           // linking to /brunch /lunch /dinner /breakfast (Webflow / WordPress /
           // multi-service restaurants split the menu across pages). Fetch each
           // sub-page, run extraction on each, merge results.
+          //
+          // Iframe fallback runs alongside: some restaurants embed their menu
+          // in a cross-origin iframe (checkle.menu, popmenu, singleplatform,
+          // Toast). findMenuIframes pulls those URLs so the same loop fetches
+          // and extracts them.
           if (extracted.dishes.length === 0) {
             const subPages = findSubMenuPages(rawHtml, menuUrl, MAX_SUB_PAGES)
-            if (subPages.length > 0) {
-              console.log(`${restaurant.name}: trying ${subPages.length} sub-menu pages`)
+            const menuIframes = findMenuIframes(rawHtml, MAX_MENU_IFRAMES)
+            const subUrls: Array<{ url: string; strategy: 'sub-page' | 'iframe' }> = [
+              ...subPages.map(url => ({ url, strategy: 'sub-page' as const })),
+              ...menuIframes.map(url => ({ url, strategy: 'iframe' as const })),
+            ]
+            if (subUrls.length > 0) {
+              console.log(`${restaurant.name}: trying ${subPages.length} sub-pages + ${menuIframes.length} menu iframes`)
               // Dedupe across sub-pages by (lowercased name, lowercased section).
               // Many restaurants list the same dish on /lunch and /dinner; without
               // deduping we'd report inflated dishes_found, and even though
@@ -1276,7 +1421,7 @@ serve(async (req) => {
               const seenDishes = new Set<string>()
               const mergedDishes: typeof extracted.dishes = []
               const mergedSections: string[] = []
-              for (const subUrl of subPages) {
+              for (const { url: subUrl, strategy } of subUrls) {
                 try {
                   const subFetch = await fetchRawHtml(subUrl)
                   // Sub-page itself served a PDF (e.g. /lunch redirects to lunch.pdf).
@@ -1284,7 +1429,7 @@ serve(async (req) => {
                   // merged sub-page output below.
                   if (subFetch.type === 'pdf') {
                     const subPdfResult = await extractMenuFromPdfsWithClaude([subFetch.pdfUrl], restaurant.name)
-                    attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: subPdfResult.dishes.length, url: subUrl })
+                    attempts.push({ strategy, url_count: 1, dishes_found: subPdfResult.dishes.length, url: subUrl })
                     for (const dish of subPdfResult.dishes) {
                       const key = `${dish.name.toLowerCase()}|${(dish.menu_section || '').toLowerCase()}`
                       if (seenDishes.has(key)) continue
@@ -1296,13 +1441,49 @@ serve(async (req) => {
                     }
                     continue
                   }
-                  const subText = extractMenuTextFromHtml(subFetch.html)
+                  let subText = extractMenuTextFromHtml(subFetch.html)
+                  let subRendered = false
+                  // Iframe URLs frequently point at Next.js / React menu services
+                  // (checkle.menu, popmenu, etc.) where the static HTML is just a
+                  // shell — actual menu content lives in JS state. Always render
+                  // iframes from known menu-service hosts; cost is bounded
+                  // because the allowlist limits which hosts qualify.
+                  //
+                  // Known-host gate also bounds the SSRF surface: Browserless
+                  // follows redirects internally, so sending it an attacker-
+                  // controlled URL would reopen the redirect-SSRF gap we closed
+                  // for raw fetch.
+                  if (strategy === 'iframe') {
+                    let iframeHost = ''
+                    try {
+                      iframeHost = new URL(subUrl).hostname
+                    } catch {
+                      iframeHost = ''
+                    }
+                    const knownHost = iframeHost ? isKnownMenuIframeHost(iframeHost) : false
+                    if (knownHost) {
+                      try {
+                        const renderedIframeHtml = await fetchRenderedHtml(subUrl, {
+                          gotoTimeout: 45000,
+                          waitForTimeoutMs: 12000,
+                        })
+                        const renderedIframeText = extractMenuTextFromHtml(renderedIframeHtml)
+                        if (renderedIframeText.length > subText.length) {
+                          subText = renderedIframeText
+                          subRendered = true
+                        }
+                      } catch (renderErr) {
+                        const msg = renderErr instanceof Error ? renderErr.message : String(renderErr)
+                        console.error(`${restaurant.name}: iframe render failed for ${subUrl}:`, msg)
+                      }
+                    }
+                  }
                   if (subText.length < 50) {
-                    attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: 0, url: subUrl, error: 'page_too_short' })
+                    attempts.push({ strategy, url_count: 1, dishes_found: 0, url: subUrl, error: subRendered ? 'rendered_but_short' : 'page_too_short' })
                     continue
                   }
                   const subResult = await extractMenuWithClaude(subText, restaurant.name)
-                  attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: subResult.dishes.length, url: subUrl })
+                  attempts.push({ strategy, url_count: 1, dishes_found: subResult.dishes.length, url: subUrl })
                   for (const dish of subResult.dishes) {
                     const key = `${dish.name.toLowerCase()}|${(dish.menu_section || '').toLowerCase()}`
                     if (seenDishes.has(key)) continue
@@ -1314,8 +1495,8 @@ serve(async (req) => {
                   }
                 } catch (err) {
                   const message = err instanceof Error ? err.message : String(err)
-                  console.error(`${restaurant.name}: sub-page ${subUrl} failed:`, message)
-                  attempts.push({ strategy: 'sub-page', url_count: 1, dishes_found: 0, url: subUrl, error: message })
+                  console.error(`${restaurant.name}: ${strategy} ${subUrl} failed:`, message)
+                  attempts.push({ strategy, url_count: 1, dishes_found: 0, url: subUrl, error: message })
                 }
               }
               if (mergedDishes.length > 0) {
@@ -1507,21 +1688,24 @@ serve(async (req) => {
       })
     }
 
-    // === Batch fallback mode: find stale menus ===
+    // === Batch fallback mode: find stale menus (or all if force_all=true) ===
     let restaurants: Array<{ id: string; name: string; menu_url: string; menu_content_hash: string | null }>
 
     {
-      // Batch mode: find stale menus
-      const staleDate = new Date()
-      staleDate.setDate(staleDate.getDate() - STALE_DAYS)
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('restaurants')
         .select('id, name, menu_url, menu_content_hash')
         .not('menu_url', 'is', null)
         .eq('is_open', true)
-        .or(`menu_last_checked.is.null,menu_last_checked.lt.${staleDate.toISOString()}`)
-        .limit(MAX_RESTAURANTS_PER_RUN)
+
+      if (!forceAll) {
+        // Default cron mode: only stale (or never-checked) menus
+        const staleDate = new Date()
+        staleDate.setDate(staleDate.getDate() - STALE_DAYS)
+        query = query.or(`menu_last_checked.is.null,menu_last_checked.lt.${staleDate.toISOString()}`)
+      }
+
+      const { data, error } = await query.limit(forceAll ? forceLimit : MAX_RESTAURANTS_PER_RUN)
 
       if (error) {
         return new Response(JSON.stringify({ error: 'Failed to fetch restaurants' }), {
@@ -1530,6 +1714,10 @@ serve(async (req) => {
         })
       }
       restaurants = data || []
+
+      if (forceAll) {
+        console.log(`menu-refresh: force_all=true, limit=${forceLimit}, found ${restaurants.length} restaurants to refresh`)
+      }
     }
 
     if (restaurants.length === 0) {

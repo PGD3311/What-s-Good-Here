@@ -380,3 +380,140 @@ export function discoverMenuCandidates(html: string, baseUrl: string): MenuCandi
   candidates.sort((a, b) => b.score - a.score)
   return candidates
 }
+
+/**
+ * Find iframes that look like embedded third-party menu services.
+ *
+ * Some restaurants (e.g. State Road via checkle.menu, others via PopMenu /
+ * SinglePlatform / Toast) embed their menu in a cross-origin iframe. The
+ * parent page has almost no text content; the iframe URL serves the actual
+ * menu HTML. findSubMenuPages skips iframes (it scans anchor tags) and
+ * filters cross-origin, so those menus never get extracted.
+ *
+ * Match strategy: iframe src matches a known menu-service host OR contains
+ * "menu" in its URL pathname. Cross-origin allowed — iframes intentionally
+ * embed third-party content. Protocol-relative srcs (`//host/path`) are
+ * upgraded to https.
+ *
+ * Security: SSRF-resilient. Scripts/comments are stripped before scanning
+ * so injected iframe strings inside <script> or <!-- --> can't smuggle a URL.
+ * Hostnames matching loopback / private CIDRs / link-local / cloud metadata
+ * are rejected to prevent server-side request forgery via fetchRawHtml.
+ *
+ * Capped at `max` to keep cost bounded.
+ */
+// Exact apex hosts. Matching is exact-equality OR proper-subdomain (host
+// ends with `.<apex>`). Substring matching would let attacker-controlled
+// hostnames like `popmenu.com.evil` slip through as "trusted".
+const KNOWN_MENU_IFRAME_HOSTS: string[] = [
+  'checkle.menu',
+  'popmenu.com',
+  'singleplatform.com',
+  'toasttab.com',
+  'getbento.com',     // BentoBox's customer-site domain
+  'menustar.com',
+]
+
+/**
+ * Used by the iframe-render gate in index.ts: we only spend Browserless
+ * cycles re-fetching iframe URLs that point at known menu-service hosts.
+ * This both bounds spend and limits the SSRF surface — an attacker-controlled
+ * iframe pointing at a public URL that 302s to internal infra can't trick
+ * us into having Browserless render it.
+ *
+ * Matches exact apex OR proper subdomain only. `popmenu.com` → true,
+ * `order.popmenu.com` → true, `popmenu.com.evil` → false, `xpopmenu.com` →
+ * false. Hostname is normalized (lowercase, trailing-dot stripped) to match
+ * isBlockedHostname's normalization.
+ */
+export function isKnownMenuIframeHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase().replace(/\.+$/, '')
+  return KNOWN_MENU_IFRAME_HOSTS.some(apex => lower === apex || lower.endsWith('.' + apex))
+}
+
+// Block hostnames that fetchRawHtml could otherwise be coaxed into reaching:
+// loopback, RFC1918 private space, link-local (incl. AWS/GCP metadata at
+// 169.254.169.254), and the *.local / *.internal suffixes used by service
+// discovery on private networks. A legitimate restaurant menu iframe never
+// points here.
+//
+// Exported so fetchRawHtml can re-check `response.url` after redirects —
+// a public iframe URL can 302 to an internal one, so per-hop validation
+// is required, not just initial-URL validation.
+export function isBlockedHostname(hostname: string): boolean {
+  // Normalize: strip IPv6 brackets, trailing FQDN dot, lowercase.
+  // Trailing-dot variants ('localhost.', 'service.local.') would otherwise
+  // sneak past the suffix and equality checks — DNS treats them as equivalent.
+  const lower = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
+  if (lower === 'localhost' || lower === '0.0.0.0' || lower === '') return true
+  if (lower.endsWith('.localhost') || lower.endsWith('.local') || lower.endsWith('.internal')) return true
+  // IPv4 numeric
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(lower)) {
+    const parts = lower.split('.').map(Number)
+    if (parts[0] === 0) return true                                            // 0/8
+    if (parts[0] === 127) return true                                          // 127/8 loopback
+    if (parts[0] === 10) return true                                           // 10/8 private
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true      // 172.16/12 private
+    if (parts[0] === 192 && parts[1] === 168) return true                      // 192.168/16 private
+    if (parts[0] === 169 && parts[1] === 254) return true                      // link-local + cloud metadata
+    return false
+  }
+  // Any IPv6 starting with `::` is unreachable on the public internet: those
+  // are the unspecified/loopback/IPv4-compatible/IPv4-mapped compatibility
+  // forms (::1, ::, ::1.2.3.4, ::ffff:1.2.3.4, parser-normalized variants
+  // like ::7f00:1). Real public IPv6 services live in 2000::/3 — none of
+  // them start with `::`. Block the whole class so we don't have to enumerate
+  // every parser-normalization quirk.
+  if (lower.startsWith('::')) return true
+  // IPv6 unique-local + link-local
+  if (/^fc[0-9a-f]{2}:/i.test(lower) || /^fd[0-9a-f]{2}:/i.test(lower)) return true  // fc00::/7 ULA
+  if (/^fe80:/i.test(lower)) return true                                              // fe80::/10 link-local
+  return false
+}
+
+// Strip content the regex shouldn't peek into: HTML comments, script/style
+// bodies, noscript, and inert text containers (<template>, <textarea>) that
+// hold literal HTML text the browser never instantiates. Without this, an
+// iframe-shaped string inside any of these would match the regex.
+function stripNonRenderedContent(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, '')
+    .replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi, '')
+}
+
+export function findMenuIframes(html: string, max = 2): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const sanitized = stripNonRenderedContent(html)
+  const iframeRegex = /<iframe\b[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi
+  let m
+  while ((m = iframeRegex.exec(sanitized)) !== null) {
+    let src = m[1].trim()
+    if (src.startsWith('//')) src = 'https:' + src
+    if (!/^https?:\/\//i.test(src)) continue
+    if (seen.has(src)) continue
+
+    let parsed: URL
+    try {
+      parsed = new URL(src)
+    } catch {
+      continue
+    }
+    if (isBlockedHostname(parsed.hostname)) continue
+
+    // Reuse the same exact-or-subdomain logic via isKnownMenuIframeHost so
+    // discovery and the Browserless render gate stay in sync.
+    const isKnown = isKnownMenuIframeHost(parsed.hostname)
+    const hasMenuKeyword = /\bmenus?\b/i.test(parsed.pathname)
+    if (!isKnown && !hasMenuKeyword) continue
+
+    seen.add(src)
+    out.push(src)
+    if (out.length >= max) break
+  }
+  return out
+}

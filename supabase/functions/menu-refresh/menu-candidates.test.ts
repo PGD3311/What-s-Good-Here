@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverMenuCandidates, findSubMenuPages, scoreCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate } from './menu-candidates.ts'
 
 describe('scoreCandidate', () => {
   it('positive: menu in URL', () => {
@@ -410,5 +410,299 @@ describe('findSubMenuPages', () => {
     const html = '<a href="/drinks-menu">Drinks Menu</a>'
     const out = findSubMenuPages(html, 'https://x.com/')
     expect(out).toEqual([])
+  })
+})
+
+describe('findMenuIframes', () => {
+  it('catches the State Road / checkle.menu pattern (protocol-relative)', () => {
+    const html = '<iframe id="menuFrame" src="//checkle.menu/stateroadrestaurant?embed=true"></iframe>'
+    expect(findMenuIframes(html)).toEqual([
+      'https://checkle.menu/stateroadrestaurant?embed=true',
+    ])
+  })
+
+  it('catches iframes by known menu-service host (popmenu, singleplatform, toast)', () => {
+    const html = `
+      <iframe src="https://popmenu.com/restaurants/foo/menu"></iframe>
+      <iframe src="https://www.singleplatform.com/bar/menu"></iframe>
+      <iframe src="https://order.toasttab.com/online/baz"></iframe>
+    `
+    const out = findMenuIframes(html, 5)
+    expect(out).toContain('https://popmenu.com/restaurants/foo/menu')
+    expect(out).toContain('https://www.singleplatform.com/bar/menu')
+    expect(out).toContain('https://order.toasttab.com/online/baz')
+  })
+
+  it('catches iframes by "menu" keyword in src even when host is unknown', () => {
+    const html = '<iframe src="https://unknown-cms.example/restaurant/menu"></iframe>'
+    expect(findMenuIframes(html)).toEqual(['https://unknown-cms.example/restaurant/menu'])
+  })
+
+  it('skips iframes that are clearly not menus (ads, maps, video)', () => {
+    const html = `
+      <iframe src="https://www.google.com/maps/embed?q=foo"></iframe>
+      <iframe src="https://www.youtube.com/embed/abc"></iframe>
+      <iframe src="https://googletagmanager.com/ns.html?id=GTM-XYZ"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('caps results at max', () => {
+    const html = `
+      <iframe src="https://a.com/menu"></iframe>
+      <iframe src="https://b.com/menu"></iframe>
+      <iframe src="https://c.com/menu"></iframe>
+    `
+    expect(findMenuIframes(html, 2).length).toBe(2)
+  })
+
+  it('dedupes identical iframe srcs', () => {
+    const html = `
+      <iframe src="https://checkle.menu/foo"></iframe>
+      <iframe src="https://checkle.menu/foo"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual(['https://checkle.menu/foo'])
+  })
+
+  it('ignores javascript: and other non-http schemes', () => {
+    const html = `
+      <iframe src="javascript:void(0)"></iframe>
+      <iframe src="about:blank"></iframe>
+      <iframe src="data:text/html,foo"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('returns empty when there are no iframes at all', () => {
+    expect(findMenuIframes('<p>no iframes here</p>')).toEqual([])
+  })
+
+  it('ignores iframe-shaped strings inside <script> tags (no smuggling)', () => {
+    const html = `
+      <script>
+        const trap = '<iframe src="http://169.254.169.254/menu"></iframe>';
+      </script>
+      <p>nothing else</p>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('ignores iframe-shaped strings inside HTML comments', () => {
+    const html = `<!-- <iframe src="https://checkle.menu/foo"></iframe> -->`
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('ignores iframe-shaped strings inside <style> and <noscript>', () => {
+    const html = `
+      <style>/* <iframe src="https://checkle.menu/foo"></iframe> */</style>
+      <noscript><iframe src="https://popmenu.com/menu"></iframe></noscript>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('blocks SSRF: loopback (127.0.0.1, localhost, ::1)', () => {
+    const html = `
+      <iframe src="http://127.0.0.1/menu"></iframe>
+      <iframe src="http://localhost/menu"></iframe>
+      <iframe src="http://[::1]/menu"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('blocks SSRF: cloud metadata (169.254.169.254)', () => {
+    const html = '<iframe src="http://169.254.169.254/menu"></iframe>'
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('blocks SSRF: RFC1918 private ranges', () => {
+    const html = `
+      <iframe src="http://10.0.0.5/menu"></iframe>
+      <iframe src="http://172.16.0.1/menu"></iframe>
+      <iframe src="http://172.31.255.254/menu"></iframe>
+      <iframe src="http://192.168.1.1/menu"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('blocks SSRF: .local / .internal hostnames', () => {
+    const html = `
+      <iframe src="http://service.local/menu"></iframe>
+      <iframe src="http://api.internal/menu"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('keyword fallback matches pathname only — not query string', () => {
+    const html = '<iframe src="https://cdn.example.com/siteimage.png?menu=footer"></iframe>'
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('keyword fallback matches pathname only — not asset extensions', () => {
+    // No "menu" substring at a word boundary in the pathname here, so this
+    // should be rejected (path = /assets/footer.png, no menu word).
+    const html = '<iframe src="https://cdn.example.com/assets/footer.png"></iframe>'
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('still catches legitimate /menu in pathname', () => {
+    const html = '<iframe src="https://unknown-cms.example/restaurant/menu/index.html"></iframe>'
+    expect(findMenuIframes(html)).toEqual(['https://unknown-cms.example/restaurant/menu/index.html'])
+  })
+
+  it('blocks SSRF: IPv4-mapped IPv6 (::ffff:127.0.0.1 and dotted/hex variants)', () => {
+    const html = `
+      <iframe src="http://[::ffff:127.0.0.1]/menu"></iframe>
+      <iframe src="http://[::ffff:10.0.0.1]/menu"></iframe>
+      <iframe src="http://[::127.0.0.1]/menu"></iframe>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('blocks SSRF: ::ffff: hex form (no dots)', () => {
+    // ::ffff:7f00:0001 is the hex IPv4-mapping of 127.0.0.1. Any ::ffff:
+    // prefix is rejected since it's exclusively IPv4-mapping.
+    const html = '<iframe src="http://[::ffff:7f00:0001]/menu"></iframe>'
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('ignores iframe-shaped strings inside <template> elements', () => {
+    const html = `
+      <template id="menuTpl">
+        <iframe src="https://checkle.menu/foo"></iframe>
+      </template>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+
+  it('ignores iframe-shaped strings inside <textarea> elements', () => {
+    const html = `
+      <textarea name="example">
+        <iframe src="https://checkle.menu/foo"></iframe>
+      </textarea>
+    `
+    expect(findMenuIframes(html)).toEqual([])
+  })
+})
+
+describe('isBlockedHostname', () => {
+  it('blocks localhost and 0.0.0.0', () => {
+    expect(isBlockedHostname('localhost')).toBe(true)
+    expect(isBlockedHostname('0.0.0.0')).toBe(true)
+  })
+
+  it('blocks loopback (127/8)', () => {
+    expect(isBlockedHostname('127.0.0.1')).toBe(true)
+    expect(isBlockedHostname('127.255.255.254')).toBe(true)
+  })
+
+  it('blocks RFC1918 private ranges', () => {
+    expect(isBlockedHostname('10.0.0.1')).toBe(true)
+    expect(isBlockedHostname('172.16.0.1')).toBe(true)
+    expect(isBlockedHostname('172.31.255.254')).toBe(true)
+    expect(isBlockedHostname('192.168.1.1')).toBe(true)
+  })
+
+  it('does NOT block 172.32+ (outside RFC1918)', () => {
+    expect(isBlockedHostname('172.32.0.1')).toBe(false)
+    expect(isBlockedHostname('172.15.0.1')).toBe(false)
+  })
+
+  it('blocks link-local + cloud metadata (169.254/16)', () => {
+    expect(isBlockedHostname('169.254.169.254')).toBe(true)
+    expect(isBlockedHostname('169.254.0.1')).toBe(true)
+  })
+
+  it('blocks IPv6 loopback and unspecified', () => {
+    expect(isBlockedHostname('::1')).toBe(true)
+    expect(isBlockedHostname('::')).toBe(true)
+  })
+
+  it('blocks IPv6 with embedded IPv4 (::ffff:x.x.x.x and ::x.x.x.x)', () => {
+    expect(isBlockedHostname('::ffff:127.0.0.1')).toBe(true)
+    expect(isBlockedHostname('::ffff:10.0.0.1')).toBe(true)
+    expect(isBlockedHostname('::127.0.0.1')).toBe(true)
+  })
+
+  it('blocks ::ffff: hex prefix (covers ::ffff:7f00:0001 form)', () => {
+    expect(isBlockedHostname('::ffff:7f00:0001')).toBe(true)
+  })
+
+  it('blocks IPv6 unique-local and link-local ranges', () => {
+    expect(isBlockedHostname('fc00:0:0:0:0:0:0:1')).toBe(true)
+    expect(isBlockedHostname('fd00:0:0:0:0:0:0:1')).toBe(true)
+    expect(isBlockedHostname('fe80:0:0:0:0:0:0:1')).toBe(true)
+  })
+
+  it('blocks .local / .internal / .localhost suffixes', () => {
+    expect(isBlockedHostname('service.local')).toBe(true)
+    expect(isBlockedHostname('api.internal')).toBe(true)
+    expect(isBlockedHostname('foo.localhost')).toBe(true)
+  })
+
+  it('strips IPv6 brackets (URL hostname may include them)', () => {
+    expect(isBlockedHostname('[::1]')).toBe(true)
+  })
+
+  it('allows legitimate public hostnames', () => {
+    expect(isBlockedHostname('checkle.menu')).toBe(false)
+    expect(isBlockedHostname('www.example.com')).toBe(false)
+    expect(isBlockedHostname('8.8.8.8')).toBe(false)
+  })
+
+  it('blocks trailing-dot variants (DNS-equivalent FQDN forms)', () => {
+    // WHATWG URL preserves trailing dots in hostname. Without normalization,
+    // 'localhost.' and 'service.local.' would slip past the blocklist.
+    expect(isBlockedHostname('localhost.')).toBe(true)
+    expect(isBlockedHostname('service.local.')).toBe(true)
+    expect(isBlockedHostname('api.internal.')).toBe(true)
+    expect(isBlockedHostname('foo.localhost.')).toBe(true)
+  })
+
+  it('does NOT block public hostnames that happen to end in a dot', () => {
+    expect(isBlockedHostname('checkle.menu.')).toBe(false)
+    expect(isBlockedHostname('example.com.')).toBe(false)
+  })
+})
+
+describe('isKnownMenuIframeHost', () => {
+  it('matches the menu-service whitelist', () => {
+    expect(isKnownMenuIframeHost('checkle.menu')).toBe(true)
+    expect(isKnownMenuIframeHost('www.popmenu.com')).toBe(true)
+    expect(isKnownMenuIframeHost('singleplatform.com')).toBe(true)
+    expect(isKnownMenuIframeHost('order.toasttab.com')).toBe(true)
+    expect(isKnownMenuIframeHost('menustar.com')).toBe(true)
+  })
+
+  it('rejects hosts not on the whitelist', () => {
+    expect(isKnownMenuIframeHost('attacker.com')).toBe(false)
+    expect(isKnownMenuIframeHost('localhost')).toBe(false)
+    expect(isKnownMenuIframeHost('example.com')).toBe(false)
+    expect(isKnownMenuIframeHost('googletagmanager.com')).toBe(false)
+  })
+
+  it('rejects superdomain bypass (attacker-controlled hostname containing trusted apex)', () => {
+    // The substring/regex form of this check would match these — the
+    // exact-or-subdomain check must reject them.
+    expect(isKnownMenuIframeHost('popmenu.com.evil')).toBe(false)
+    expect(isKnownMenuIframeHost('foo.popmenu.com.evil')).toBe(false)
+    expect(isKnownMenuIframeHost('toasttab.com.attacker.io')).toBe(false)
+    expect(isKnownMenuIframeHost('checkle.menu.attacker.io')).toBe(false)
+  })
+
+  it('rejects prefix-match imposters (e.g. xpopmenu.com)', () => {
+    expect(isKnownMenuIframeHost('xpopmenu.com')).toBe(false)
+    expect(isKnownMenuIframeHost('not-popmenu.com')).toBe(false)
+    expect(isKnownMenuIframeHost('checkle.menus')).toBe(false)
+  })
+
+  it('matches exact apex and proper subdomains', () => {
+    expect(isKnownMenuIframeHost('popmenu.com')).toBe(true)
+    expect(isKnownMenuIframeHost('order.popmenu.com')).toBe(true)
+    expect(isKnownMenuIframeHost('any.deep.subdomain.popmenu.com')).toBe(true)
+  })
+
+  it('normalizes trailing dot (DNS-equivalent FQDN forms)', () => {
+    expect(isKnownMenuIframeHost('popmenu.com.')).toBe(true)
+    expect(isKnownMenuIframeHost('order.popmenu.com.')).toBe(true)
   })
 })
