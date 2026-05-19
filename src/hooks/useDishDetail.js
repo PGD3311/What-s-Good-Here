@@ -8,9 +8,13 @@ import { votesApi } from '../api/votesApi'
 import { ErrorTypes, createClassifiedError } from '../utils/errorHandler'
 
 /**
- * Transform raw dish data from API to component format
+ * Transform raw dish data from API to component format.
+ * Exported for direct unit testing — this is the choke point where new
+ * dish columns must be explicitly added or they get silently dropped on
+ * the way to the detail page (see CLAUDE.md §1.2 — new Supabase fields
+ * must be added in two places: selectFields AND .map() transform).
  */
-function transformDish(data) {
+export function transformDish(data) {
   return {
     dish_id: data.id,
     dish_name: data.name,
@@ -33,6 +37,8 @@ function transformDish(data) {
     toast_slug: data.restaurants?.toast_slug,
     restaurant_phone: data.restaurants?.phone,
     restaurant_is_open: data.restaurants?.is_open ?? null,
+    description: data.description ?? null,
+    dietary_tags: Array.isArray(data.dietary_tags) ? data.dietary_tags : [],
   }
 }
 
