@@ -214,6 +214,21 @@ interface MenuExtractionResult {
 const MAX_RESTAURANTS_PER_RUN = 10
 const STALE_DAYS = 14
 
+// Identifies the extractor pipeline that produced the dishes currently stored
+// for a restaurant. The hash short-circuit skips Sonnet only when BOTH
+// restaurants.menu_content_hash matches the freshly-fetched HTML hash AND
+// restaurants.extractor_fingerprint matches this constant. Bump the
+// appropriate segment whenever something changes that affects what gets
+// stored:
+//   - model         : the Sonnet model identifier (current: sonnet-4-6)
+//   - prompt        : the Sonnet system/user prompt revision
+//   - pipeline      : extractors.ts sanitization, candidate scoring, strategy
+//                     ordering (html/pdf/image/render), iframe-following
+//   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
+// Format is intentionally human-readable so the stored value alone tells you
+// which extractor produced a row — easier to debug than a bare integer.
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v2|pipeline-v1|desc+dietary'
+
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [
   /closed\s+(for\s+the\s+)?season/i,
@@ -1063,7 +1078,7 @@ serve(async (req) => {
         try {
           const { data: restaurant, error: restErr } = await supabase
             .from('restaurants')
-            .select('id, name, address, menu_url, website_url, google_place_id, menu_content_hash')
+            .select('id, name, address, menu_url, website_url, google_place_id, menu_content_hash, extractor_fingerprint')
             .eq('id', job.restaurant_id)
             .single()
 
@@ -1174,8 +1189,14 @@ serve(async (req) => {
 
             if (pdfExtracted.dishes.length > 0) {
               const stats = await upsertDishes(supabase, restaurant.id, pdfExtracted)
+              // Note: we deliberately do not store menu_content_hash here —
+              // PDFs route through a different fetch path with no equivalent
+              // raw-HTML shell to fingerprint. The extractor_fingerprint is
+              // still written so a future extractor bump invalidates the
+              // cache for PDF-backed restaurants too.
               await supabase.from('restaurants').update({
                 menu_last_checked: new Date().toISOString(),
+                extractor_fingerprint: CURRENT_EXTRACTOR_FINGERPRINT,
               }).eq('id', restaurant.id)
               await supabase.from('menu_import_jobs').update({
                 status: 'completed',
@@ -1245,12 +1266,19 @@ serve(async (req) => {
           const triedUrls = new Set<string>()
 
           // Fast path: compute raw hash BEFORE any Sonnet/render call.
-          // If the raw HTML shell hasn't changed since last successful run, skip everything.
-          // This costs some freshness on JS-rendered sites (Wix shell may not change even when
-          // the menu does), but avoids paying Sonnet and Browserless on every cron cycle.
-          // The 14-day refresh cron will eventually catch menu updates.
+          // Skip Sonnet only when BOTH the raw HTML shell AND the extractor
+          // fingerprint match what's stored. The fingerprint check ensures
+          // that prompt/schema upgrades (e.g. PR #229 added description +
+          // dietary_tags) invalidate the cache automatically — every restaurant
+          // with a stored fingerprint from an older extractor re-extracts.
+          // The 14-day refresh cron still catches actual menu updates between
+          // extractor versions.
           const rawHash = await hashContent(rawText)
-          if (restaurant.menu_content_hash && restaurant.menu_content_hash === rawHash) {
+          if (
+            restaurant.menu_content_hash &&
+            restaurant.menu_content_hash === rawHash &&
+            restaurant.extractor_fingerprint === CURRENT_EXTRACTOR_FINGERPRINT
+          ) {
             await supabase.from('restaurants').update({ menu_last_checked: new Date().toISOString() }).eq('id', restaurant.id)
             await supabase.from('menu_import_jobs').update({
               status: 'completed',
@@ -1600,6 +1628,7 @@ serve(async (req) => {
           await supabase.from('restaurants').update({
             menu_last_checked: new Date().toISOString(),
             menu_content_hash: rawHash,
+            extractor_fingerprint: CURRENT_EXTRACTOR_FINGERPRINT,
           }).eq('id', restaurant.id)
 
           const winningStrategy = attempts.find(a => a.dishes_found > 0)?.strategy ?? 'html'
@@ -1689,14 +1718,27 @@ serve(async (req) => {
     }
 
     // === Batch fallback mode: find stale menus (or all if force_all=true) ===
-    let restaurants: Array<{ id: string; name: string; menu_url: string; menu_content_hash: string | null }>
+    let restaurants: Array<{
+      id: string;
+      name: string;
+      menu_url: string;
+      menu_content_hash: string | null;
+      extractor_fingerprint: string | null;
+    }>
 
     {
+      // ORDER BY menu_last_checked (NULLS FIRST) so a backfill that runs the
+      // same edge function in a loop cycles through the inventory instead of
+      // grabbing the same physical-heap-order rows every call. Tiebreak by id
+      // so batch boundaries are deterministic when many rows share the same
+      // (or NULL) timestamp.
       let query = supabase
         .from('restaurants')
-        .select('id, name, menu_url, menu_content_hash')
+        .select('id, name, menu_url, menu_content_hash, extractor_fingerprint')
         .not('menu_url', 'is', null)
         .eq('is_open', true)
+        .order('menu_last_checked', { ascending: true, nullsFirst: true })
+        .order('id', { ascending: true })
 
       if (!forceAll) {
         // Default cron mode: only stale (or never-checked) menus
@@ -1736,6 +1778,20 @@ serve(async (req) => {
       total_dishes?: number
     }> = []
 
+    // Stamp menu_last_checked = now on EVERY processed restaurant, regardless
+    // of outcome. The column doubles as the rotation key for ORDER BY above:
+    // if failure paths leave it stale, the same broken-URL rows get re-picked
+    // every call and the backfill loops forever on a bad cluster (this is the
+    // bug that motivated this whole change). The cost is that the 14-day
+    // staleness cron sees failed rows as "fresh" for ~14 days — acceptable
+    // because Path A's queue retry/backoff handles short-term retries.
+    const stampChecked = async (restaurantId: string) => {
+      await supabase
+        .from('restaurants')
+        .update({ menu_last_checked: new Date().toISOString() })
+        .eq('id', restaurantId)
+    }
+
     for (const restaurant of restaurants) {
       try {
         console.log(`Processing menu for: ${restaurant.name}`)
@@ -1743,18 +1799,23 @@ serve(async (req) => {
         // Fetch menu content
         const content = await fetchMenuContent(restaurant.menu_url)
         if (content.length < 50) {
+          await stampChecked(restaurant.id)
           results.push({ restaurant_id: restaurant.id, name: restaurant.name, status: 'skipped: page too short' })
           continue
         }
 
-        // Content hash — skip Claude if page hasn't changed
+        // Content hash — skip Claude only when BOTH the page hash and the
+        // stored extractor fingerprint match. Fingerprint mismatch means we've
+        // upgraded the extractor since last extraction (new prompt, new
+        // schema, etc.) — re-run Sonnet so the upgrade actually takes effect.
         const contentHash = await hashContent(content)
-        if (restaurant.menu_content_hash && restaurant.menu_content_hash === contentHash) {
-          console.log(`${restaurant.name}: content unchanged, skipping`)
-          await supabase
-            .from('restaurants')
-            .update({ menu_last_checked: new Date().toISOString() })
-            .eq('id', restaurant.id)
+        if (
+          restaurant.menu_content_hash &&
+          restaurant.menu_content_hash === contentHash &&
+          restaurant.extractor_fingerprint === CURRENT_EXTRACTOR_FINGERPRINT
+        ) {
+          console.log(`${restaurant.name}: content + extractor unchanged, skipping`)
+          await stampChecked(restaurant.id)
           results.push({ restaurant_id: restaurant.id, name: restaurant.name, status: 'unchanged (hash match)' })
           continue
         }
@@ -1778,6 +1839,7 @@ serve(async (req) => {
         // Extract dishes with Claude
         const extracted = await extractMenuWithClaude(content, restaurant.name)
         if (extracted.dishes.length === 0) {
+          await stampChecked(restaurant.id)
           results.push({ restaurant_id: restaurant.id, name: restaurant.name, status: 'skipped: no dishes found' })
           continue
         }
@@ -1785,12 +1847,13 @@ serve(async (req) => {
         // Upsert dishes
         const stats = await upsertDishes(supabase, restaurant.id, extracted)
 
-        // Mark menu as checked + save content hash
+        // Mark menu as checked + save content hash + extractor fingerprint
         await supabase
           .from('restaurants')
           .update({
             menu_last_checked: new Date().toISOString(),
             menu_content_hash: contentHash,
+            extractor_fingerprint: CURRENT_EXTRACTOR_FINGERPRINT,
           })
           .eq('id', restaurant.id)
 
@@ -1804,6 +1867,7 @@ serve(async (req) => {
           total_dishes: extracted.dishes.length,
         })
       } catch (err) {
+        await stampChecked(restaurant.id)
         console.error(`Error processing ${restaurant.name}:`, err)
         results.push({
           restaurant_id: restaurant.id,

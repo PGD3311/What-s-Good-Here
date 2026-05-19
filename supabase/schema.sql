@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS restaurants (
   menu_url TEXT,
   menu_last_checked TIMESTAMPTZ,
   menu_content_hash TEXT,
+  -- Fingerprint of the extractor pipeline (model + prompt + pipeline + features)
+  -- that produced the dishes currently stored. The menu-refresh short-circuit
+  -- skips Sonnet only when menu_content_hash AND extractor_fingerprint both
+  -- match the current versions — so prompt/schema upgrades naturally invalidate
+  -- the cache without manual hash-wipes. Stored as TEXT (e.g.
+  -- 'sonnet-4-6|prompt-v2|pipeline-v1|desc+dietary') instead of an integer so
+  -- the stored value describes WHICH extractor produced it, not just an opaque
+  -- generation counter. Source of truth for the constant is
+  -- CURRENT_EXTRACTOR_FINGERPRINT in supabase/functions/menu-refresh/index.ts.
+  extractor_fingerprint TEXT,
   menu_section_order TEXT[] DEFAULT '{}',
   toast_slug TEXT,
   order_url TEXT,
@@ -2670,8 +2680,9 @@ BEGIN
     RETURN NEW;
   END IF;
   -- Managers can only change contact/social/menu/order fields. Identity + geo frozen.
-  -- menu_last_checked + menu_content_hash are menu-refresh bookkeeping — frozen
-  -- so managers can't force or skip auto-scrapes.
+  -- menu_last_checked + menu_content_hash + extractor_fingerprint are
+  -- menu-refresh bookkeeping — frozen so managers can't force or skip
+  -- auto-scrapes (and can't trick the cache by clearing the fingerprint).
   NEW.id := OLD.id;
   NEW.name := OLD.name;
   NEW.address := OLD.address;
@@ -2684,6 +2695,7 @@ BEGIN
   NEW.created_at := OLD.created_at;
   NEW.menu_last_checked := OLD.menu_last_checked;
   NEW.menu_content_hash := OLD.menu_content_hash;
+  NEW.extractor_fingerprint := OLD.extractor_fingerprint;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
