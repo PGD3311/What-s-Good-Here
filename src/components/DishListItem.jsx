@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { getRatingColor } from '../utils/ranking'
@@ -43,9 +43,6 @@ export const DishListItem = memo(function DishListItem({
   hideVotes = false,
 }) {
   const navigate = useNavigate()
-  // Inline "ingredients" expander — local state per card. Closed by default
-  // so the list stays tight; user opts in to see Sonnet's ingredient line.
-  const [showDescription, setShowDescription] = useState(false)
 
   // Normalize data shapes between different sources
   const dishName = dish.dish_name || dish.name
@@ -80,9 +77,9 @@ export const DishListItem = memo(function DishListItem({
   return (
     // Passive container — NOT an ARIA control. Keeps `onClick` for the
     // mouse-anywhere convenience but no `role="button"`/`tabIndex`/`onKeyDown`,
-    // so its interactive children (dish-name button, restaurant link, Order /
-    // Directions / ingredients toggle) are siblings of controls, not nested
-    // inside one. Keyboard activation goes through the dish-name button below.
+    // so its interactive children (dish-name button, restaurant link, Order
+    // Now, Directions) are siblings of controls, not nested inside one.
+    // Keyboard activation goes through the dish-name button below.
     <div
       data-dish-id={dishId}
       onClick={handleClick}
@@ -221,72 +218,10 @@ export const DishListItem = memo(function DishListItem({
         </div>
         {/* Description preview \u2014 terse Sonnet ingredient line. Omitted entirely
             when null/empty so cards render exactly as before backfill. */}
-        {typeof dish.description === 'string' && dish.description.trim() ? (
-          <div style={{ marginTop: '3px' }}>
-            <button
-              type="button"
-              onClick={function (e) {
-                e.stopPropagation()
-                setShowDescription(function (v) { return !v })
-              }}
-              onKeyDown={function (e) {
-                // Parent card handles Enter/Space as its own activation. Without
-                // this guard, keyboard activation of the toggle would bubble up
-                // and navigate to the dish detail page.
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.stopPropagation()
-                }
-              }}
-              aria-expanded={showDescription}
-              aria-controls={'dish-desc-' + dishId}
-              data-testid="dish-description-toggle"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                fontFamily: 'Outfit, sans-serif',
-                fontSize: isPodium ? '11px' : '10px',
-                fontWeight: 600,
-                color: 'var(--color-text-tertiary)',
-                letterSpacing: '0.04em',
-                textTransform: 'lowercase',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px',
-              }}
-            >
-              ingredients
-              <span
-                aria-hidden="true"
-                style={{
-                  display: 'inline-block',
-                  transform: showDescription ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 150ms ease',
-                  fontSize: '8px',
-                  lineHeight: 1,
-                }}
-              >
-                ▾
-              </span>
-            </button>
-            {showDescription ? (
-              <div
-                id={'dish-desc-' + dishId}
-                data-testid="dish-description-preview"
-                style={{
-                  marginTop: '4px',
-                  fontFamily: 'Outfit, sans-serif',
-                  fontSize: isPodium ? '12px' : '11px',
-                  color: 'var(--color-text-secondary)',
-                  lineHeight: 1.4,
-                }}
-              >
-                {dish.description.trim()}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {/* Dish description lives on the detail page only (rendered by
+            DishDescription in src/pages/Dish.jsx). Keep the list-item card
+            tight — name, restaurant, rating, and the Order/Directions
+            action buttons below. Users tap into the dish to see ingredients. */}
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
           <div className="flex items-center gap-2" style={{ marginTop: '4px' }}>

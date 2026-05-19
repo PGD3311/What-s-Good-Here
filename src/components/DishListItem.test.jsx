@@ -22,91 +22,34 @@ const BASE = {
   total_votes: 12,
 }
 
-describe('DishListItem description toggle', () => {
-  it('shows an "ingredients" toggle when description is non-null', () => {
+describe('DishListItem — description belongs on the detail page, not the card', () => {
+  it('does NOT render any ingredients toggle on the card, even when description is present', () => {
     renderItem({
       ...BASE,
       description: 'Hot lobster meat, drawn butter, split-top bun',
     })
-    expect(screen.getByTestId('dish-description-toggle')).toBeInTheDocument()
-    // Collapsed by default — description body is not rendered yet.
+    expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
     expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
   })
 
-  it('tapping the toggle reveals the description inline', () => {
+  it('does NOT render the description text on the card, even when present', () => {
     renderItem({
       ...BASE,
       description: 'Hot lobster meat, drawn butter, split-top bun',
     })
-    fireEvent.click(screen.getByTestId('dish-description-toggle'))
-    expect(screen.getByTestId('dish-description-preview')).toBeInTheDocument()
-    expect(screen.getByText(/hot lobster meat, drawn butter, split-top bun/i)).toBeInTheDocument()
+    expect(screen.queryByText(/hot lobster meat/i)).not.toBeInTheDocument()
   })
 
-  it('tapping the toggle a second time collapses the description', () => {
-    renderItem({
-      ...BASE,
-      description: 'Hot lobster meat, drawn butter',
-    })
-    const toggle = screen.getByTestId('dish-description-toggle')
-    fireEvent.click(toggle)
-    fireEvent.click(toggle)
-    expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
-  })
-
-  it('toggle reflects aria-expanded state', () => {
-    renderItem({
-      ...BASE,
-      description: 'Anchovy, lemon, breadcrumb',
-    })
-    const toggle = screen.getByTestId('dish-description-toggle')
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('clicking the toggle does NOT navigate to the dish (stopPropagation)', () => {
-    let cardClicks = 0
-    renderItem(
-      { ...BASE, description: 'Some ingredients' },
-      { onClick: () => { cardClicks++ } }
-    )
-    fireEvent.click(screen.getByTestId('dish-description-toggle'))
-    expect(cardClicks).toBe(0)
-  })
-
-  it('keyboard-activating the toggle does NOT bubble Enter/Space to the card', () => {
-    let cardClicks = 0
-    renderItem(
-      { ...BASE, description: 'Some ingredients' },
-      { onClick: () => { cardClicks++ } }
-    )
-    const toggle = screen.getByTestId('dish-description-toggle')
-    fireEvent.keyDown(toggle, { key: 'Enter' })
-    fireEvent.keyDown(toggle, { key: ' ' })
-    expect(cardClicks).toBe(0)
-  })
-
-  it('omits the toggle entirely when description is null', () => {
+  it('renders normally when description is null', () => {
     renderItem({ ...BASE, description: null })
-    expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('dish-description-preview')).not.toBeInTheDocument()
-  })
-
-  it('omits the toggle when description is undefined', () => {
-    renderItem({ ...BASE })
-    expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
-  })
-
-  it('omits the toggle when description is whitespace only', () => {
-    renderItem({ ...BASE, description: '   ' })
+    expect(screen.getByText(BASE.dish_name)).toBeInTheDocument()
     expect(screen.queryByTestId('dish-description-toggle')).not.toBeInTheDocument()
   })
 })
 
 describe('DishListItem accessibility — no nested interactive controls', () => {
   it('outer container is NOT a button (no role="button" or tabIndex)', () => {
-    renderItem({ ...BASE, description: null })
+    renderItem({ ...BASE })
     const outer = document.querySelector('[data-dish-id="' + BASE.dish_id + '"]')
     expect(outer).not.toBeNull()
     expect(outer.getAttribute('role')).toBeNull()
@@ -114,7 +57,7 @@ describe('DishListItem accessibility — no nested interactive controls', () => 
   })
 
   it('dish name is a real <button> for keyboard navigation', () => {
-    renderItem({ ...BASE, description: null })
+    renderItem({ ...BASE })
     const dishNameButton = screen.getByRole('button', { name: BASE.dish_name })
     expect(dishNameButton.tagName).toBe('BUTTON')
   })
@@ -122,7 +65,7 @@ describe('DishListItem accessibility — no nested interactive controls', () => 
   it('clicking the dish name button navigates without double-firing the parent', () => {
     let clicks = 0
     renderItem(
-      { ...BASE, description: null },
+      { ...BASE },
       { onClick: () => { clicks++ } }
     )
     const dishNameButton = screen.getByRole('button', { name: BASE.dish_name })
