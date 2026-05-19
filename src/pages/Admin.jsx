@@ -802,6 +802,38 @@ export function Admin() {
                     >
                       Copy
                     </button>
+                    <button
+                      onClick={() => {
+                        const restaurantName =
+                          restaurants.find((r) => r.id === inviteRestaurantId)?.name || 'your restaurant'
+                        const subject = `You're invited to manage ${restaurantName} on What's Good Here`
+                        const body = [
+                          `Hi,`,
+                          ``,
+                          `You've been invited to manage ${restaurantName} on What's Good Here — a mobile-first food discovery app for Martha's Vineyard.`,
+                          ``,
+                          `Once you accept, you'll be able to:`,
+                          `  • Add your menu (paste text or upload a PDF — we'll parse it automatically)`,
+                          `  • Update dish names, prices, and photos`,
+                          `  • Post specials (happy hour, daily deals)`,
+                          `  • Schedule events (live music, trivia nights)`,
+                          ``,
+                          `Click the link below to get started. The link expires in 7 days.`,
+                          ``,
+                          inviteLink,
+                          ``,
+                          `Questions? Just reply to this email.`,
+                          ``,
+                          `— The What's Good Here team`,
+                        ].join('\n')
+                        const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+                        window.location.href = mailto
+                      }}
+                      className="px-3 py-1 rounded text-xs font-medium"
+                      style={{ background: 'var(--color-accent-gold)', color: 'var(--color-text-on-primary)' }}
+                    >
+                      Email
+                    </button>
                   </div>
                 </div>
               )}
