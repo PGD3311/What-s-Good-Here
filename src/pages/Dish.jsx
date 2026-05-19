@@ -12,7 +12,7 @@ import { useMyLocalList } from '../hooks/useMyLocalList'
 import { ReviewFlow } from '../components/ReviewFlow'
 import { PhotoUploadConfirmation } from '../components/PhotoUploadConfirmation'
 import { LoginModal } from '../components/Auth/LoginModal'
-import { DishHero, DishEvidence } from '../components/dish'
+import { DishHero, DishEvidence, DishDescription } from '../components/dish'
 import { AddToPlaylistSheet } from '../components/playlists/AddToPlaylistSheet'
 import { ReportModal } from '../components/ReportModal'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
@@ -349,6 +349,16 @@ export function Dish() {
               </span>
             </div>
           )}
+
+          {/* Description + dietary tags. Self-contained — DishDescription
+              returns null when the dish has neither field, leaving the page
+              layout unchanged for non-backfilled dishes. Spacing lives inside
+              the component so an unconditional wrapper div never adds a
+              ghost gap when the block is empty. */}
+          <DishDescription
+            description={dish.description}
+            dietaryTags={dish.dietary_tags}
+          />
 
           {/* LAYER 2: THE ACTION — Rate CTA + inline rate flow */}
           <div className="p-4 space-y-3">

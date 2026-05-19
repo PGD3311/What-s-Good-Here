@@ -67,6 +67,7 @@ function scoreDish(dish, tokens, normalizedPhrase, expandedTags) {
   const dishCategory = (dish.category || '').toLowerCase()
   const dishCuisine = (dish.restaurant_cuisine || '').toLowerCase()
   const dishRestaurant = (dish.restaurant_name || '').toLowerCase()
+  const dishDescription = (dish.description || '').toLowerCase()
   const dishTags = dish.tags || []
 
   // Exact phrase in name: 100
@@ -98,6 +99,19 @@ function scoreDish(dish, tokens, normalizedPhrase, expandedTags) {
   // All tokens match restaurant cuisine: 50
   if (dishCuisine && tokens.every(t => dishCuisine.includes(t)) && tokens.length > 0) {
     return 50
+  }
+
+  // Description match (ingredient): 45
+  // Single token → substring contains. Multi-token → require the joined
+  // phrase as a substring so "fried chicken" doesn't match a description
+  // like "fried tofu, chicken broth" where both tokens appear but unrelated.
+  // Ranked below name+category (60) so direct identifiers win, above
+  // tag-synonym (40) since ingredient matches are a more specific signal.
+  if (dishDescription && tokens.length > 0) {
+    const phraseHit = tokens.length === 1
+      ? dishDescription.includes(tokens[0])
+      : dishDescription.includes(normalizedPhrase)
+    if (phraseHit) return 45
   }
 
   // Tag overlap with synonym expansion: 40

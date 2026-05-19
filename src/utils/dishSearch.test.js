@@ -6,6 +6,7 @@ const makeDish = (overrides = {}) => ({
   name: overrides.name || 'Lobster Roll',
   category: overrides.category || 'lobster roll',
   tags: overrides.tags || [],
+  description: 'description' in overrides ? overrides.description : null,
   avg_rating: overrides.avg_rating ?? 8.5,
   total_votes: overrides.total_votes ?? 10,
   price: overrides.price ?? 18,
@@ -340,6 +341,81 @@ describe('searchDishes', () => {
       expect(result.avg_rating).toBe(9.2)
       expect(result.total_votes).toBe(45)
       expect(result.restaurant_name).toBe("Nancy's")
+    })
+  })
+
+  describe('description matching', () => {
+    const DISHES_WITH_DESC = [
+      makeDish({
+        id: 'd-anchovy',
+        name: 'House Salad',
+        category: 'salad',
+        tags: [],
+        description: 'Romaine, anchovy, lemon vinaigrette',
+        avg_rating: 8.0,
+        restaurant_name: 'Coast Cafe',
+      }),
+      makeDish({
+        id: 'd-plain',
+        name: 'Mystery Plate',
+        category: 'entree',
+        tags: [],
+        description: null,
+        avg_rating: 8.0,
+        restaurant_name: 'Other Place',
+      }),
+    ]
+
+    it('matches dishes by description ingredient', () => {
+      const results = searchDishes(DISHES_WITH_DESC, 'anchovy')
+      expect(results.map(r => r.dish_id)).toEqual(['d-anchovy'])
+    })
+
+    it('returns no match for query that only appears in a null description', () => {
+      const results = searchDishes(
+        [makeDish({ id: 'd-null', name: 'No Desc', description: null })],
+        'anchovy'
+      )
+      expect(results).toEqual([])
+    })
+
+    it('does not crash on undefined description', () => {
+      const dishes = [makeDish({ id: 'd-undef', name: 'Stew', description: undefined })]
+      expect(() => searchDishes(dishes, 'anchovy')).not.toThrow()
+    })
+
+    it('multi-token query does not match unrelated tokens in same description', () => {
+      const dishes = [
+        makeDish({
+          id: 'd-falsepos',
+          name: 'Tofu Stir Fry',
+          description: 'fried tofu, chicken broth, scallion',
+          avg_rating: 8.0,
+        }),
+      ]
+      const results = searchDishes(dishes, 'fried chicken')
+      // "fried" and "chicken" both appear but as parts of separate ingredients;
+      // word-boundary matching should reject this for the multi-token query
+      expect(results).toEqual([])
+    })
+
+    it('description match does not outrank dish name match', () => {
+      const dishes = [
+        makeDish({
+          id: 'd-named',
+          name: 'Truffle Pasta',
+          description: null,
+          avg_rating: 7.0,
+        }),
+        makeDish({
+          id: 'd-desc',
+          name: 'Tagliatelle',
+          description: 'house-made pasta, truffle, parmesan',
+          avg_rating: 9.5,
+        }),
+      ]
+      const results = searchDishes(dishes, 'truffle')
+      expect(results[0].dish_id).toBe('d-named')
     })
   })
 

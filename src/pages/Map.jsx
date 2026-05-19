@@ -12,6 +12,10 @@ import { ModeFAB } from '../components/ModeFAB'
 import { HomeListMode, MapCategoryBar } from '../components/home'
 import { getSessionItem, setSessionItem } from '../lib/storage'
 import { logger } from '../utils/logger'
+import { parseDietParam, serializeDietParam } from '../utils/dietUrlParams'
+import { ALLOWED_DIETARY_TAGS, DIETARY_TAG_LABELS, DIETARY_DISCLAIMER } from '../constants/dietaryTags'
+import { DietButton } from '../components/DietButton'
+import { DietSheet } from '../components/DietSheet'
 
 var RestaurantMap = lazy(function () {
   return import('../components/restaurants/RestaurantMap').then(function (m) {
@@ -24,13 +28,14 @@ export function Map() {
 
   var navigate = useNavigate()
   var routeLocation = useLocation()
-  var [searchParams] = useSearchParams()
+  var [searchParams, setSearchParams] = useSearchParams()
   var { location, radius, setRadius, permissionState, requestLocation } = useLocationContext()
 
   // Seed filters from URL on first render. Used when arriving via search/category
   // links from elsewhere in the app (DishSearch) or from a legacy /browse bookmark.
   var initialCategory = searchParams.get('category')
   var initialQuery = searchParams.get('q')
+  var initialDiet = parseDietParam(searchParams.get('diet'))
 
   var [mode, setMode] = useState(function () {
     return getSessionItem('wgh_home_mode') || 'list'
@@ -38,6 +43,8 @@ export function Map() {
   var [selectedCategory, setSelectedCategory] = useState(initialCategory)
   var [radiusSheetOpen, setRadiusSheetOpen] = useState(false)
   var [searchQuery, setSearchQuery] = useState(initialQuery || '')
+  var [dietaryTags, setDietaryTags] = useState(initialDiet)
+  var [dietSheetOpen, setDietSheetOpen] = useState(false)
   var [searchLimit, setSearchLimit] = useState(10)
   var [focusDishId, setFocusDishId] = useState(null)
   var [highlightedDishId, setHighlightedDishId] = useState(null)
@@ -52,6 +59,31 @@ export function Map() {
   var listScrollRef = useRef(null)
   var scrollPositionRef = useRef(0)
   var highlightTimerRef = useRef(null)
+
+  // Reactive sync for ?diet= — picks up navigations that change the URL after
+  // mount (e.g. tapping a tag pill on a dish detail page jumps back to /?diet=vegan).
+  // Without this, the param is read once at mount and the filter never re-applies.
+  useEffect(function () {
+    var fromUrl = parseDietParam(searchParams.get('diet'))
+    var changed =
+      fromUrl.length !== dietaryTags.length ||
+      fromUrl.some(function (t, i) { return t !== dietaryTags[i] })
+    if (changed) setDietaryTags(fromUrl)
+    // dietaryTags intentionally omitted — this effect mirrors URL → state only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  // Helper: update both state and URL together. Empty selection drops the param.
+  var updateDietaryTags = useCallback(function (tags) {
+    var serialized = serializeDietParam(tags)
+    var next = new URLSearchParams(searchParams)
+    if (serialized) {
+      next.set('diet', serialized)
+    } else {
+      next.delete('diet')
+    }
+    setSearchParams(next, { replace: false })
+  }, [searchParams, setSearchParams])
 
   // Route state: "See on map" from dish detail
   var focusDishFromRoute = routeLocation.state?.focusDish || null
@@ -133,8 +165,10 @@ export function Map() {
   var searchLoading = searchData.loading
 
   // Ranked dishes — single source of truth for both modes
-  // Always fetch ALL dishes — carousel does client-side category filtering
-  var rankedData = useDishes(location, radius, null, null, null)
+  // Always fetch ALL dishes — carousel does client-side category filtering.
+  // dietaryTags is passed server-side so AND-semantics filtering happens in
+  // the RPC (d.dietary_tags @> filter_dietary_tags).
+  var rankedData = useDishes(location, radius, null, null, dietaryTags)
   var rankedDishes = rankedData.dishes
   var rankedLoading = rankedData.loading || rankedData.isFetching
   var rankedError = rankedData.error
@@ -344,6 +378,9 @@ export function Map() {
           onExpandedCategoryChange={setExpandedCategory}
           onCategoryChange={setSelectedCategory}
           onLocalListExpanded={handleLocalListExpanded}
+          dietaryTags={dietaryTags}
+          dietaryLabels={DIETARY_TAG_LABELS}
+          onDietOpen={function () { setDietSheetOpen(true) }}
         />
       )}
 
@@ -435,6 +472,18 @@ export function Map() {
               </div>
             </div>
 
+            {/* Diet filter trigger — keeps the active dietary state visible while in map mode. */}
+            <div
+              className="mt-2 flex justify-end"
+              style={{ pointerEvents: (pinSelected && location) ? 'none' : 'auto' }}
+            >
+              <DietButton
+                selected={dietaryTags}
+                labels={DIETARY_TAG_LABELS}
+                onOpen={function () { setDietSheetOpen(true) }}
+              />
+            </div>
+
             {/* Floating category bar */}
             <div className="mt-2" style={{ pointerEvents: (pinSelected && location) ? 'none' : 'auto' }}>
               <MapCategoryBar activeCategory={mapCategory} onCategoryChange={setMapCategory} />
@@ -489,6 +538,16 @@ export function Map() {
         onClose={function () { setRadiusSheetOpen(false) }}
         radius={radius}
         onRadiusChange={setRadius}
+      />
+
+      <DietSheet
+        open={dietSheetOpen}
+        initial={dietaryTags}
+        allowed={ALLOWED_DIETARY_TAGS}
+        labels={DIETARY_TAG_LABELS}
+        disclaimer={DIETARY_DISCLAIMER}
+        onApply={updateDietaryTags}
+        onClose={function () { setDietSheetOpen(false) }}
       />
 
     </main>

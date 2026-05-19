@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BROWSE_CATEGORIES } from '../../constants/categories'
 import { DishSearch } from '../DishSearch'
 import { DishListItem } from '../DishListItem'
+import { DietButton } from '../DietButton'
 import { EmptyState } from '../EmptyState'
 import { DataLoadError } from '../DataLoadError'
 import { LocationBanner } from '../LocationBanner'
@@ -29,6 +30,9 @@ export const HomeListMode = memo(function HomeListMode({
   onExpandedCategoryChange,
   onCategoryChange,
   onLocalListExpanded,
+  dietaryTags,
+  dietaryLabels,
+  onDietOpen,
 }) {
   var navigate = useNavigate()
   var carouselRef = useRef(null)
@@ -114,6 +118,19 @@ export const HomeListMode = memo(function HomeListMode({
             />
           </div>
         </div>
+
+        {/* Dietary filter trigger — sits just under the search row, right-aligned
+            so it doesn't compete with the search bar visually. Only render when a
+            handler is wired in (keeps the test/storybook surfaces simple). */}
+        {onDietOpen ? (
+          <div className="px-5 pt-1 pb-1 flex justify-end">
+            <DietButton
+              selected={dietaryTags}
+              labels={dietaryLabels}
+              onOpen={onDietOpen}
+            />
+          </div>
+        ) : null}
 
         {/* Location banner */}
         <div className="px-4">

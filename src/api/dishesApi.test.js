@@ -51,6 +51,7 @@ describe('dishesApi', () => {
         radius_miles: 10,
         filter_category: 'seafood',
         filter_town: null,
+        filter_dietary_tags: null,
       })
       expect(result).toEqual(mockData)
     })
@@ -70,7 +71,53 @@ describe('dishesApi', () => {
         radius_miles: 10,
         filter_category: null,
         filter_town: null,
+        filter_dietary_tags: null,
       })
+    })
+
+    it('passes filter_dietary_tags to the RPC when provided', async () => {
+      supabase.rpc.mockResolvedValueOnce({ data: [], error: null })
+
+      await dishesApi.getRankedDishes({
+        lat: 41.45,
+        lng: -70.56,
+        radiusMiles: 25,
+        dietaryTags: ['vegan', 'gluten_free'],
+      })
+
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'get_ranked_dishes',
+        expect.objectContaining({
+          filter_dietary_tags: ['vegan', 'gluten_free'],
+        })
+      )
+    })
+
+    it('sends filter_dietary_tags as null when dietaryTags is empty array', async () => {
+      supabase.rpc.mockResolvedValueOnce({ data: [], error: null })
+
+      await dishesApi.getRankedDishes({
+        lat: 41.45,
+        lng: -70.56,
+        radiusMiles: 25,
+        dietaryTags: [],
+      })
+
+      const callArg = supabase.rpc.mock.calls[0][1]
+      expect(callArg.filter_dietary_tags).toBeNull()
+    })
+
+    it('sends filter_dietary_tags as null when dietaryTags is undefined', async () => {
+      supabase.rpc.mockResolvedValueOnce({ data: [], error: null })
+
+      await dishesApi.getRankedDishes({
+        lat: 41.45,
+        lng: -70.56,
+        radiusMiles: 25,
+      })
+
+      const callArg = supabase.rpc.mock.calls[0][1]
+      expect(callArg.filter_dietary_tags).toBeNull()
     })
 
     it('should return empty array when data is null', async () => {
@@ -109,6 +156,104 @@ describe('dishesApi', () => {
       } catch (error) {
         expect(error.type).toBeDefined()
       }
+    })
+  })
+
+  describe('getAllSearchable', () => {
+    function mockDishesPage(rows) {
+      const rangeMock = vi.fn().mockResolvedValue({ data: rows, error: null })
+      const orderMock = vi.fn().mockReturnValue({ range: rangeMock })
+      const selectMock = vi.fn().mockReturnValue({ order: orderMock })
+      supabase.from.mockReturnValue({ select: selectMock })
+      return { selectMock, rangeMock }
+    }
+
+    it('selects description and dietary_tags in the query', async () => {
+      const { selectMock } = mockDishesPage([])
+      await dishesApi.getAllSearchable()
+
+      const selectArg = selectMock.mock.calls[0][0]
+      expect(selectArg).toContain('description')
+      expect(selectArg).toContain('dietary_tags')
+    })
+
+    it('maps description and dietary_tags onto the result rows', async () => {
+      mockDishesPage([
+        {
+          id: 'd1',
+          name: 'Lobster Roll',
+          category: 'lobster roll',
+          tags: ['classic'],
+          photo_url: null,
+          price: 28,
+          avg_rating: 8.4,
+          total_votes: 12,
+          value_score: null,
+          value_percentile: null,
+          description: 'Hot lobster meat, drawn butter, split-top bun',
+          dietary_tags: ['dairy_free'],
+          restaurants: {
+            id: 'r1',
+            name: 'Coast Cafe',
+            is_open: true,
+            cuisine: 'Seafood',
+            town: 'Oak Bluffs',
+            lat: 41.45,
+            lng: -70.56,
+            address: '1 Circuit Ave',
+            phone: null,
+            website_url: null,
+            toast_slug: null,
+            order_url: null,
+          },
+        },
+      ])
+
+      const result = await dishesApi.getAllSearchable()
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        id: 'd1',
+        description: 'Hot lobster meat, drawn butter, split-top bun',
+        dietary_tags: ['dairy_free'],
+      })
+    })
+
+    it('defaults dietary_tags to empty array and description to null when DB returns nullish', async () => {
+      mockDishesPage([
+        {
+          id: 'd2',
+          name: 'Mystery Dish',
+          category: 'entree',
+          tags: null,
+          photo_url: null,
+          price: null,
+          avg_rating: null,
+          total_votes: null,
+          value_score: null,
+          value_percentile: null,
+          description: null,
+          dietary_tags: null,
+          restaurants: {
+            id: 'r2',
+            name: 'Test Restaurant',
+            is_open: true,
+            cuisine: null,
+            town: null,
+            lat: 0,
+            lng: 0,
+            address: null,
+            phone: null,
+            website_url: null,
+            toast_slug: null,
+            order_url: null,
+          },
+        },
+      ])
+
+      const result = await dishesApi.getAllSearchable()
+      expect(result[0].description).toBeNull()
+      expect(result[0].dietary_tags).toEqual([])
     })
   })
 

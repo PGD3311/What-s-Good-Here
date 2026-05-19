@@ -8,10 +8,17 @@ import { logger } from '../utils/logger'
  * Fetch and cache dishes using React Query
  * Supports both location-based ranked dishes and restaurant-specific dishes
  */
-export function useDishes(location, radius, category = null, restaurantId = null) {
+export function useDishes(location, radius, category = null, restaurantId = null, dietaryTags = null) {
+  // Normalize for stable query keys: ignore order so ['vegan','gluten_free']
+  // and ['gluten_free','vegan'] share a cache. Empty/non-array → null (no filter).
+  const normalizedTags = Array.isArray(dietaryTags) && dietaryTags.length > 0
+    ? [...dietaryTags].sort()
+    : null
+  const tagsKey = normalizedTags ? normalizedTags.join(',') : null
+
   const queryKey = restaurantId
     ? ['dishes', 'restaurant', restaurantId, category]
-    : ['dishes', 'ranked', location?.lat, location?.lng, radius, category]
+    : ['dishes', 'ranked', location?.lat, location?.lng, radius, category, tagsKey]
 
   const enabled = restaurantId ? !!restaurantId : !!location
 
@@ -26,6 +33,7 @@ export function useDishes(location, radius, category = null, restaurantId = null
         lng: location.lng,
         radiusMiles: radius,
         category,
+        dietaryTags: normalizedTags,
       })
     },
     enabled,

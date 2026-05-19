@@ -18,10 +18,11 @@ export const dishesApi = {
    * @param {number} params.lng - User longitude
    * @param {number} params.radiusMiles - Search radius in miles
    * @param {string|null} params.category - Optional category filter
+   * @param {string[]|null} params.dietaryTags - Optional dietary tag filter (AND semantics)
    * @returns {Promise<Array>} Array of ranked dishes
    * @throws {Error} With classified error type
    */
-  async getRankedDishes({ lat, lng, radiusMiles, category = null }) {
+  async getRankedDishes({ lat, lng, radiusMiles, category = null, dietaryTags = null }) {
     try {
       const { data, error } = await supabase.rpc('get_ranked_dishes', {
         user_lat: lat,
@@ -29,6 +30,8 @@ export const dishesApi = {
         radius_miles: radiusMiles === 0 ? 25000 : radiusMiles,
         filter_category: category,
         filter_town: null,
+        filter_dietary_tags:
+          Array.isArray(dietaryTags) && dietaryTags.length > 0 ? dietaryTags : null,
       })
 
       if (error) {
@@ -280,6 +283,7 @@ export const dishesApi = {
     const selectFields = `
       id, name, category, tags, photo_url, price,
       avg_rating, total_votes, value_score, value_percentile,
+      description, dietary_tags,
       restaurants!inner (
         id, name, is_open, cuisine, town, lat, lng,
         address, phone, website_url, toast_slug, order_url
@@ -318,6 +322,8 @@ export const dishesApi = {
           total_votes: d.total_votes || 0,
           value_score: d.value_score,
           value_percentile: d.value_percentile,
+          description: d.description ?? null,
+          dietary_tags: Array.isArray(d.dietary_tags) ? d.dietary_tags : [],
           restaurant_id: d.restaurants.id,
           restaurant_name: d.restaurants.name,
           restaurant_is_open: d.restaurants.is_open,

@@ -197,6 +197,25 @@ export const DishListItem = memo(function DishListItem({
             {showDistance && distanceMiles != null && ' \u00b7 ' + Number(distanceMiles).toFixed(1) + ' mi'}
           </p>
         </div>
+        {/* Description preview \u2014 terse Sonnet ingredient line. Omitted entirely
+            when null/empty so cards render exactly as before backfill. */}
+        {typeof dish.description === 'string' && dish.description.trim() ? (
+          <div
+            data-testid="dish-description-preview"
+            style={{
+              marginTop: '3px',
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: isPodium ? '12px' : '11px',
+              color: 'var(--color-text-tertiary)',
+              lineHeight: 1.35,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {dish.description.trim()}
+          </div>
+        ) : null}
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
           <div className="flex items-center gap-2" style={{ marginTop: '4px' }}>
