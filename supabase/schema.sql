@@ -4022,7 +4022,16 @@ SELECT cron.schedule(
 -- Remove old biweekly menu refresh cron (replaced by job queue)
 SELECT cron.unschedule('biweekly-menu-refresh');
 
--- pg_cron: create refresh jobs for stale menus (daily at 3 AM)
+-- pg_cron: create refresh jobs for stale menus (daily at 3 AM).
+--
+-- The fingerprint=NULL branch makes future extractor bumps self-deploy via
+-- cron. To upgrade the extractor: bump CURRENT_EXTRACTOR_FINGERPRINT in
+-- supabase/functions/menu-refresh/index.ts, then run
+--   UPDATE restaurants SET extractor_fingerprint = NULL
+--   WHERE extractor_fingerprint = '<previous-value>';
+-- The next nightly tick enqueues every wiped row; the per-minute cron drains.
+-- The fingerprint string lives in exactly one place (the TS constant) — this
+-- SQL never names it.
 SELECT cron.schedule(
   'create-menu-refresh-jobs',
   '0 3 * * *',
@@ -4032,7 +4041,11 @@ SELECT cron.schedule(
   FROM restaurants r
   WHERE r.is_open = true
     AND r.menu_url IS NOT NULL
-    AND (r.menu_last_checked IS NULL OR r.menu_last_checked < NOW() - INTERVAL '14 days')
+    AND (
+      r.menu_last_checked IS NULL
+      OR r.menu_last_checked < NOW() - INTERVAL '14 days'
+      OR r.extractor_fingerprint IS NULL
+    )
     AND NOT EXISTS (
       SELECT 1 FROM menu_import_jobs mij
       WHERE mij.restaurant_id = r.id
@@ -4044,6 +4057,7 @@ SELECT cron.schedule(
         AND mij.status = 'dead'
         AND mij.created_at > NOW() - INTERVAL '30 days'
     )
+  ON CONFLICT (restaurant_id) WHERE status IN ('pending', 'processing') DO NOTHING
   $$
 );
 
