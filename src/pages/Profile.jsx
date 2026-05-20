@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
@@ -36,7 +37,7 @@ export function Profile() {
   const [newName, setNewName] = useState('')
   const [nameStatus, setNameStatus] = useState(null) // null | 'checking' | 'available' | 'taken' | 'same'
 
-  const { profile, error: profileError, loading: profileLoading, refetch: refetchProfile } = useProfile(user?.id)
+  const { profile, error: profileError, loading: profileLoading, refetch: refetchProfile, updateProfile } = useProfile(user?.id)
   const { ratedDishes, stats, loading: votesLoading, refetch: refetchVotes } = useUserVotes(user?.id)
   const { dishes: unratedDishes, count: unratedCount, refetch: refetchUnrated } = useUnratedDishes(user?.id)
 
@@ -142,20 +143,17 @@ export function Profile() {
   }, [newName, editingName, profile?.display_name])
 
   const handleSaveName = async () => {
-    // Don't save if name is taken
-    if (nameStatus === 'taken') {
+    if (nameStatus === 'taken') return
+    if (!newName.trim()) return
+
+    const { error } = await updateProfile({ display_name: newName.trim() })
+    if (error) {
+      logger.error('Profile: failed to save display name', error)
+      toast.error(error?.message || "Couldn't save your name. Try again.")
       return
     }
-
-    try {
-      if (newName.trim()) {
-        await updateProfile({ display_name: newName.trim() })
-      }
-      setEditingName(false)
-      setNameStatus(null)
-    } catch (error) {
-      logger.error('Profile: failed to save display name', error)
-    }
+    setEditingName(false)
+    setNameStatus(null)
   }
 
   // Handle vote from unrated dish
