@@ -19,7 +19,14 @@ function renderWithRouter(ui, { route = '/dish/abc' } = {}) {
   )
 }
 
-describe('DishDescription', () => {
+describe('DishDescription — dietary tags + disclaimer surface', () => {
+  it('returns null when dietaryTags is empty (description ignored here, rendered by DishHero)', () => {
+    const { container } = renderWithRouter(
+      <DishDescription description="Hot lobster meat, drawn butter, split-top bun" dietaryTags={[]} />
+    )
+    expect(container.querySelector('section')).toBeNull()
+  })
+
   it('returns null when both description and dietaryTags are absent', () => {
     const { container } = renderWithRouter(
       <DishDescription description={null} dietaryTags={[]} />
@@ -27,15 +34,14 @@ describe('DishDescription', () => {
     expect(container.querySelector('section')).toBeNull()
   })
 
-  it('renders description when present, no pill row when tags empty', () => {
+  it('does NOT render the description text (DishHero renders it)', () => {
     renderWithRouter(
       <DishDescription
         description="Hot lobster meat, drawn butter, split-top bun"
-        dietaryTags={[]}
+        dietaryTags={['vegan']}
       />
     )
-    expect(screen.getByText(/hot lobster meat, drawn butter, split-top bun/i)).toBeInTheDocument()
-    expect(screen.queryByTestId('dietary-tag-pills')).not.toBeInTheDocument()
+    expect(screen.queryByText(/hot lobster meat, drawn butter, split-top bun/i)).not.toBeInTheDocument()
   })
 
   it('renders pill row + disclaimer when tags non-empty', () => {
@@ -62,12 +68,5 @@ describe('DishDescription', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /filter homepage by vegan/i }))
     expect(screen.getByTestId('location').textContent).toBe('/?diet=vegan')
-  })
-
-  it('omits disclaimer when no tags are rendered', () => {
-    renderWithRouter(
-      <DishDescription description="Just ingredients" dietaryTags={[]} />
-    )
-    expect(screen.queryByText(/menu labels/i)).not.toBeInTheDocument()
   })
 })

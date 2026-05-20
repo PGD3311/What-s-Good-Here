@@ -350,15 +350,11 @@ export function Dish() {
             </div>
           )}
 
-          {/* Description + dietary tags. Self-contained — DishDescription
-              returns null when the dish has neither field, leaving the page
-              layout unchanged for non-backfilled dishes. Spacing lives inside
-              the component so an unconditional wrapper div never adds a
-              ghost gap when the block is empty. */}
-          <DishDescription
-            description={dish.description}
-            dietaryTags={dish.dietary_tags}
-          />
+          {/* Dietary tags + allergen disclaimer. Description itself lives
+              in the hero card now (DishHero's ingredients drop-down).
+              DishDescription returns null when dietary_tags is empty, so
+              the page layout is unchanged for dishes without tags. */}
+          <DishDescription dietaryTags={dish.dietary_tags} />
 
           {/* LAYER 2: THE ACTION — Rate CTA + inline rate flow */}
           <div className="p-4 space-y-3">

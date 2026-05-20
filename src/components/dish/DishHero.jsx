@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CategoryIcon } from '../home/CategoryIcons'
 import { TrustBadge } from '../jitter'
@@ -11,6 +12,8 @@ import { getRatingColor, formatScore10 } from '../../utils/ranking'
 export function DishHero({ dish, allPhotos, isVariant, parentDish }) {
   const navigate = useNavigate()
   const isRanked = dish.total_votes >= MIN_VOTES_FOR_RANKING
+  const [showIngredients, setShowIngredients] = useState(false)
+  const hasDescription = typeof dish.description === 'string' && dish.description.trim().length > 0
 
   var heroPhoto = allPhotos.length > 0 ? allPhotos[0].photo_url : (dish.photo_url || null)
 
@@ -109,6 +112,69 @@ export function DishHero({ dish, allPhotos, isVariant, parentDish }) {
             </div>
           </div>
         </div>
+
+        {/* Ingredients drop-down — small "ingredients ▾" link between the
+            title/restaurant block and the rating block. Tap reveals the
+            terse Sonnet-extracted ingredient line; closed by default so
+            the "2-second verdict" stays clean. Hidden entirely when the
+            dish has no description. */}
+        {hasDescription ? (
+          <div style={{ marginTop: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setShowIngredients(v => !v)}
+              aria-expanded={showIngredients}
+              aria-controls={'hero-dish-desc-' + dish.dish_id}
+              data-testid="hero-ingredients-toggle"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--color-primary)',
+                letterSpacing: '0.04em',
+                textTransform: 'lowercase',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              ingredients
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-block',
+                  transform: showIngredients ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 150ms ease',
+                  fontSize: '9px',
+                  lineHeight: 1,
+                }}
+              >
+                ▾
+              </span>
+            </button>
+            {showIngredients ? (
+              <p
+                id={'hero-dish-desc-' + dish.dish_id}
+                data-testid="hero-dish-description"
+                style={{
+                  margin: '6px 0 0',
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  lineHeight: 1.45,
+                  color: 'var(--color-text-primary)',
+                  letterSpacing: '0.005em',
+                }}
+              >
+                {dish.description.trim()}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Score Block */}
         {isRanked && dish.avg_rating ? (

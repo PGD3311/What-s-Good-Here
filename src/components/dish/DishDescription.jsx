@@ -3,30 +3,31 @@ import { DIETARY_TAG_LABELS, DIETARY_DISCLAIMER, ALLOWED_DIETARY_TAGS } from '..
 import { serializeDietParam } from '../../utils/dietUrlParams'
 
 /**
- * DishDescription — the "what's in this?" block on the dish detail page.
+ * DishDescription — the dietary tags + allergen disclaimer block.
  *
- * Renders three optional surfaces, in order:
- *   1. The ingredient/preparation description (terse, ≤80 chars, Sonnet extracted)
- *   2. A row of tappable dietary tag pills (Vegan, Vegetarian, etc.)
- *   3. An allergen disclaimer (only when at least one tag is shown)
+ * The dish description itself now lives inside the hero card (DishHero)
+ * as a tap-to-expand "ingredients" link. This component is the
+ * tag pills + allergen disclaimer surface that sits below the rating
+ * card on the dish detail page.
  *
- * Each surface is null-safe — the whole block returns null when the dish
- * has no description AND no dietary tags, so dishes that haven't been
- * backfilled yet render the page exactly as before.
+ * Renders two optional surfaces, in order:
+ *   1. A row of tappable dietary tag pills (Vegan, Vegetarian, etc.)
+ *   2. An allergen disclaimer (only when at least one tag is shown)
+ *
+ * Returns null when the dish has no dietary tags.
  *
  * Tapping a tag pill navigates to `/?diet=<tag>` so the homepage list
  * filters to that restriction.
  */
-export function DishDescription({ description, dietaryTags }) {
+export function DishDescription({ dietaryTags }) {
   var navigate = useNavigate()
 
-  var hasDescription = typeof description === 'string' && description.trim().length > 0
   var tags = Array.isArray(dietaryTags)
     ? dietaryTags.filter(function (t) { return ALLOWED_DIETARY_TAGS.indexOf(t) !== -1 })
     : []
   var hasTags = tags.length > 0
 
-  if (!hasDescription && !hasTags) return null
+  if (!hasTags) return null
 
   function handleTagClick(tag) {
     navigate('/?diet=' + serializeDietParam([tag]))
@@ -34,7 +35,7 @@ export function DishDescription({ description, dietaryTags }) {
 
   return (
     <section
-      aria-label="Dish description and dietary tags"
+      aria-label="Dietary tags"
       style={{
         margin: '12px 16px 8px',
         padding: '16px 18px',
@@ -43,22 +44,6 @@ export function DishDescription({ description, dietaryTags }) {
         borderRadius: '14px',
       }}
     >
-      {hasDescription ? (
-        <p
-          style={{
-            margin: 0,
-            fontFamily: 'Outfit, sans-serif',
-            fontSize: '15px',
-            fontWeight: 500,
-            lineHeight: 1.45,
-            color: 'var(--color-text-primary)',
-            letterSpacing: '0.005em',
-          }}
-        >
-          {description.trim()}
-        </p>
-      ) : null}
-
       {hasTags ? (
         <div
           aria-label="Dietary tags"
@@ -67,7 +52,6 @@ export function DishDescription({ description, dietaryTags }) {
             display: 'flex',
             flexWrap: 'wrap',
             gap: '8px',
-            marginTop: hasDescription ? '14px' : 0,
           }}
         >
           {tags.map(function (tag) {
