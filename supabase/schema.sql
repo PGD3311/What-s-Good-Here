@@ -3225,6 +3225,10 @@ AS $$
 $$;
 
 -- RPC: Full list detail by user ID (for profile pages)
+-- RETURNS TABLE shape changes need a DROP first — Postgres' CREATE OR REPLACE
+-- rejects return-type changes. Done atomically inside a transaction in the
+-- companion migration file.
+DROP FUNCTION IF EXISTS get_local_list_by_user(UUID);
 CREATE OR REPLACE FUNCTION get_local_list_by_user(target_user_id UUID)
 RETURNS TABLE (
   list_id UUID,
@@ -3232,6 +3236,7 @@ RETURNS TABLE (
   description TEXT,
   user_id UUID,
   display_name TEXT,
+  avatar_url TEXT,
   "position" INT,
   dish_id UUID,
   dish_name TEXT,
@@ -3252,6 +3257,7 @@ AS $$
     ll.description,
     ll.user_id,
     p.display_name,
+    p.avatar_url,
     li."position",
     d.id AS dish_id,
     d.name AS dish_name,
@@ -5541,17 +5547,21 @@ LANGUAGE SQL STABLE AS $$
 $$;
 
 
--- get_local_list_by_user — empty result when viewer blocked curator
+-- get_local_list_by_user — empty result when viewer blocked curator.
+-- Live version (overrides the earlier definition above). Keep both
+-- in sync: 2026-05-19 added avatar_url so the curator detail page
+-- can render a profile photo above the title.
+DROP FUNCTION IF EXISTS get_local_list_by_user(UUID);
 CREATE OR REPLACE FUNCTION get_local_list_by_user(target_user_id UUID)
 RETURNS TABLE (
   list_id UUID, title TEXT, description TEXT, user_id UUID,
-  display_name TEXT, "position" INT, dish_id UUID, dish_name TEXT,
+  display_name TEXT, avatar_url TEXT, "position" INT, dish_id UUID, dish_name TEXT,
   restaurant_name TEXT, restaurant_id UUID, avg_rating NUMERIC,
   total_votes BIGINT, category TEXT, note TEXT,
   restaurant_lat FLOAT, restaurant_lng FLOAT
 )
 LANGUAGE SQL STABLE AS $$
-  SELECT ll.id, ll.title, ll.description, ll.user_id, p.display_name,
+  SELECT ll.id, ll.title, ll.description, ll.user_id, p.display_name, p.avatar_url,
     li."position", d.id, d.name, r.name, r.id, d.avg_rating, d.total_votes,
     d.category, li.note, r.lat, r.lng
   FROM local_lists ll
@@ -5565,6 +5575,7 @@ LANGUAGE SQL STABLE AS $$
          OR NOT is_blocked_pair((select auth.uid()), target_user_id))
   ORDER BY li."position";
 $$;
+GRANT EXECUTE ON FUNCTION get_local_list_by_user(UUID) TO anon, authenticated;
 
 
 -- get_ranked_dishes — only best_photos CTE changes. Full final body lives in

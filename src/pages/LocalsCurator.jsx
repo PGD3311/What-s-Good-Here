@@ -26,9 +26,30 @@ var PAGENO = { fontFamily: "'Amatic SC', cursive", fontSize: '16px', fontWeight:
 
 var STAMP_TINY = { position: 'absolute', top: '54px', right: '24px', width: '44px', height: '44px', transform: 'rotate(10deg)', opacity: 0.8, zIndex: 2 }
 
-var EYEBROW = { fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)', marginBottom: '-2px' }
+var EYEBROW = { fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)', marginBottom: '6px' }
 var TITLE = { fontFamily: "'Amatic SC', cursive", fontWeight: 700, fontSize: '52px', lineHeight: 0.95, color: 'var(--color-text-primary)' }
 var BYLINE = { fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '16px' }
+
+var AVATAR_SIZE = 88
+var AVATAR_WRAP = {
+  width: AVATAR_SIZE,
+  height: AVATAR_SIZE,
+  borderRadius: '50%',
+  overflow: 'hidden',
+  background: 'var(--color-primary)',
+  color: '#FFFFFF',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontFamily: 'Outfit, sans-serif',
+  fontWeight: 700,
+  fontSize: '34px',
+  letterSpacing: '0.01em',
+  lineHeight: 1,
+  marginBottom: '10px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+  border: '2px solid var(--color-paper-cream-light)',
+}
 
 var ITEM = { marginBottom: '11px', padding: '0 2px' }
 var ITEM_HEAD = { display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '1px' }
@@ -72,6 +93,18 @@ export function LocalsCurator() {
         </div>
 
         <div style={EYEBROW}>a local's picks</div>
+        <div style={AVATAR_WRAP} aria-hidden="true">
+          {first.avatar_url ? (
+            <img
+              src={first.avatar_url}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              draggable={false}
+            />
+          ) : (
+            (first.display_name || '?').charAt(0).toUpperCase()
+          )}
+        </div>
         <h1 style={TITLE}>{first.display_name || 'Anonymous'}</h1>
         <div style={BYLINE}>{first.description || (first.title || '')}</div>
 
