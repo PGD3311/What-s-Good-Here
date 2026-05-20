@@ -70,7 +70,7 @@ export function DietButton({ selected, labels, onOpen }) {
       {leafIcon(active)}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
-          Diet
+          DP
         </span>
         <span
           aria-hidden="true"

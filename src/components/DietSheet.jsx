@@ -110,7 +110,7 @@ export function DietSheet({
                 letterSpacing: '0.01em',
               }}
             >
-              Dietary preferences
+              DP
             </h2>
             <div
               aria-hidden="true"
