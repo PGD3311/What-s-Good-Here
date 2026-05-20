@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS invite_email_sends (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invite_id UUID NOT NULL REFERENCES restaurant_invites(id) ON DELETE CASCADE,
   recipient_email TEXT NOT NULL,
-  sent_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  -- NOT NULL would contradict ON DELETE SET NULL: deleting the admin user would
+  -- fail on the constraint. We need SET NULL so account deletion (which is shipped)
+  -- never blocks on this audit table — sender attribution becomes null, audit row
+  -- survives for forensics.
+  sent_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   status TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
   resend_message_id TEXT,

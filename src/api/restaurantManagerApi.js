@@ -133,6 +133,9 @@ export const restaurantManagerApi = {
     }
 
     if (data && data.ok === false) {
+      // Server-side structured failure (rate limit, invite_not_found, resend rejection, etc).
+      // Log so it surfaces in Sentry — UI alone would swallow it.
+      logger.error('sendInviteEmail server-side failure:', data)
       return {
         ok: false,
         errorCode: data.error_code,

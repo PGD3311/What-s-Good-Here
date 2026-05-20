@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS invite_email_sends (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invite_id UUID NOT NULL REFERENCES restaurant_invites(id) ON DELETE CASCADE,
   recipient_email TEXT NOT NULL,
-  sent_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  sent_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   status TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
   resend_message_id TEXT,

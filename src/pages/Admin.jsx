@@ -8,6 +8,18 @@ import { adminApi } from '../api/adminApi'
 import { restaurantManagerApi } from '../api/restaurantManagerApi'
 import { ALL_CATEGORIES } from '../constants/categories'
 
+function formatRetryAfter(seconds) {
+  if (seconds >= 3600) {
+    const hours = Math.ceil(seconds / 3600)
+    return hours === 1 ? '1 hour' : `${hours} hours`
+  }
+  if (seconds >= 60) {
+    const minutes = Math.ceil(seconds / 60)
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`
+  }
+  return seconds === 1 ? '1 second' : `${seconds} seconds`
+}
+
 export function Admin() {
   const navigate = useNavigate()
   const { user, loading: authLoading } = useAuth()
@@ -41,6 +53,10 @@ export function Admin() {
   const [recipientEmail, setRecipientEmail] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [sendResult, setSendResult] = useState(null)
+  // Synchronous guard — React state updates aren't atomic, so a fast double-click
+  // could fire two sends before sendingEmail re-renders the disabled attribute.
+  // Refs flip immediately and are unaffected by render batching.
+  const sendingRef = useRef(false)
   const inviteInputRef = useRef(null)
   const [managers, setManagers] = useState([])
   const [managersLoading, setManagersLoading] = useState(false)
@@ -330,10 +346,15 @@ export function Admin() {
   }
 
   async function handleSendInviteEmail() {
+    if (sendingRef.current) return
     setSendResult(null)
     const email = recipientEmail.trim()
     if (!email) {
       setSendResult({ ok: false, message: 'Enter a recipient email first' })
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setSendResult({ ok: false, message: 'That doesn\'t look like a valid email address' })
       return
     }
     if (!inviteId || !inviteLink) {
@@ -341,6 +362,7 @@ export function Admin() {
       return
     }
 
+    sendingRef.current = true
     setSendingEmail(true)
     try {
       const result = await restaurantManagerApi.sendInviteEmail({
@@ -361,6 +383,7 @@ export function Admin() {
       logger.error('handleSendInviteEmail unexpected:', err)
       setSendResult({ ok: false, message: 'Failed to send. Use Copy link instead.' })
     } finally {
+      sendingRef.current = false
       setSendingEmail(false)
     }
   }
@@ -890,11 +913,16 @@ export function Admin() {
 
                   {/* Primary: send via Resend through the Edge Function */}
                   <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-divider)' }}>
-                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                    <label
+                      htmlFor="invite-recipient-email"
+                      className="block text-xs font-medium mb-1"
+                      style={{ color: 'var(--color-text-tertiary)' }}
+                    >
                       Send directly to restaurant owner:
                     </label>
                     <div className="flex items-center gap-2">
                       <input
+                        id="invite-recipient-email"
                         type="email"
                         value={recipientEmail}
                         onChange={(e) => setRecipientEmail(e.target.value)}
@@ -919,7 +947,7 @@ export function Admin() {
                       >
                         {sendResult.ok ? '✓ ' : '⚠ '}
                         {sendResult.message}
-                        {sendResult.retryAfterSeconds ? ` (retry in ${sendResult.retryAfterSeconds}s)` : ''}
+                        {sendResult.retryAfterSeconds ? ` (try again in ${formatRetryAfter(sendResult.retryAfterSeconds)})` : ''}
                       </p>
                     )}
                   </div>

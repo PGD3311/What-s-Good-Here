@@ -23,22 +23,18 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders } from '../_shared/cors.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const SENDER = 'What\'s Good Here <wghapp@wghapp.com>'
 const REPLY_TO = 'wghapp@wghapp.com'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://whats-good-here.vercel.app',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, req: Request) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   })
 }
 
@@ -66,11 +62,11 @@ function buildBody(restaurantName: string, inviteUrl: string): string {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
 
   try {
     if (!RESEND_API_KEY) {
-      return json({ ok: false, error_code: 'config_missing', message: 'RESEND_API_KEY not configured' }, 500)
+      return json({ ok: false, error_code: 'config_missing', message: 'RESEND_API_KEY not configured' }, 500, req)
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -79,13 +75,13 @@ serve(async (req) => {
 
     // --- Auth gate: require an authenticated admin ---
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) return json({ ok: false, error_code: 'unauthorized', message: 'Missing Authorization header' }, 401)
+    if (!authHeader) return json({ ok: false, error_code: 'unauthorized', message: 'Missing Authorization header' }, 401, req)
 
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     })
     const { data: { user } } = await supabaseAuth.auth.getUser()
-    if (!user) return json({ ok: false, error_code: 'unauthorized', message: 'Invalid session' }, 401)
+    if (!user) return json({ ok: false, error_code: 'unauthorized', message: 'Invalid session' }, 401, req)
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -94,25 +90,25 @@ serve(async (req) => {
       .select('id')
       .eq('user_id', user.id)
       .maybeSingle()
-    if (!admin) return json({ ok: false, error_code: 'forbidden', message: 'Admin only' }, 403)
+    if (!admin) return json({ ok: false, error_code: 'forbidden', message: 'Admin only' }, 403, req)
 
     // --- Parse + validate input ---
     let payload: { invite_id?: string; invite_url?: string; recipient_email?: string }
     try {
       payload = await req.json()
     } catch {
-      return json({ ok: false, error_code: 'bad_request', message: 'Invalid JSON body' }, 400)
+      return json({ ok: false, error_code: 'bad_request', message: 'Invalid JSON body' }, 400, req)
     }
     const { invite_id, invite_url, recipient_email } = payload
 
     if (!invite_id || typeof invite_id !== 'string') {
-      return json({ ok: false, error_code: 'bad_request', message: 'invite_id is required' }, 400)
+      return json({ ok: false, error_code: 'bad_request', message: 'invite_id is required' }, 400, req)
     }
     if (!invite_url || typeof invite_url !== 'string' || !invite_url.startsWith('http')) {
-      return json({ ok: false, error_code: 'bad_request', message: 'invite_url must be an http(s) URL' }, 400)
+      return json({ ok: false, error_code: 'bad_request', message: 'invite_url must be an http(s) URL' }, 400, req)
     }
     if (!recipient_email || !EMAIL_RE.test(recipient_email)) {
-      return json({ ok: false, error_code: 'bad_request', message: 'recipient_email is not a valid email' }, 400)
+      return json({ ok: false, error_code: 'bad_request', message: 'recipient_email is not a valid email' }, 400, req)
     }
 
     // --- Look up the invite + restaurant ---
@@ -126,10 +122,10 @@ serve(async (req) => {
       .maybeSingle()
 
     if (inviteErr || !invite) {
-      return json({ ok: false, error_code: 'invite_not_found', message: 'Invite not found' }, 404)
+      return json({ ok: false, error_code: 'invite_not_found', message: 'Invite not found' }, 404, req)
     }
     if (!invite_url.includes(invite.token)) {
-      return json({ ok: false, error_code: 'invite_url_mismatch', message: 'invite_url does not match the token for this invite_id' }, 400)
+      return json({ ok: false, error_code: 'invite_url_mismatch', message: 'invite_url does not match the token for this invite_id' }, 400, req)
     }
 
     // deno-lint-ignore no-explicit-any
@@ -143,7 +139,7 @@ serve(async (req) => {
         error_code: 'rate_limited',
         message: limitData.message || 'Rate limit exceeded',
         retry_after_seconds: limitData.retry_after_seconds,
-      }, 429)
+      }, 429, req)
     }
 
     // --- Send via Resend ---
@@ -179,28 +175,27 @@ serve(async (req) => {
         error_code: errorCode,
         error_message: errorMessage,
       })
-      return json({ ok: false, error_code: errorCode, message: errorMessage }, 502)
+      return json({ ok: false, error_code: errorCode, message: errorMessage }, 502, req)
     }
 
     const messageId = resendBody?.id || null
 
-    // Audit the successful send.
-    const { error: auditErr } = await supabase.from('invite_email_sends').insert({
+    // Audit fire-and-forget — the email already sent, so don't make the user
+    // wait on a DB write that doesn't affect outcome. Failure is logged for
+    // Sentry visibility but the response goes out immediately.
+    supabase.from('invite_email_sends').insert({
       invite_id,
       recipient_email,
       sent_by: user.id,
       status: 'sent',
       resend_message_id: messageId,
+    }).then(({ error: auditErr }) => {
+      if (auditErr) console.error('Audit log insert failed after successful send:', auditErr)
     })
-    if (auditErr) {
-      // The email DID send. Surface a soft warning but still return ok so the
-      // admin's UI reflects reality (the recipient got the email).
-      console.error('Audit log insert failed after successful send:', auditErr)
-    }
 
-    return json({ ok: true, message_id: messageId })
+    return json({ ok: true, message_id: messageId }, 200, req)
   } catch (err) {
     console.error('send-invite-email unexpected error:', err)
-    return json({ ok: false, error_code: 'internal_error', message: (err as Error).message || 'Internal error' }, 500)
+    return json({ ok: false, error_code: 'internal_error', message: (err as Error).message || 'Internal error' }, 500, req)
   }
 })
