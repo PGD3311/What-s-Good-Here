@@ -163,12 +163,37 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
 8. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
 9. **One category per dish** — pick the most specific match
 10. **Description rule:** Output a terse ingredient/preparation line, 80 chars or fewer, as \`description\`. Format: comma-separated nouns. Examples: "Hot lobster meat, drawn butter, split-top bun" / "Pepperoni, mozzarella, San Marzano tomato" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
-11. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively states the dish IS that diet.** This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free, not "can be modified."
-    - **Emit** when the dish itself is unambiguously labeled: "Vegan Buddha Bowl", "GF Pasta", "Gluten-Free Penne", "Dairy-Free Ice Cream", a definitive "V" or "GF" badge attached directly to the dish.
-    - **Do NOT emit** for "available", "on request", "can be made", "ask your server" qualifiers — those mean modifiable, not the dish as listed. "Gluten-Free Available" → do NOT emit \`gluten_free\`.
-    - **Do NOT emit** when shorthand markers are ambiguous (e.g., "V" could mean vegan or vegetarian and the menu has no legend). When in doubt, emit \`[]\`.
-    - **Do NOT infer from ingredients** — a tofu stir-fry with no animal products does NOT get \`vegan\` unless the menu labels it.
-    - Empty array \`[]\` when nothing is labeled, ambiguous, or only "available". Never invent tags.
+11. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively labels the dish as that diet** (not "available" or "on request"). This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free as served, not "can be modified."
+
+    **Conventional shorthand markers** — treat these as definitive when they appear as a badge, suffix, or column marker on a dish, even without a printed legend. These conventions are standard across restaurant menus:
+    - \`V\` → \`vegetarian\`
+    - \`VE\`, \`VG\`, \`VGN\`, \`V+\` → \`vegan\`
+    - \`GF\` → \`gluten_free\`
+    - \`DF\` → \`dairy_free\`
+    - Combined like \`V/GF\` or \`(V, GF)\` → emit both tags
+    - If the menu has its own printed legend (e.g., "V = Vegan"), defer to the legend instead of these defaults.
+
+    **\`nut_free\` requires stricter evidence** — nut allergies can be anaphylactic. Emit \`nut_free\` ONLY when the menu uses the spelled-out phrase ("Nut-Free", "nut free", "free of tree nuts and peanuts"). Do NOT emit \`nut_free\` from a bare \`NF\` abbreviation — too rarely used and easily confused with "Not Featured", "New Flavor", etc.
+
+    **\`PB\` is NOT a valid shorthand** — it commonly means "peanut butter" on dessert/coffee menus and is dangerous to interpret as "plant-based". Require the spelled-out "Plant-Based" / "plant based" / "Plant Based" phrase to emit \`vegan\` from this synonym.
+
+    **Section-level inheritance.** If a menu section header is explicitly labeled with a diet ("VEGAN", "VEGETARIAN", "GLUTEN-FREE", "PLANT-BASED", "VEGAN OPTIONS", "GF MENU", "Plant-Based Bowls"), emit the corresponding tag ONLY for dishes listed directly under that header — the dishes structurally grouped beneath it before any visible section break, blank line, or new heading. Do NOT extend the label "until the next themed section" — in scraped HTML/PDF text, that boundary is unreliable and risks leaking labels across unrelated subsections.
+
+    **Synonyms and phrasings to recognize:**
+    - "Plant-Based" / "plant based" / "Plant Based" → \`vegan\` (NOT \`PB\` alone)
+    - "Gluten-Free" / "Gluten Free" / "Gluten-free" → \`gluten_free\`
+    - "Dairy-Free" / "Dairy Free" → \`dairy_free\`
+    - "Nut-Free" / "nut free" / "free of nuts" → \`nut_free\`
+    - "Vegan Buddha Bowl", "GF Pasta", "Dairy-Free Ice Cream" — name itself contains the label → emit
+    - Explicit phrases like "All items are gluten-free" or "100% vegan menu" applied to a section → emit for every dish in scope
+
+    **Do NOT emit:**
+    - **Modifiable qualifiers:** "available", "on request", "can be made", "ask your server". "Gluten-Free Available" → no tag.
+    - **Pure ingredient inference:** a tofu stir-fry with no animal products does NOT get \`vegan\` unless the menu labels it. A salad without croutons does NOT get \`gluten_free\` unless labeled.
+    - **Allergen WARNINGS, not endorsements:** asterisk-footed lines like "\* contains nuts" or "Contains: dairy, gluten" are warnings about what the dish DOES have. These do NOT trigger the opposite \`nut_free\`/\`gluten_free\`/\`dairy_free\` tags. Only emit those tags from positive labels.
+    - **Aspirational marketing:** "fresh ingredients", "wholesome", "natural" → no tags.
+
+    Empty array \`[]\` when no marker, no section context, no synonym match. Never invent.
 
 ## CRITICAL: Reject placeholder/template content
 
@@ -227,7 +252,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v2|pipeline-v1|desc+dietary'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v3|pipeline-v1|desc+dietary-v2'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [
