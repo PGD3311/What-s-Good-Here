@@ -37,6 +37,10 @@ export function Admin() {
   // Restaurant manager state
   const [inviteRestaurantId, setInviteRestaurantId] = useState('')
   const [inviteLink, setInviteLink] = useState('')
+  const [inviteId, setInviteId] = useState('')
+  const [recipientEmail, setRecipientEmail] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [sendResult, setSendResult] = useState(null)
   const inviteInputRef = useRef(null)
   const [managers, setManagers] = useState([])
   const [managersLoading, setManagersLoading] = useState(false)
@@ -313,13 +317,51 @@ export function Admin() {
     }
 
     try {
-      const { token } = await restaurantManagerApi.createInvite(inviteRestaurantId)
+      const { id, token } = await restaurantManagerApi.createInvite(inviteRestaurantId)
       const link = `${window.location.origin}/invite/${token}`
       setInviteLink(link)
+      setInviteId(id)
+      setSendResult(null)
       setMessage({ type: 'success', text: 'Invite link generated!' })
     } catch (error) {
       logger.error('Error generating invite:', error)
       setMessage({ type: 'error', text: `Failed to generate invite: ${getUserMessage(error, 'generating invite')}` })
+    }
+  }
+
+  async function handleSendInviteEmail() {
+    setSendResult(null)
+    const email = recipientEmail.trim()
+    if (!email) {
+      setSendResult({ ok: false, message: 'Enter a recipient email first' })
+      return
+    }
+    if (!inviteId || !inviteLink) {
+      setSendResult({ ok: false, message: 'Generate the invite link first' })
+      return
+    }
+
+    setSendingEmail(true)
+    try {
+      const result = await restaurantManagerApi.sendInviteEmail({
+        inviteId,
+        inviteUrl: inviteLink,
+        recipientEmail: email,
+      })
+      if (result.ok) {
+        setSendResult({ ok: true, message: `Email sent to ${email}` })
+      } else {
+        setSendResult({
+          ok: false,
+          message: result.message || 'Failed to send. Use Copy link instead.',
+          retryAfterSeconds: result.retryAfterSeconds,
+        })
+      }
+    } catch (err) {
+      logger.error('handleSendInviteEmail unexpected:', err)
+      setSendResult({ ok: false, message: 'Failed to send. Use Copy link instead.' })
+    } finally {
+      setSendingEmail(false)
     }
   }
 
@@ -689,6 +731,9 @@ export function Admin() {
                 if (inviteRestaurantId) {
                   setInviteRestaurantId('')
                   setInviteLink('')
+                  setInviteId('')
+                  setRecipientEmail('')
+                  setSendResult(null)
                   setManagers([])
                 }
               }}
@@ -703,6 +748,9 @@ export function Admin() {
                   setInviteRestaurantId('')
                   setInviteSearch('')
                   setInviteLink('')
+                  setInviteId('')
+                  setRecipientEmail('')
+                  setSendResult(null)
                   setManagers([])
                 }}
                 className="absolute right-2 top-[34px] text-sm px-1"
@@ -730,6 +778,9 @@ export function Admin() {
                         setInviteSearch(r.name)
                         setInviteDropdownOpen(false)
                         setInviteLink('')
+                        setInviteId('')
+                        setRecipientEmail('')
+                        setSendResult(null)
                         fetchManagers(r.id)
                       }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-[color:var(--color-surface-elevated)] transition-colors"
@@ -831,9 +882,46 @@ export function Admin() {
                       }}
                       className="px-3 py-1 rounded text-xs font-medium"
                       style={{ background: 'var(--color-accent-gold)', color: 'var(--color-text-on-primary)' }}
+                      title="Open your mail client with the invite prefilled (fallback)"
                     >
-                      Email
+                      Email (mailto)
                     </button>
+                  </div>
+
+                  {/* Primary: send via Resend through the Edge Function */}
+                  <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-divider)' }}>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                      Send directly to restaurant owner:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={recipientEmail}
+                        onChange={(e) => setRecipientEmail(e.target.value)}
+                        placeholder="owner@example.com"
+                        disabled={sendingEmail}
+                        className="flex-1 px-2 py-1 border rounded text-xs"
+                        style={{ borderColor: 'var(--color-divider)', background: 'var(--color-surface)' }}
+                      />
+                      <button
+                        onClick={handleSendInviteEmail}
+                        disabled={sendingEmail || !recipientEmail.trim()}
+                        className="px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
+                        style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+                      >
+                        {sendingEmail ? 'Sending…' : 'Send Email'}
+                      </button>
+                    </div>
+                    {sendResult && (
+                      <p
+                        className="mt-2 text-xs"
+                        style={{ color: sendResult.ok ? 'var(--color-success)' : 'var(--color-danger)' }}
+                      >
+                        {sendResult.ok ? '✓ ' : '⚠ '}
+                        {sendResult.message}
+                        {sendResult.retryAfterSeconds ? ` (retry in ${sendResult.retryAfterSeconds}s)` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

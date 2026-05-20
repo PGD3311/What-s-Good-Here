@@ -76,7 +76,7 @@ export const restaurantManagerApi = {
   /**
    * Create an invite link for a restaurant (admin only)
    * @param {string} restaurantId
-   * @returns {Promise<{token: string, expiresAt: string}>}
+   * @returns {Promise<{id: string, token: string, expiresAt: string}>}
    */
   async createInvite(restaurantId) {
     try {
@@ -89,7 +89,7 @@ export const restaurantManagerApi = {
           restaurant_id: restaurantId,
           created_by: user.id,
         })
-        .select('token, expires_at')
+        .select('id, token, expires_at')
         .single()
 
       if (error) {
@@ -97,11 +97,51 @@ export const restaurantManagerApi = {
         throw createClassifiedError(error)
       }
 
-      return { token: data.token, expiresAt: data.expires_at }
+      return { id: data.id, token: data.token, expiresAt: data.expires_at }
     } catch (error) {
       logger.error('Error in createInvite:', error)
       throw error.type ? error : createClassifiedError(error)
     }
+  },
+
+  /**
+   * Send the invite via the send-invite-email Edge Function (Resend).
+   * Returns a structured result so the UI can fall back to "Copy link" on failure.
+   * @param {{ inviteId: string, inviteUrl: string, recipientEmail: string }} params
+   * @returns {Promise<{ok: boolean, messageId?: string, errorCode?: string, message?: string, retryAfterSeconds?: number}>}
+   */
+  async sendInviteEmail({ inviteId, inviteUrl, recipientEmail }) {
+    const { data, error } = await supabase.functions.invoke('send-invite-email', {
+      body: { invite_id: inviteId, invite_url: inviteUrl, recipient_email: recipientEmail },
+    })
+
+    if (error) {
+      // The function returned non-2xx OR the request itself failed. Try to
+      // surface the structured error payload from the function body.
+      const ctx = error.context
+      let parsed = null
+      if (ctx && typeof ctx.json === 'function') {
+        try { parsed = await ctx.json() } catch { /* ignore */ }
+      }
+      logger.error('sendInviteEmail failed:', { error, parsed })
+      return {
+        ok: false,
+        errorCode: parsed?.error_code || 'request_failed',
+        message: parsed?.message || error.message || 'Failed to send invite email',
+        retryAfterSeconds: parsed?.retry_after_seconds,
+      }
+    }
+
+    if (data && data.ok === false) {
+      return {
+        ok: false,
+        errorCode: data.error_code,
+        message: data.message,
+        retryAfterSeconds: data.retry_after_seconds,
+      }
+    }
+
+    return { ok: true, messageId: data?.message_id }
   },
 
   /**

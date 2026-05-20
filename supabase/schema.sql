@@ -313,6 +313,18 @@ CREATE TABLE IF NOT EXISTS ip_rate_limits (
 CREATE INDEX IF NOT EXISTS ip_rate_limits_lookup_idx
   ON ip_rate_limits (ip_address, action, created_at DESC);
 
+-- 1t. invite_email_sends (audit log for the send-invite-email Edge Function)
+CREATE TABLE IF NOT EXISTS invite_email_sends (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invite_id UUID NOT NULL REFERENCES restaurant_invites(id) ON DELETE CASCADE,
+  recipient_email TEXT NOT NULL,
+  sent_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  status TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
+  resend_message_id TEXT,
+  error_code TEXT,
+  error_message TEXT
+);
 
 -- 1s. jitter_profiles (Jitter Protocol: behavioral biometrics for human verification)
 CREATE TABLE IF NOT EXISTS jitter_profiles (
@@ -544,6 +556,10 @@ CREATE INDEX IF NOT EXISTS idx_curator_invites_created_by ON curator_invites(cre
 CREATE INDEX IF NOT EXISTS idx_rate_limits_user_action ON rate_limits(user_id, action, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_cleanup ON rate_limits(created_at);
 
+-- invite_email_sends
+CREATE INDEX IF NOT EXISTS idx_invite_email_sends_invite ON invite_email_sends(invite_id);
+CREATE INDEX IF NOT EXISTS idx_invite_email_sends_sent_by ON invite_email_sends(sent_by, sent_at DESC);
+
 -- events
 CREATE INDEX IF NOT EXISTS idx_events_restaurant ON events(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_events_active_upcoming ON events(event_date, is_promoted DESC) WHERE is_active = true;
@@ -587,6 +603,7 @@ ALTER TABLE restaurant_managers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE restaurant_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ip_rate_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invite_email_sends ENABLE ROW LEVEL SECURITY;
 
 -- restaurants: public read, admin + manager write (column-level protection via trigger)
 CREATE POLICY "Public read access" ON restaurants FOR SELECT USING (true);
@@ -727,6 +744,9 @@ CREATE POLICY "Admins manage all managers" ON restaurant_managers FOR ALL USING 
 
 -- restaurant_invites: admins only (public preview via SECURITY DEFINER function)
 CREATE POLICY "Admins manage invites" ON restaurant_invites FOR ALL USING (is_admin());
+
+-- invite_email_sends: admins read; service role writes via Edge Function
+CREATE POLICY "Admins view invite email sends" ON invite_email_sends FOR SELECT USING (is_admin());
 
 -- curator_invites: admins only (public preview via SECURITY DEFINER function)
 ALTER TABLE curator_invites ENABLE ROW LEVEL SECURITY;
@@ -2964,6 +2984,12 @@ RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   SELECT check_and_record_rate_limit('dish_create', 20, 3600);
 $$;
 
+-- Invite email rate limit: 20 sends per hour per admin
+CREATE OR REPLACE FUNCTION check_invite_email_rate_limit()
+RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT check_and_record_rate_limit('invite_email', 20, 3600);
+$$;
+
 -- Find nearby restaurants (for duplicate detection and "you're here" suggestions)
 CREATE OR REPLACE FUNCTION find_nearby_restaurants(
   p_name TEXT DEFAULT NULL,
@@ -3695,6 +3721,7 @@ GRANT EXECUTE ON FUNCTION submit_vote_atomic(UUID, UUID, DECIMAL, TEXT, DECIMAL,
 GRANT EXECUTE ON FUNCTION check_photo_upload_rate_limit TO authenticated;
 GRANT EXECUTE ON FUNCTION check_restaurant_create_rate_limit TO authenticated;
 GRANT EXECUTE ON FUNCTION check_dish_create_rate_limit TO authenticated;
+GRANT EXECUTE ON FUNCTION check_invite_email_rate_limit TO authenticated;
 GRANT EXECUTE ON FUNCTION find_nearby_restaurants TO authenticated;
 GRANT EXECUTE ON FUNCTION find_nearby_restaurants TO anon;
 GRANT EXECUTE ON FUNCTION get_restaurants_within_radius(DECIMAL, DECIMAL, INT) TO authenticated;
