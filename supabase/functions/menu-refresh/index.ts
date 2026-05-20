@@ -1796,22 +1796,33 @@ serve(async (req) => {
     // days. Acceptable — Path A's queue retry/backoff handles short-term
     // retries, and burning Sonnet on the same broken URL every cron cycle
     // would be worse.
-    const stampChecked = async (restaurantId: string) => {
-      await supabase
+    // Batch pre-stamp: update menu_last_checked = now() for the WHOLE batch
+    // in a single UPDATE before processing any restaurant. The earlier
+    // per-restaurant pre-stamp inside the loop only rotated the row
+    // currently being processed on IDLE_TIMEOUT, leaving its 7 batch-mates
+    // unstamped at the front of the queue — so the next invocation hit the
+    // same slow cluster again. Batch-stamping at the top guarantees
+    // full-batch rotation on any timeout, anywhere in the loop.
+    //
+    // Supabase JS resolves with { error } on PostgREST/SQL failures rather
+    // than throwing, so inspect .error explicitly. The try/catch is still
+    // there for transport-level throws (fetch failures, etc.). Either way
+    // we log loudly and continue — rotation that didn't happen is loud, not
+    // silent.
+    try {
+      const { error: batchStampErr } = await supabase
         .from('restaurants')
         .update({ menu_last_checked: new Date().toISOString() })
-        .eq('id', restaurantId)
+        .in('id', restaurants.map(r => r.id))
+      if (batchStampErr) {
+        console.error('Batch pre-stamp returned error (continuing):', batchStampErr)
+      }
+    } catch (stampErr) {
+      console.error('Batch pre-stamp threw (continuing):', stampErr)
     }
 
     for (const restaurant of restaurants) {
       try {
-        // Pre-stamp inside the try so a transient DB write failure here is
-        // caught and recorded as a single-restaurant error rather than
-        // aborting the whole batch. The stamp still commits before any of
-        // the slow work (fetch / Sonnet / Browserless render), which is all
-        // we need for the IDLE_TIMEOUT rotation guarantee.
-        await stampChecked(restaurant.id)
-
         console.log(`Processing menu for: ${restaurant.name}`)
 
         // Fetch menu content

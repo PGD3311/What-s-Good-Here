@@ -38,7 +38,12 @@ ENDPOINT="$SUPABASE_URL/functions/v1/menu-refresh?force_all=true&limit=$LIMIT"
 # Safety cap so a buggy "processed > 0 forever" loop can't run unbounded.
 # 30 iterations × 8 restaurants = 240 ceiling; well above the ~177 inventory.
 MAX_ITERATIONS=30
+# Bail after this many consecutive IDLE_TIMEOUTs — if we never see a normal
+# response across several batches, rotation isn't recovering and there's a
+# real upstream problem to investigate (network, runtime config, etc).
+MAX_CONSECUTIVE_TIMEOUTS=5
 TOTAL=0
+CONSECUTIVE_TIMEOUTS=0
 
 for ((i=1; i<=MAX_ITERATIONS; i++)); do
   echo "→ Iteration $i: POST $ENDPOINT"
@@ -47,12 +52,29 @@ for ((i=1; i<=MAX_ITERATIONS; i++)); do
     -H "Content-Type: application/json")
   echo "  response: $RESPONSE"
 
-  # Detect timeout / explicit error responses — these have no "processed" field
-  # and previously caused the script to falsely exit "done" with 0 work done.
-  if echo "$RESPONSE" | grep -qE '"code":"IDLE_TIMEOUT"|"error":'; then
+  # IDLE_TIMEOUT used to abort the script — that was protective when the
+  # function would loop on a stuck cluster. With PR #232 + #236 + this PR's
+  # batch pre-stamp, a timeout safely rotates the whole batch, so we just
+  # log + continue. The next iteration picks a different batch.
+  if echo "$RESPONSE" | grep -qE '"code":"IDLE_TIMEOUT"'; then
+    CONSECUTIVE_TIMEOUTS=$((CONSECUTIVE_TIMEOUTS + 1))
+    echo "  ⚠ IDLE_TIMEOUT (consecutive: $CONSECUTIVE_TIMEOUTS/$MAX_CONSECUTIVE_TIMEOUTS) — batch rotated by pre-stamp, continuing."
+    if [ "$CONSECUTIVE_TIMEOUTS" -ge "$MAX_CONSECUTIVE_TIMEOUTS" ]; then
+      echo "✗ Hit $MAX_CONSECUTIVE_TIMEOUTS consecutive IDLE_TIMEOUTs — rotation isn't recovering. Aborting to surface real problem."
+      echo "  Total restaurants successfully processed before abort: $TOTAL"
+      exit 1
+    fi
+    sleep 5
+    continue
+  fi
+  # Any non-timeout response resets the streak — we just made forward progress.
+  CONSECUTIVE_TIMEOUTS=0
+
+  # Other errors (auth, server) still abort — those indicate a config problem
+  # the rotation logic can't fix.
+  if echo "$RESPONSE" | grep -qE '"error":'; then
     echo "✗ Edge function returned an error response. Backfill aborted."
     echo "  Total restaurants successfully processed before error: $TOTAL"
-    echo "  Re-run the script — already-backfilled restaurants are hash-skipped fast."
     exit 1
   fi
 
