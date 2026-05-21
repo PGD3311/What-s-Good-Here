@@ -256,6 +256,24 @@ export function UserProfile() {
           const MIN_COMMUNITY = 3
           const picks = {}
 
+          // Best Find = the user's highest-rated dish, no community gate (matches
+          // user expectation: "my favorite," not "consensus favorite").
+          const allRated = ratedVotes
+            .filter(v => v.dish?.id)
+            .map(v => ({
+              dish_id: v.dish.id,
+              dish_name: v.dish.name,
+              restaurant_id: v.dish.restaurant_id,
+              restaurant_name: v.dish.restaurant_name,
+              userRating: v.rating,
+            }))
+
+          if (allRated.length > 0) {
+            const best = allRated.slice().sort((a, b) => b.userRating - a.userRating)
+            picks.bestFind = best[0]
+          }
+
+          // Hottest Take still needs community comparison to be meaningful.
           const comparisons = ratedVotes
             .filter(v => v.dish?.id && communityAvgs[v.dish.id]?.count >= MIN_COMMUNITY)
             .map(v => ({
@@ -269,21 +287,11 @@ export function UserProfile() {
             }))
 
           if (comparisons.length > 0) {
-            // Best find: highest user rating, tie-break by positive diff
-            const best = comparisons.slice().sort((a, b) => {
-              if (b.userRating !== a.userRating) return b.userRating - a.userRating
-              return b.diff - a.diff
-            })
-            picks.bestFind = best[0]
-
-            // Hottest take: biggest negative diff (user rates much lower than community), min -1.0
             const harsh = comparisons.slice().sort((a, b) => a.diff - b.diff)
-            if (harsh[0] && harsh[0].diff <= -1.0) {
-              picks.harshestTake = harsh[0]
-            }
-
-            setStandoutPicks(picks)
+            if (harsh[0].diff <= -1.0) picks.harshestTake = harsh[0]
           }
+
+          if (picks.bestFind || picks.harshestTake) setStandoutPicks(picks)
         } catch (err) {
           logger.error('Failed to compute standout picks:', err)
         }

@@ -67,40 +67,40 @@ function computeStandoutPicks(data, communityAvgs) {
   const MIN_COMMUNITY_VOTES = 3
   const picks = {}
 
-  // Build per-dish comparisons
+  // ratedVotes: every rated dish — feeds Best Find (just the user's top rating).
+  // comparisons: subset with community baseline — feeds Hottest Take (you-vs-crowd diff).
+  const ratedVotes = []
   const comparisons = []
   for (const vote of data) {
     if (vote.rating_10 == null) continue
     const dishId = vote.dishes.id
-    const community = communityAvgs[dishId]
-    if (!community || community.count < MIN_COMMUNITY_VOTES) continue
-
-    const diff = vote.rating_10 - community.avg
-    comparisons.push({
+    const item = {
       dish_id: dishId,
       dish_name: vote.dishes.name,
       category: vote.dishes.category,
       restaurant_id: vote.dishes.restaurants?.id,
       restaurant_name: vote.dishes.restaurants?.name,
       userRating: vote.rating_10,
+    }
+    ratedVotes.push(item)
+
+    const community = communityAvgs[dishId]
+    if (!community || community.count < MIN_COMMUNITY_VOTES) continue
+    comparisons.push({
+      ...item,
       communityAvg: community.avg,
-      diff,
+      diff: vote.rating_10 - community.avg,
     })
   }
 
-  if (comparisons.length === 0) return picks
+  if (ratedVotes.length > 0) {
+    const best = ratedVotes.slice().sort((a, b) => b.userRating - a.userRating)
+    picks.bestFind = best[0]
+  }
 
-  // Best find: highest user rating, tie-break by biggest positive diff
-  const sorted = comparisons.slice().sort((a, b) => {
-    if (b.userRating !== a.userRating) return b.userRating - a.userRating
-    return b.diff - a.diff
-  })
-  picks.bestFind = sorted[0]
-
-  // Hottest take: biggest negative diff (user rates much lower than community), min -1.0
-  const harsh = comparisons.slice().sort((a, b) => a.diff - b.diff)
-  if (harsh[0] && harsh[0].diff <= -1.0) {
-    picks.harshestTake = harsh[0]
+  if (comparisons.length > 0) {
+    const harsh = comparisons.slice().sort((a, b) => a.diff - b.diff)
+    if (harsh[0].diff <= -1.0) picks.harshestTake = harsh[0]
   }
 
   return picks
