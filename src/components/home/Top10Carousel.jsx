@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHand
 import { BROWSE_CATEGORIES } from '../../constants/categories'
 import { DishListItem } from '../DishListItem'
 import { CategoryIcon } from './CategoryIcons'
+import { useDishes } from '../../hooks/useDishes'
 
 var CAROUSEL_TABS = [{ id: 'nearby', label: 'Near You' }].concat(
   BROWSE_CATEGORIES.map(function (c) { return { id: c.id, label: c.label } })
@@ -13,13 +14,18 @@ var LOAD_MORE_COUNT = 5
 /**
  * Top10Carousel — horizontally swipeable set of vertical top-10 lists.
  * "Near You" is the first page, then one page per BROWSE_CATEGORY.
- * All filtering is client-side from the full ranked dishes array.
  *
- * Props:
- *   dishes          - full ranked dishes array
- *   onCategoryChange - callback(categoryId | null) when active tab changes (for map sync)
+ * Each tab fetches its own data via useDishes with category filter, so a
+ * category's full result set is independent of others. This bypasses the
+ * Supabase 1000-row cap that previously truncated less-popular categories
+ * (cocktails, donuts, etc.) when a shared no-filter query returned 1000+
+ * food dishes first and cut off the rest.
+ *
+ * Lazy: only tabs within ±1 of active actually mount, so initial page load
+ * is at most 3 queries. React Query caches by key so scrolling back to a
+ * visited tab is instant.
  */
-export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategoryChange }, ref) {
+export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius, onCategoryChange }, ref) {
   var [activeIndex, setActiveIndex] = useState(0)
   var [limits, setLimits] = useState({}) // { tabId: visibleCount }
   var scrollRef = useRef(null)
@@ -62,9 +68,6 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
   }, [activeIndex, onCategoryChange])
 
   // Auto-scroll tab bar to keep active tab visible.
-  // Scroll tabsRef horizontally ourselves — scrollIntoView with block: 'nearest'
-  // will vertically scroll the outer container when the tab bar is off-screen,
-  // which fights any page-level scroll-to-carousel animation from callers.
   useEffect(function () {
     var tabs = tabsRef.current
     if (!tabs) return
@@ -74,14 +77,6 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
     var targetLeft = activeTab.offsetLeft - (tabs.offsetWidth - activeTab.offsetWidth) / 2
     tabs.scrollTo({ left: targetLeft, behavior: prefersReducedMotion ? 'auto' : 'smooth' })
   }, [activeIndex])
-
-  // Get all dishes for a tab (unsliced)
-  function getAllDishesForTab(tab) {
-    if (tab.id === 'nearby') return dishes || []
-    return (dishes || []).filter(function (d) {
-      return d.category && d.category.toLowerCase() === tab.id.toLowerCase()
-    })
-  }
 
   // Get visible limit for a tab
   function getLimit(tabId) {
@@ -105,9 +100,13 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
   }
 
   var activeTab = CAROUSEL_TABS[activeIndex] || CAROUSEL_TABS[0]
-  var allActiveTabDishes = getAllDishesForTab(activeTab)
   var activeLimit = getLimit(activeTab.id)
-  var visibleCount = Math.min(allActiveTabDishes.length, activeLimit)
+  // Parent fetches the active tab's data for the count badge. React Query
+  // dedupes — the same query key from CarouselTabContent hits the cache.
+  var activeCategoryFilter = activeTab.id === 'nearby' ? null : activeTab.id
+  var activeDishesQuery = useDishes(location, radius, activeCategoryFilter, null, null)
+  var activeTotal = (activeDishesQuery.dishes || []).length
+  var visibleCount = Math.min(activeTotal, activeLimit)
 
   return (
     <div className="pt-1">
@@ -192,7 +191,7 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
         }}>
-          {visibleCount}{allActiveTabDishes.length > activeLimit ? '+' : ''} {visibleCount === 1 ? 'dish' : 'dishes'}
+          {visibleCount}{activeTotal > activeLimit ? '+' : ''} {visibleCount === 1 ? 'dish' : 'dishes'}
         </span>
       </div>
 
@@ -210,14 +209,9 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
         }}
       >
         {CAROUSEL_TABS.map(function (tab, tabIndex) {
-          // Only render content for active page ± 1 neighbor (lazy rendering)
+          // Only render content (= only fetch data) for active page ± 1 neighbor.
+          // Lazy rendering caps initial load to ~3 queries.
           var isNearActive = Math.abs(tabIndex - activeIndex) <= 1
-          var allTabDishes = isNearActive ? getAllDishesForTab(tab) : []
-          var tabLimit = getLimit(tab.id)
-          var visibleDishes = allTabDishes.slice(0, tabLimit)
-          var hasMore = allTabDishes.length > tabLimit
-          var remaining = allTabDishes.length - tabLimit
-
           return (
             <div
               key={tab.id}
@@ -230,45 +224,16 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
                 boxSizing: 'border-box',
               }}
             >
-              {!isNearActive ? (
-                <div style={{ minHeight: '200px' }} />
-              ) : visibleDishes.length > 0 ? (
-                <>
-                  {visibleDishes.map(function (dish, i) {
-                    return (
-                      <DishListItem
-                        key={dish.dish_id || dish.id}
-                        dish={dish}
-                        rank={i + 1}
-                        variant="ranked"
-                        isLast={!hasMore && i === visibleDishes.length - 1}
-                      />
-                    )
-                  })}
-                  {hasMore && (
-                    <button
-                      onClick={function () { handleShowMore(tab.id) }}
-                      className="w-full py-3 rounded-xl font-semibold text-center transition-all active:scale-[0.98]"
-                      style={{
-                        fontSize: '14px',
-                        color: 'var(--color-accent-gold)',
-                        background: 'var(--color-card)',
-                        border: '1.5px solid var(--color-divider)',
-                        marginTop: '8px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Show {remaining > LOAD_MORE_COUNT ? LOAD_MORE_COUNT : remaining} more
-                    </button>
-                  )}
-                </>
+              {isNearActive ? (
+                <CarouselTabContent
+                  tab={tab}
+                  location={location}
+                  radius={radius}
+                  tabLimit={getLimit(tab.id)}
+                  onShowMore={function () { handleShowMore(tab.id) }}
+                />
               ) : (
-                <p className="py-8 text-center" style={{
-                  fontSize: '14px',
-                  color: 'var(--color-text-tertiary)',
-                }}>
-                  No {tab.label.toLowerCase()} rated yet
-                </p>
+                <div style={{ minHeight: '200px' }} />
               )}
             </div>
           )
@@ -277,3 +242,90 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ dishes, onCategor
     </div>
   )
 })
+
+/**
+ * One tab's worth of dishes. Owns its own data fetch keyed by category, so
+ * each category gets its own (uncapped) result set.
+ *
+ * Surfacing rule (matches CategoryExpand, PR #255):
+ * - Ranked dishes (total_votes > 0) sort first, up to tabLimit
+ * - If fewer than tabLimit ranked exist, the remaining slots fill with
+ *   unranked (0-vote) dishes so sparse categories aren't half-empty
+ * - "Show N more" reveals additional ranked + unranked beyond tabLimit
+ */
+function CarouselTabContent({ tab, location, radius, tabLimit, onShowMore }) {
+  var categoryFilter = tab.id === 'nearby' ? null : tab.id
+  var { dishes, loading } = useDishes(location, radius, categoryFilter, null, null)
+  var allDishes = dishes || []
+
+  // Split ranked vs unranked (vote-phantom fix in PR #257 makes this honest).
+  var ranked = []
+  var unranked = []
+  for (var i = 0; i < allDishes.length; i++) {
+    if (allDishes[i].total_votes && Number(allDishes[i].total_votes) > 0) {
+      ranked.push(allDishes[i])
+    } else {
+      unranked.push(allDishes[i])
+    }
+  }
+
+  // Ranked take priority; fill remaining slots with unranked.
+  var visibleDishes = ranked.slice(0, tabLimit)
+  if (visibleDishes.length < tabLimit) {
+    var fillCount = tabLimit - visibleDishes.length
+    visibleDishes = visibleDishes.concat(unranked.slice(0, fillCount))
+  }
+  var hasMore = allDishes.length > tabLimit
+  var remaining = allDishes.length - tabLimit
+
+  if (loading && allDishes.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <div className="animate-spin w-5 h-5 border-2 rounded-full mx-auto" style={{ borderColor: 'var(--color-divider)', borderTopColor: 'var(--color-primary)' }} />
+      </div>
+    )
+  }
+
+  if (visibleDishes.length === 0) {
+    return (
+      <p className="py-8 text-center" style={{
+        fontSize: '14px',
+        color: 'var(--color-text-tertiary)',
+      }}>
+        No {tab.label.toLowerCase()} rated yet
+      </p>
+    )
+  }
+
+  return (
+    <>
+      {visibleDishes.map(function (dish, i) {
+        return (
+          <DishListItem
+            key={dish.dish_id || dish.id}
+            dish={dish}
+            rank={i + 1}
+            variant="ranked"
+            isLast={!hasMore && i === visibleDishes.length - 1}
+          />
+        )
+      })}
+      {hasMore && (
+        <button
+          onClick={onShowMore}
+          className="w-full py-3 rounded-xl font-semibold text-center transition-all active:scale-[0.98]"
+          style={{
+            fontSize: '14px',
+            color: 'var(--color-accent-gold)',
+            background: 'var(--color-card)',
+            border: '1.5px solid var(--color-divider)',
+            marginTop: '8px',
+            cursor: 'pointer',
+          }}
+        >
+          Show {remaining > LOAD_MORE_COUNT ? LOAD_MORE_COUNT : remaining} more
+        </button>
+      )}
+    </>
+  )
+}

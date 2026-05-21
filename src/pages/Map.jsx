@@ -370,6 +370,7 @@ export function Map() {
           mostVotedDish={mostVotedDish}
           bestValueMeal={bestValueMeal}
           bestIceCream={bestIceCream}
+          location={location}
           radius={radius}
           permissionState={permissionState}
           requestLocation={requestLocation}
