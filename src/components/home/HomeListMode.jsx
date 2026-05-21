@@ -63,16 +63,23 @@ export const HomeListMode = memo(function HomeListMode({
     >
       {/* Fixed header: brand + search + chips */}
       <div style={{ flexShrink: 0, background: 'var(--color-bg)', zIndex: 10, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        {/* Brand header — coral wgh wordmark (no plate, no square: confidence
-            to let the mark stand on its own). PNG is 1600×640 (≈2.5:1
-            aspect); width controls the visual size. Map page already has an
-            <h1 className="sr-only">What's Good Here</h1> so the screen-reader
-            label here is the alt text. */}
+        {/* Brand header — the iOS app icon used as the homepage mark.
+            Rounded corners (22% radius matches Apple's icon mask) and a
+            soft shadow make it read as "icon," not bare PNG. Map page
+            already has an <h1 className="sr-only">What's Good Here</h1>
+            so this img carries the screen-reader label as alt text. */}
         <div className="text-center pt-4 pb-1">
           <img
-            src="/wgh-mark-coral.png"
+            src="/wgh-icon.png"
             alt="What's Good Here"
-            style={{ display: 'block', margin: '0 auto', width: '180px', height: 'auto' }}
+            style={{
+              display: 'block',
+              margin: '0 auto',
+              width: '120px',
+              height: '120px',
+              borderRadius: '26px',
+              boxShadow: '0 6px 16px rgba(26, 26, 26, 0.12)',
+            }}
           />
           <p style={{
             fontSize: '10px',

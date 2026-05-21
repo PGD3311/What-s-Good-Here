@@ -26,6 +26,7 @@ const categoryIcons = {
   'ice cream': '/categories/icons/ice-cream.png',
   coffee: '/categories/icons/coffee.png',
   cocktails: '/categories/icons/cocktails.png',
+  donuts: '/categories/icons/donuts.png',
   // Missing poster icons: oysters (use SVG fallback)
 
   // === SUB-CATEGORIES ===
