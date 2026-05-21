@@ -27,7 +27,14 @@ function sanitizeDescription(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
   if (trimmed.length === 0) return null
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed
+  if (trimmed.length <= 150) return trimmed
+  // Truncate at last word boundary within cap to avoid mid-word cuts like
+  // "crispy garlic, sm" (was actually "smoked sea salt"). Strip trailing
+  // punctuation that gets orphaned by the cut.
+  const capped = trimmed.slice(0, 150)
+  const lastSpace = capped.lastIndexOf(' ')
+  const result = lastSpace >= 80 ? capped.slice(0, lastSpace) : capped
+  return result.trimEnd().replace(/[,;:.·•\-–—]+$/, '')
 }
 
 function sortedArraysEqual(a: string[], b: string[]): boolean {
@@ -184,7 +191,7 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
    - **When in doubt:** if two dishes in the same section have names that a normal human would read as "the same dish at different prices," collapse them. Better to under-count than to duplicate.
 10. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
 11. **One category per dish** — pick the most specific match
-12. **Description rule:** Output a terse ingredient/preparation line, 80 chars or fewer, as \`description\`. Format: comma-separated nouns. Examples: "Hot lobster meat, drawn butter, split-top bun" / "Pepperoni, mozzarella, San Marzano tomato" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
+12. **Description rule:** Output an ingredient/preparation line **150 chars or fewer** as \`description\`. Format: comma-separated nouns. List the dish's defining ingredients in the order the menu presents them — protein, signature accompaniments, sauce/finish. Skip filler adjectives ("fresh", "house-made", "perfectly"). If the menu copy fits under 150 chars, keep all of it. **Never truncate mid-word.** Examples: "Hot lobster meat, drawn butter, split-top bun" / "Fried cauliflower, brussels sprouts, sun-dried tomato melange, crispy garlic, smoked sea salt, vichyssoise sauce" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
 13. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively labels the dish as that diet** (not "available" or "on request"). This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free as served, not "can be modified."
 
     **Conventional shorthand markers** — treat these as definitive when they appear as a badge, suffix, or column marker on a dish, even without a printed legend. These conventions are standard across restaurant menus:
@@ -274,7 +281,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v4|pipeline-v1|desc+dietary-v2|drinks-v1'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v5|pipeline-v2|desc150+dietary-v2|drinks-v1'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [

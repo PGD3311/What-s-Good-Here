@@ -20,21 +20,39 @@ describe('sanitizeDescription', () => {
     expect(sanitizeDescription('  Hot lobster, drawn butter  ')).toBe('Hot lobster, drawn butter')
   })
 
-  it('truncates strings over 80 chars to 80', () => {
-    const long = 'x'.repeat(120)
+  it('truncates strings over 150 chars to ≤150 at word boundary', () => {
+    const long = 'word '.repeat(50)  // 250 chars of "word word word..."
     const result = sanitizeDescription(long)
     expect(result).not.toBeNull()
-    expect(result!.length).toBe(80)
+    expect(result!.length).toBeLessThanOrEqual(150)
+    expect(result!.endsWith(' ')).toBe(false)
   })
 
-  it('passes through strings under 80 chars unchanged', () => {
+  it('passes through strings under 150 chars unchanged', () => {
     const short = 'Pepperoni, mozzarella, San Marzano tomato'
     expect(sanitizeDescription(short)).toBe(short)
   })
 
-  it('handles exactly-80-char string without truncation', () => {
-    const exact = 'x'.repeat(80)
+  it('handles exactly-150-char string without truncation', () => {
+    const exact = 'x'.repeat(150)
     expect(sanitizeDescription(exact)).toBe(exact)
+  })
+
+  it('strips orphaned trailing punctuation after word-boundary truncation', () => {
+    // 160-char comma-separated list; word-boundary cut leaves an orphaned comma
+    const long = 'cauliflower, brussels sprouts, sun-dried tomato melange, crispy garlic, smoked sea salt, vichyssoise sauce, lemon zest, fresh herbs, microgreens'
+    const result = sanitizeDescription(long)
+    expect(result).not.toBeNull()
+    expect(result!.length).toBeLessThanOrEqual(150)
+    expect(/[,;:.·•\-–—]$/.test(result!)).toBe(false)
+  })
+
+  it('hard-cuts when no space within first 80 chars', () => {
+    // 200-char string with no spaces in first 80
+    const long = 'a'.repeat(85) + ' rest of description here'
+    const result = sanitizeDescription(long)
+    expect(result).not.toBeNull()
+    expect(result!.length).toBeLessThanOrEqual(150)
   })
 })
 

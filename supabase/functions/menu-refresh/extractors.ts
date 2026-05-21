@@ -21,7 +21,11 @@ export function sanitizeDescription(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
   if (trimmed.length === 0) return null
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed
+  if (trimmed.length <= 150) return trimmed
+  const capped = trimmed.slice(0, 150)
+  const lastSpace = capped.lastIndexOf(' ')
+  const result = lastSpace >= 80 ? capped.slice(0, lastSpace) : capped
+  return result.trimEnd().replace(/[,;:.·•\-–—]+$/, '')
 }
 
 // Order-insensitive string-array equality for change-detection on dietary_tags.
