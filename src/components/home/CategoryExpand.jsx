@@ -23,15 +23,32 @@ export function CategoryExpand({ categoryId, onClose }) {
   var { dishes, loading } = useDishes(location, radius, categoryId, null, null)
 
   var allDishes = dishes || []
-  var displayed = showAll ? allDishes : allDishes.slice(0, 10)
-  var hasMore = allDishes.length > 10 && !showAll
+  // Split ranked (has votes) from unranked (0 votes). Ranked dishes take priority;
+  // unranked surface in a separate "New on the menu" section so they're discoverable
+  // for voting without competing with established top picks.
+  var ranked = []
+  var unranked = []
+  for (var j = 0; j < allDishes.length; j++) {
+    if (allDishes[j].total_votes && Number(allDishes[j].total_votes) > 0) {
+      ranked.push(allDishes[j])
+    } else {
+      unranked.push(allDishes[j])
+    }
+  }
+  var rankedDisplayed = showAll ? ranked : ranked.slice(0, 10)
+  var hasMoreRanked = ranked.length > 10 && !showAll
+  // Unranked dishes are NEVER hidden — discoverability beats neatness here. A user
+  // can't vote on a dish they can't find, so the whole list is rendered.
+  var unrankedDisplayed = unranked
 
   return (
     <div
       style={{
         overflow: 'hidden',
         transition: 'max-height 0.4s ease, opacity 0.3s ease',
-        maxHeight: showAll ? '4000px' : '1200px',
+        // No fixed cap — content drives height. 100000px is a safe upper bound for
+        // categories with 150+ unranked dishes (cocktails has ~150 today).
+        maxHeight: '100000px',
         opacity: 1,
       }}
     >
@@ -71,32 +88,25 @@ export function CategoryExpand({ categoryId, onClose }) {
           </div>
         )}
 
-        {/* Dish list */}
-        {!loading && displayed.length > 0 && (
+        {/* Ranked dishes (have votes) */}
+        {!loading && rankedDisplayed.length > 0 && (
           <div>
-            {displayed.map(function (dish, idx) {
+            {rankedDisplayed.map(function (dish, idx) {
               return (
                 <DishListItem
                   key={dish.dish_id}
                   dish={dish}
                   rank={idx + 1}
                   showDistance
-                  isLast={idx === displayed.length - 1}
+                  isLast={idx === rankedDisplayed.length - 1 && !hasMoreRanked}
                 />
               )
             })}
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && allDishes.length === 0 && (
-          <p className="py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-            No {categoryLabel.toLowerCase()} rated yet
-          </p>
-        )}
-
-        {/* Show more — expands inline, no page nav */}
-        {!loading && hasMore && (
+        {/* Show more ranked — only when there are ranked dishes hidden */}
+        {!loading && hasMoreRanked && (
           <button
             onClick={function () { setShowAll(true) }}
             className="w-full py-3 mt-1 mb-2 text-center font-bold text-sm active:scale-[0.98] transition-transform"
@@ -106,8 +116,46 @@ export function CategoryExpand({ categoryId, onClose }) {
               borderRadius: '12px',
             }}
           >
-            Show all {allDishes.length} {categoryLabel} &rsaquo;
+            Show all {ranked.length} {categoryLabel} &rsaquo;
           </button>
+        )}
+
+        {/* New on the menu — unranked dishes that need votes to climb the ranking */}
+        {!loading && unrankedDisplayed.length > 0 && (
+          <div className="mt-4">
+            <p style={{
+              fontFamily: "'Amatic SC', cursive",
+              fontSize: '20px',
+              fontWeight: 700,
+              color: 'var(--color-text-secondary)',
+              margin: '0 0 4px',
+              lineHeight: 1,
+            }}>
+              New on the menu
+            </p>
+            <p className="text-xs mb-2" style={{ color: 'var(--color-text-tertiary)' }}>
+              Just added — help us rank these
+            </p>
+            <div>
+              {unrankedDisplayed.map(function (dish, idx) {
+                return (
+                  <DishListItem
+                    key={dish.dish_id}
+                    dish={dish}
+                    showDistance
+                    isLast={idx === unrankedDisplayed.length - 1}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state — only when there are NO dishes at all */}
+        {!loading && allDishes.length === 0 && (
+          <p className="py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+            No {categoryLabel.toLowerCase()} rated yet
+          </p>
         )}
       </div>
     </div>
