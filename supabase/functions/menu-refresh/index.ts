@@ -70,7 +70,7 @@ const VALID_CATEGORIES = [
   'calamari', 'crab', 'curry', 'lobster', 'mussels', 'onion rings',
   'pancakes', 'scallops', 'shrimp', 'waffles', 'wrap',
   'fish-and-chips', 'fish-sandwich', 'eggs-benedict',
-  'oysters', 'pastry', 'coffee',
+  'oysters', 'pastry', 'coffee', 'drinks',
 ]
 
 const MENU_EXTRACTION_PROMPT = `You are extracting a restaurant menu for a food discovery app. Your job is to produce output that mirrors the restaurant's actual menu — a user reading it should feel like they're looking at the real thing.
@@ -145,25 +145,47 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
 | asian | Asian entrees (pad thai, stir-fry) |
 | curry | Curry dishes |
 | coffee | Coffee drinks: drip, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee |
+| drinks | Handcrafted bar drinks: cocktails, mocktails, signature drinks, house specials. Bartender-prepared. NOT canned/bottled RTDs |
 | entree | Catch-all for entrees that don't fit any specific category |
 
 ## Rules
 
 1. **Extract EVERY food dish on the menu** — be thorough, don't skip items
-2. **Coffee drinks ARE included** — categorize as \`coffee\`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur). **Skip all other drinks** — no cocktails, beer, wine, soda, juice, plain water, or non-coffee beverages.
-3. **Skip kids meals**
-4. **Skip condiments** — extra sauce, side of dressing, bread roll
-5. **Skip side dishes** — mashed potatoes, green beans, rice, coleslaw, steamed veggies, etc. NOT rateable.
-6. **EXCEPTION: Fries and onion rings ARE included** — people rate these. Keep them.
-7. **Deduplicate sizes, portions, and near-duplicate names within a menu section**:
+2. **Coffee drinks ARE included** — categorize as \`coffee\`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur) — those go in \`drinks\` if they're house-made.
+
+3. **Handcrafted bar drinks ARE included** — categorize as \`drinks\`. Decision rule: **include ONLY if** the menu shows mixed ingredients OR a classic/signature cocktail format (Old Fashioned, Margarita, Espresso Martini, French 75, mocktail variants, house spritz, signature negroni). **Exclude if** the item is sold as a packaged brand SKU (a brand name with a can/bottle, not a recipe).
+
+   **Beer is NEVER \`drinks\`.** If a dish appears in a "Beer", "Draft", "Bottles", "Cans", "On Tap", "Brews" section, or if its name contains a beer-style token (\`IPA\`, \`lager\`, \`pilsner\`, \`stout\`, \`ale\`, \`porter\`, \`hefeweizen\`, \`saison\`, \`gose\`), exclude it — even if the name is creative ("Whale's Tale Pale Ale" is still beer).
+
+   **Wine is NEVER \`drinks\`.** Wine by the glass, by the bottle, varietal listings (Chardonnay, Pinot, Cabernet, Rosé, sparkling) — all excluded. Champagne by the glass excluded. The only wine-related exception is a *house-made* preparation like sangria, mulled wine, or a wine cocktail — those count because the bar built them.
+
+   **Skip canned/bottled ready-to-drink (RTD) products** — bartender pops a can; doesn't make it. Skip everything in these categories regardless of brand:
+   - **Hard seltzers:** High Noon, White Claw, Truly, Sun Cruiser, Surfside, Cape Line, Mighty Swell, Crook & Marker, Vizzy, Topo Chico Hard Seltzer, NUTRL, Happy Dad, Cacti, Stateside, press/tea/vodka canned lines
+   - **Canned cocktails:** Cutwater, On The Rocks, Tip Top, BeatBox, Loverboy, Monaco, Cayman Jack
+   - **Malt beverages:** Smirnoff Ice, Mike's Hard, Twisted Tea, Cayman Jack
+   - **Generic class language:** "hard lemonade", "hard tea", "hard seltzer", "canned cocktail", "RTD" → exclude
+   - Anything marketed as "ready to drink" or sold by the can/bottle as a finished product
+
+   **"House" terms — be strict.** "House pour", "house draft", "house red", "house white" all mean the restaurant's default cheap option — NOT a handcrafted drink. Exclude. Only include "house-made" when followed by a mixed/prepared drink (e.g., "house-made sangria", "house michelada", "house sour mix"). The word that matters is *made*, not *house*.
+
+   **When in doubt:** creative name + ingredient list + cocktail price range ($12–$18) → include as \`drinks\`. Listed in a "Canned", "RTD", "Beer", "Wine", "On Tap" section → skip.
+
+4. **Skip all OTHER beverages** — no juice, soda, lemonade (unless it's a clearly-labeled house cocktail), plain water, milk, plain tea, plain iced tea, kombucha, energy drinks. Complex non-alcoholic tea drinks on a serious cocktail menu (matcha latte cocktail, kombucha cocktail) count under \`drinks\` only if they have the cocktail-format signals from rule 3.
+
+   **Coffee vs drinks precedence:** if an item is BOTH coffee AND alcoholic (espresso martini, Irish coffee, coffee negroni, white Russian, mudslide), route to \`drinks\` — alcoholic wins. Non-alcoholic coffee stays \`coffee\` (rule 2).
+5. **Skip kids meals**
+6. **Skip condiments** — extra sauce, side of dressing, bread roll
+7. **Skip side dishes** — mashed potatoes, green beans, rice, coleslaw, steamed veggies, etc. NOT rateable.
+8. **EXCEPTION: Fries and onion rings ARE included** — people rate these. Keep them.
+9. **Deduplicate sizes, portions, and near-duplicate names within a menu section**:
    - **Size/portion variants** (Small/Medium/Large, 10"/14", Cup/Bowl, half/whole, lunch/dinner): output ONE entry per dish. Use the larger/dinner price.
    - **Near-duplicate names** (same menu_section, same category): if two dishes differ only by a redundant category suffix — "Margherita" vs "Margherita Pizza", "Caesar" vs "Caesar Salad", "Lobster" vs "Lobster Roll" when both are in the pizza / salad / lobster-roll section — they are the SAME dish listed twice. Output ONE entry. Prefer the shorter name (without the redundant category word).
    - **Genuinely different portions stay separate:** "Half Roast Chicken" vs "Whole Roast Chicken", "Kids Burger" vs "Burger" — output both.
    - **When in doubt:** if two dishes in the same section have names that a normal human would read as "the same dish at different prices," collapse them. Better to under-count than to duplicate.
-8. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
-9. **One category per dish** — pick the most specific match
-10. **Description rule:** Output a terse ingredient/preparation line, 80 chars or fewer, as \`description\`. Format: comma-separated nouns. Examples: "Hot lobster meat, drawn butter, split-top bun" / "Pepperoni, mozzarella, San Marzano tomato" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
-11. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively labels the dish as that diet** (not "available" or "on request"). This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free as served, not "can be modified."
+10. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
+11. **One category per dish** — pick the most specific match
+12. **Description rule:** Output a terse ingredient/preparation line, 80 chars or fewer, as \`description\`. Format: comma-separated nouns. Examples: "Hot lobster meat, drawn butter, split-top bun" / "Pepperoni, mozzarella, San Marzano tomato" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
+13. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively labels the dish as that diet** (not "available" or "on request"). This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free as served, not "can be modified."
 
     **Conventional shorthand markers** — treat these as definitive when they appear as a badge, suffix, or column marker on a dish, even without a printed legend. These conventions are standard across restaurant menus:
     - \`V\` → \`vegetarian\`
@@ -252,7 +274,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v3|pipeline-v1|desc+dietary-v2'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v4|pipeline-v1|desc+dietary-v2|drinks-v1'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [
