@@ -322,7 +322,17 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
         onClick={function () { onExpandCategory('chowder') }}
       />
 
-      {/* Board 4: Most Talked About */}
+      {/* Board 4: Best Coffee NOW */}
+      <ChalkboardCard
+        icon="/categories/icons/coffee.png"
+        tag={'best coffee now'}
+        title="Coffee"
+        sub="freshly ranked by locals"
+        cta={'best on the island \u2192'}
+        onClick={function () { onExpandCategory('coffee') }}
+      />
+
+      {/* Board 5: Most Talked About */}
       {mostVotedDish && (
         <ChalkboardCard
           icon="/categories/icons/speech-bubble.png"
@@ -336,7 +346,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
         />
       )}
 
-      {/* Board 5: Best Meal Under $15 */}
+      {/* Board 6: Best Meal Under $15 */}
       {bestValueMeal && (
         <ChalkboardCard
           icon="/categories/icons/money-bag.png"
@@ -350,7 +360,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
         />
       )}
 
-      {/* Board 6: Best Ice Cream — clean cone top, melting cone bottom */}
+      {/* Board 7: Best Ice Cream — clean cone top, melting cone bottom */}
       {bestIceCream && (
         <ChalkboardCard
           icon="/categories/icons/ice-cream-clean.png"
