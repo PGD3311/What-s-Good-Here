@@ -17,7 +17,7 @@ export const BROWSE_CATEGORIES = [
   { id: 'steak', label: 'Steak', emoji: '🥩' },
   { id: 'coffee', label: 'Coffee', emoji: '☕' },
   { id: 'donuts', label: 'Donuts', emoji: '🍩' },
-  { id: 'drinks', label: 'Drinks', emoji: '🍸' },
+  { id: 'cocktails', label: 'Cocktails', emoji: '🍸' },
   { id: 'sandwich', label: 'Sandwiches', emoji: '🥪' },
   { id: 'salad', label: 'Salads', emoji: '🥗' },
   { id: 'taco', label: 'Tacos', emoji: '🌮' },
@@ -53,7 +53,7 @@ export const MAIN_CATEGORIES = [
   { id: 'pork', label: 'Pork', emoji: '🐷' },
   { id: 'coffee', label: 'Coffee', emoji: '☕' },
   { id: 'donuts', label: 'Donuts', emoji: '🍩' },
-  { id: 'drinks', label: 'Drinks', emoji: '🍸' },
+  { id: 'cocktails', label: 'Cocktails', emoji: '🍸' },
 ]
 
 // All categories in the system (including sub-categories)
@@ -158,7 +158,7 @@ const CATEGORY_IMAGES = {
   sandwich: '/categories/icons/sandwich.png',
   salad: '/categories/icons/salad.png',
   coffee: '/categories/icons/coffee.png',
-  drinks: '/categories/icons/drinks.png',
+  cocktails: '/categories/icons/cocktails.png',
   taco: '/categories/icons/taco.png',
   pasta: '/categories/icons/pasta.png',
   seafood: '/categories/icons/seafood.png',
@@ -354,7 +354,7 @@ export const CATEGORY_INFO = {
   'clams': { emoji: '🐚', label: 'Clams' },
   'oysters': { emoji: '🦪', label: 'Oysters' },
   'coffee': { emoji: '☕', label: 'Coffee' },
-  'drinks': { emoji: '🍸', label: 'Drinks' },
+  'cocktails': { emoji: '🍸', label: 'Cocktails' },
   'ice cream': { emoji: '🍦', label: 'Ice Cream' },
   'bruschetta': { emoji: '🍞', label: 'Bruschetta' },
   'burrito': { emoji: '🌯', label: 'Burrito' },

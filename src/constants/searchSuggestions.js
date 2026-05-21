@@ -71,7 +71,7 @@ const RELATED_TERMS = {
   // Drinks
   coffee: ['breakfast', 'cafe', 'espresso'],
   smoothie: ['acai', 'juice', 'breakfast'],
-  cocktail: ['drinks', 'bar', 'appetizers'],
+  cocktail: ['cocktails', 'bar', 'martini'],
 
   // Catch-all cuisine types
   indian: ['curry', 'naan', 'rice'],

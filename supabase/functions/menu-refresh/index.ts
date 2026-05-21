@@ -77,7 +77,7 @@ const VALID_CATEGORIES = [
   'calamari', 'crab', 'curry', 'lobster', 'mussels', 'onion rings',
   'pancakes', 'scallops', 'shrimp', 'waffles', 'wrap',
   'fish-and-chips', 'fish-sandwich', 'eggs-benedict',
-  'oysters', 'pastry', 'coffee', 'drinks',
+  'oysters', 'pastry', 'coffee', 'cocktails',
 ]
 
 const MENU_EXTRACTION_PROMPT = `You are extracting a restaurant menu for a food discovery app. Your job is to produce output that mirrors the restaurant's actual menu — a user reading it should feel like they're looking at the real thing.
@@ -152,19 +152,26 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
 | asian | Asian entrees (pad thai, stir-fry) |
 | curry | Curry dishes |
 | coffee | Coffee drinks: drip, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee |
-| drinks | Handcrafted bar drinks: cocktails, mocktails, signature drinks, house specials. Bartender-prepared. NOT canned/bottled RTDs |
+| cocktails | Alcoholic bar drinks ONLY: classic + signature cocktails, spirit-based drinks, wine cocktails (sangria), beer cocktails (michelada). Bartender-prepared with alcohol. NOT mocktails, NOT smoothies, NOT non-alcoholic anything, NOT canned/bottled RTDs |
 | entree | Catch-all for entrees that don't fit any specific category |
 
 ## Rules
 
 1. **Extract EVERY food dish on the menu** — be thorough, don't skip items
-2. **Coffee drinks ARE included** — categorize as \`coffee\`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur) — those go in \`drinks\` if they're house-made.
+2. **Coffee drinks ARE included** — categorize as \`coffee\`. This covers drip coffee, americano, espresso, latte, cappuccino, cortado, macchiato, mocha, flat white, cold brew, iced coffee, and other coffee preparations. **Skip alcoholic coffee drinks** (Irish coffee, espresso martini, coffee negroni, anything with a liqueur) — those go in \`cocktails\`.
 
-3. **Handcrafted bar drinks ARE included** — categorize as \`drinks\`. Decision rule: **include ONLY if** the menu shows mixed ingredients OR a classic/signature cocktail format (Old Fashioned, Margarita, Espresso Martini, French 75, mocktail variants, house spritz, signature negroni). **Exclude if** the item is sold as a packaged brand SKU (a brand name with a can/bottle, not a recipe).
+3. **Cocktails (ALCOHOL ONLY) ARE included** — categorize as \`cocktails\`. The category is **strictly alcoholic** — if it doesn't contain alcohol, it doesn't belong here. Decision rule: **include ONLY if** the drink is alcohol-based AND the menu shows mixed ingredients OR a classic/signature cocktail format (Old Fashioned, Margarita, Negroni, Espresso Martini, French 75, Mai Tai, Mule, Spritz, etc.). **Exclude if** the item is sold as a packaged brand SKU.
 
-   **Beer is NEVER \`drinks\`.** If a dish appears in a "Beer", "Draft", "Bottles", "Cans", "On Tap", "Brews" section, or if its name contains a beer-style token (\`IPA\`, \`lager\`, \`pilsner\`, \`stout\`, \`ale\`, \`porter\`, \`hefeweizen\`, \`saison\`, \`gose\`), exclude it — even if the name is creative ("Whale's Tale Pale Ale" is still beer).
+   **EXCLUDE everything non-alcoholic, no exceptions:**
+   - **Mocktails / zero-proof / "spirit-free" / "alcohol-free" cocktails** — these are NOT \`cocktails\` per Dan's rule. Don't extract them at all.
+   - **Smoothies, frappes, milkshakes, frozen lemonades, slushies** — frozen non-alcoholic drinks are not cocktails. Skip entirely (they don't fit any other category either).
+   - **Juice cocktails, mocktail "spritzers", non-alcoholic punches** — skip.
+   - **Tea drinks, matcha lattes, kombucha** (alcoholic or non-alcoholic) — skip.
+   - **Hot chocolate, cider (non-alcoholic), egg nog (non-alcoholic)** — skip.
 
-   **Wine is NEVER \`drinks\`.** Wine by the glass, by the bottle, varietal listings (Chardonnay, Pinot, Cabernet, Rosé, sparkling) — all excluded. Champagne by the glass excluded. The only wine-related exception is a *house-made* preparation like sangria, mulled wine, or a wine cocktail — those count because the bar built them.
+   **Beer is NEVER \`cocktails\`.** If a dish appears in a "Beer", "Draft", "Bottles", "Cans", "On Tap", "Brews" section, or if its name contains a beer-style token (\`IPA\`, \`lager\`, \`pilsner\`, \`stout\`, \`ale\`, \`porter\`, \`hefeweizen\`, \`saison\`, \`gose\`), exclude it — even if the name is creative ("Whale's Tale Pale Ale" is still beer). EXCEPTION: a beer cocktail / michelada / shandy made by the bartender (beer + lime + spice mix, not just beer) IS a cocktail.
+
+   **Wine is NEVER \`cocktails\`.** Wine by the glass, by the bottle, varietal listings (Chardonnay, Pinot, Cabernet, Rosé, sparkling) — all excluded. Champagne by the glass excluded. EXCEPTION: house-made wine preparations like sangria, mulled wine, or wine cocktails — those count because they're built drinks.
 
    **Skip canned/bottled ready-to-drink (RTD) products** — bartender pops a can; doesn't make it. Skip everything in these categories regardless of brand:
    - **Hard seltzers:** High Noon, White Claw, Truly, Sun Cruiser, Surfside, Cape Line, Mighty Swell, Crook & Marker, Vizzy, Topo Chico Hard Seltzer, NUTRL, Happy Dad, Cacti, Stateside, press/tea/vodka canned lines
@@ -173,13 +180,13 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
    - **Generic class language:** "hard lemonade", "hard tea", "hard seltzer", "canned cocktail", "RTD" → exclude
    - Anything marketed as "ready to drink" or sold by the can/bottle as a finished product
 
-   **"House" terms — be strict.** "House pour", "house draft", "house red", "house white" all mean the restaurant's default cheap option — NOT a handcrafted drink. Exclude. Only include "house-made" when followed by a mixed/prepared drink (e.g., "house-made sangria", "house michelada", "house sour mix"). The word that matters is *made*, not *house*.
+   **"House" terms — be strict.** "House pour", "house draft", "house red", "house white" all mean the restaurant's default cheap option — NOT a handcrafted cocktail. Exclude. Only include "house-made" when followed by a mixed/prepared ALCOHOLIC drink (e.g., "house-made sangria", "house michelada", "house bloody mary"). The word that matters is *made + alcohol*, not *house*.
 
-   **When in doubt:** creative name + ingredient list + cocktail price range ($12–$18) → include as \`drinks\`. Listed in a "Canned", "RTD", "Beer", "Wine", "On Tap" section → skip.
+   **When in doubt:** alcohol-based + creative name + ingredient list + cocktail price range ($12–$18) → include as \`cocktails\`. Listed in a "Canned", "RTD", "Beer", "Wine", "On Tap", "Zero Proof", "Mocktails", "Spirit-Free" section → skip.
 
-4. **Skip all OTHER beverages** — no juice, soda, lemonade (unless it's a clearly-labeled house cocktail), plain water, milk, plain tea, plain iced tea, kombucha, energy drinks. Complex non-alcoholic tea drinks on a serious cocktail menu (matcha latte cocktail, kombucha cocktail) count under \`drinks\` only if they have the cocktail-format signals from rule 3.
+4. **Skip all OTHER beverages** — no juice, soda, lemonade, plain water, milk, plain tea, plain iced tea, kombucha, energy drinks, smoothies, frappes, milkshakes (unless an alcoholic milkshake like mudslide). Non-alcoholic beverages have no home in this app's categories — don't try to slot them anywhere.
 
-   **Coffee vs drinks precedence:** if an item is BOTH coffee AND alcoholic (espresso martini, Irish coffee, coffee negroni, white Russian, mudslide), route to \`drinks\` — alcoholic wins. Non-alcoholic coffee stays \`coffee\` (rule 2).
+   **Coffee vs cocktails precedence:** if an item is BOTH coffee AND alcoholic (espresso martini, Irish coffee, coffee negroni, white Russian, mudslide), route to \`cocktails\` — alcoholic wins. Non-alcoholic coffee stays \`coffee\` (rule 2).
 5. **Skip kids meals**
 6. **Skip condiments** — extra sauce, side of dressing, bread roll
 7. **Skip side dishes** — mashed potatoes, green beans, rice, coleslaw, steamed veggies, etc. NOT rateable.
@@ -281,7 +288,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v5|pipeline-v2|desc150+dietary-v2|drinks-v1'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [

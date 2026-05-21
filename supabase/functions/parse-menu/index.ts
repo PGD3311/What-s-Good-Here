@@ -11,7 +11,7 @@ const VALID_CATEGORIES = [
   'apps', 'fries', 'entree', 'dessert', 'donuts', 'pokebowl',
   'asian', 'chicken', 'quesadilla', 'soup',
   'ribs', 'sides', 'duck', 'lamb', 'pork', 'clams',
-  'oysters', 'coffee', 'drinks', 'ice cream', 'beer',
+  'oysters', 'coffee', 'cocktails', 'ice cream', 'beer',
 ]
 
 const MENU_EXTRACTION_PROMPT = `You are a menu data extraction assistant for a food discovery app.
@@ -55,15 +55,15 @@ Given raw menu text from a restaurant, extract every food AND drink item and ret
 | pokebowl | Poke bowls |
 | asian | Asian entrees (pad thai, curry, stir-fry) |
 | soup | Soups (non-chowder) |
-| drinks | Cocktails, mixed drinks, signature drinks, frozen drinks |
-| coffee | Coffee drinks, espresso, lattes |
+| cocktails | Alcoholic cocktails ONLY: classic + signature, spirit-based, bartender-prepared. NOT mocktails, NOT smoothies, NOT non-alcoholic frozen drinks |
+| coffee | Coffee drinks, espresso, lattes (non-alcoholic only — alcoholic coffee drinks like espresso martini go in `cocktails`) |
 | ice cream | Ice cream, gelato, frozen treats, milkshakes |
 | beer | Craft beer, beer flights, specialty brews |
 | quesadilla | Quesadillas |
 
 ## Rules
 
-1. **Include drinks, coffee, beer, and specialty drinks** — these are important categories (use the `drinks` category for cocktails, mixed drinks, frozen drinks)
+1. **Include cocktails, coffee, beer** — these are important categories. Use `cocktails` ONLY for alcoholic bar-prepared drinks. **Explicitly EXCLUDE** anything labeled "mocktail", "zero-proof", "zero proof", "spirit-free", "spirit free", "NA cocktail", "non-alcoholic cocktail", "alcohol-free" — none of these are `cocktails`. Also exclude smoothies, frappes, frozen lemonades, and any non-alcoholic frozen drinks. Use `coffee` for non-alcoholic coffee drinks; alcoholic coffee drinks (espresso martini, Irish coffee) → `cocktails`.
 2. **Skip generic beverages** — no soda, no plain water/juice, no wine by the glass lists
 3. **Skip condiment-level items under ~$4** — extra sauce, bread roll, etc.
 4. **Include substantive sides $4+**
