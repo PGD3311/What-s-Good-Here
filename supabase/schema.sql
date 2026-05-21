@@ -1241,8 +1241,12 @@ BEGIN
     fr.cuisine,
     d.price,
     d.photo_url,
+    -- ELSE 0 (not ELSE 1.0): the outer LEFT JOIN to votes produces a NULL-row when
+    -- a dish has no votes. v.source IS NULL doesn't match the WHEN clauses, so the
+    -- ELSE branch fires for that phantom row. With ELSE 1.0, every 0-vote dish was
+    -- being counted as having 1 vote — corrupting total_votes and downstream rank.
     COALESCE(vs.total_child_votes,
-      SUM(CASE WHEN v.source = 'user' THEN 1.0 WHEN v.source = 'ai_estimated' THEN 0.5 ELSE 1.0 END)
+      SUM(CASE WHEN v.source = 'user' THEN 1.0 WHEN v.source = 'ai_estimated' THEN 0.5 ELSE 0 END)
     )::BIGINT AS total_votes,
     COALESCE(ROUND(
       (SUM(CASE WHEN v.source = 'user' THEN v.rating_10
