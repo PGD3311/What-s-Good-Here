@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { capture } from '../lib/analytics'
@@ -135,13 +135,31 @@ export function RestaurantDetail() {
       })
   }, [restaurant])
 
-  // Auto-detect best default tab: Menu if no votes yet, Top Rated if votes exist
+  // Multi-menu restaurants (e.g. Nancy's: Snack Bar + Upstairs) expose pills
+  // for each menu_group alongside the pooled Top Rated tab. Memoized so it's
+  // a stable dependency for the auto-detect effect below.
+  const menuGroups = useMemo(
+    () => restaurant?.menu_group_order || [],
+    [restaurant?.menu_group_order]
+  )
+  const useMultiMenu = menuGroups.length >= 2
+
+  // Auto-detect best default tab. With votes → Top Rated (pooled). Without:
+  // multi-menu falls to the first group; single-menu falls to the legacy Menu tab.
   useEffect(() => {
     if (activeTab !== null || dishesLoading || !dishes) return
     const hasVotes = dishes.some(d => (d.total_votes || 0) > 0)
+    if (hasVotes) {
+      setActiveTab('top')
+      return
+    }
+    if (useMultiMenu) {
+      setActiveTab(menuGroups[0])
+      return
+    }
     const hasMenuSections = dishes.some(d => d.menu_section)
-    setActiveTab(hasVotes ? 'top' : (hasMenuSections ? 'menu' : 'top'))
-  }, [dishes, dishesLoading, activeTab])
+    setActiveTab(hasMenuSections ? 'menu' : 'top')
+  }, [dishes, dishesLoading, activeTab, useMultiMenu, menuGroups])
 
   // Check if user is physically near this restaurant
   const { nearbyRestaurant } = useNearbyRestaurant()
@@ -564,57 +582,96 @@ export function RestaurantDetail() {
 
       {/* Tab Switcher */}
       <div className="px-4 pt-4">
-        <div
-          className="flex rounded-xl p-1"
-          style={{
-            background: 'var(--color-surface-elevated)',
-            border: '1px solid var(--color-divider)',
-          }}
-          role="tablist"
-          aria-label="Restaurant view"
-          onKeyDown={(e) => {
-            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-            e.preventDefault()
-            const next = (activeTab || 'top') === 'top' ? 'menu' : 'top'
-            setActiveTab(next)
-            requestAnimationFrame(() => {
-              document.getElementById('restaurant-tab-' + next)?.focus()
-            })
-          }}
-        >
-          <button
-            role="tab"
-            aria-selected={(activeTab || 'top') === 'top'}
-            aria-controls="restaurant-tab-panel"
-            id="restaurant-tab-top"
-            tabIndex={(activeTab || 'top') === 'top' ? 0 : -1}
-            onClick={() => setActiveTab('top')}
-            className="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all"
+        {useMultiMenu ? (
+          // Multi-menu restaurants: scrollable filter-pill row. These behave
+          // as filter toggles (aria-pressed), not classic tabs — drops the
+          // tablist semantics intentionally so we don't need full roving-tab
+          // keyboard nav. Standard button focus order is preserved.
+          <div
+            className="flex gap-2 overflow-x-auto"
             style={{
-              background: (activeTab || 'top') === 'top' ? 'var(--color-primary)' : 'transparent',
-              color: (activeTab || 'top') === 'top' ? 'white' : 'var(--color-text-secondary)',
-              boxShadow: 'none',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+            }}
+            aria-label="Filter dishes by menu"
+          >
+            {['top', ...menuGroups].map((tabValue) => {
+              const label = tabValue === 'top' ? 'Top Rated' : tabValue
+              const isActive = (activeTab || 'top') === tabValue
+              return (
+                <button
+                  key={tabValue}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setActiveTab(tabValue)}
+                  className="px-4 py-2 text-sm font-semibold rounded-full transition-all flex-shrink-0 active:scale-95"
+                  style={{
+                    background: isActive ? 'var(--color-primary)' : 'var(--color-surface-elevated)',
+                    color: isActive ? 'white' : 'var(--color-text-secondary)',
+                    border: '1px solid ' + (isActive ? 'var(--color-primary)' : 'var(--color-divider)'),
+                    boxShadow: isActive ? '0 2px 8px -2px rgba(200, 90, 84, 0.4)' : 'none',
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          // Single-menu restaurants: original 2-tab segmented control
+          <div
+            className="flex rounded-xl p-1"
+            style={{
+              background: 'var(--color-surface-elevated)',
+              border: '1px solid var(--color-divider)',
+            }}
+            role="tablist"
+            aria-label="Restaurant view"
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+              e.preventDefault()
+              const next = (activeTab || 'top') === 'top' ? 'menu' : 'top'
+              setActiveTab(next)
+              requestAnimationFrame(() => {
+                document.getElementById('restaurant-tab-' + next)?.focus()
+              })
             }}
           >
-            Top Rated
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'menu'}
-            aria-controls="restaurant-tab-panel"
-            id="restaurant-tab-menu"
-            tabIndex={activeTab === 'menu' ? 0 : -1}
-            onClick={() => setActiveTab('menu')}
-            className="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all"
-            style={{
-              background: activeTab === 'menu' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'menu' ? 'white' : 'var(--color-text-secondary)',
-              boxShadow: activeTab === 'menu' ? '0 2px 8px -2px rgba(200, 90, 84, 0.4)' : 'none',
-            }}
-          >
-            Menu
-          </button>
-        </div>
+            <button
+              role="tab"
+              aria-selected={(activeTab || 'top') === 'top'}
+              aria-controls="restaurant-tab-panel"
+              id="restaurant-tab-top"
+              tabIndex={(activeTab || 'top') === 'top' ? 0 : -1}
+              onClick={() => setActiveTab('top')}
+              className="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all"
+              style={{
+                background: (activeTab || 'top') === 'top' ? 'var(--color-primary)' : 'transparent',
+                color: (activeTab || 'top') === 'top' ? 'white' : 'var(--color-text-secondary)',
+                boxShadow: 'none',
+              }}
+            >
+              Top Rated
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeTab === 'menu'}
+              aria-controls="restaurant-tab-panel"
+              id="restaurant-tab-menu"
+              tabIndex={activeTab === 'menu' ? 0 : -1}
+              onClick={() => setActiveTab('menu')}
+              className="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all"
+              style={{
+                background: activeTab === 'menu' ? 'var(--color-primary)' : 'transparent',
+                color: activeTab === 'menu' ? 'white' : 'var(--color-text-secondary)',
+                boxShadow: activeTab === 'menu' ? '0 2px 8px -2px rgba(200, 90, 84, 0.4)' : 'none',
+              }}
+            >
+              Menu
+            </button>
+          </div>
+        )}
         <div
           className="mt-3 h-px"
           style={{ background: 'linear-gradient(90deg, transparent, var(--color-accent-gold), transparent)' }}
@@ -630,7 +687,6 @@ export function RestaurantDetail() {
       <div
         role="tabpanel"
         id="restaurant-tab-panel"
-        aria-labelledby={(activeTab || 'top') === 'top' ? 'restaurant-tab-top' : 'restaurant-tab-menu'}
       >
       {(activeTab || 'top') === 'top' ? (
         <RestaurantDishes
@@ -647,7 +703,14 @@ export function RestaurantDetail() {
         />
       ) : (
         <RestaurantMenu
-          dishes={dishes}
+          dishes={useMultiMenu && activeTab !== 'menu'
+            // Dishes with menu_group IS NULL show in the first group so
+            // stragglers from un-tagged imports don't disappear from view.
+            ? (dishes || []).filter(d =>
+                d.menu_group === activeTab ||
+                (!d.menu_group && activeTab === menuGroups[0])
+              )
+            : dishes}
           loading={dishesLoading}
           error={dishesError}
           searchQuery={dishSearchQuery}
