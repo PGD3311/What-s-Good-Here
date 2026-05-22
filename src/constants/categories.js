@@ -225,6 +225,18 @@ const DISH_NAME_ICON_RULES = [
   { keyword: 'rice bowl', icon: '/categories/icons/pokebowl.png' },
   { keyword: 'eggs benedict', icon: '/categories/icons/eggs-benedict.png' },
   { keyword: 'ice cream', icon: '/categories/icons/ice-cream.png' },
+  // Drinks — compound terms (specific variants beat single-word fallbacks)
+  { keyword: 'frozen margarita', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frozen daiquiri', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frozen lemonade', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'piña colada', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'pina colada', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'mai tai', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'moscow mule', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'bloody mary', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'old fashioned', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'espresso martini', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'rum punch', icon: '/categories/icons/cocktails.png' },
   // Single keywords
   { keyword: 'benedict', icon: '/categories/icons/eggs-benedict.png' },
   { keyword: 'burrito', icon: '/categories/icons/burrito.png' },
@@ -289,6 +301,26 @@ const DISH_NAME_ICON_RULES = [
   { keyword: 'pie', icon: '/categories/icons/dessert.png' },
   { keyword: 'brownie', icon: '/categories/icons/dessert.png' },
   { keyword: 'cookie', icon: '/categories/icons/dessert.png' },
+  // Drinks — single keywords. Order safe because these aren't substrings of
+  // any food keyword above. Margarita/etc. lose to the "frozen X" compound
+  // variants that appear earlier.
+  { keyword: 'margarita', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'daiquiri', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'martini', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'mojito', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'negroni', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'spritz', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'cosmopolitan', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'sangria', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'painkiller', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'paloma', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'gimlet', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'sidecar', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'boulevardier', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'caipirinha', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'mimosa', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'frosé', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frose', icon: '/categories/icons/frozen_drinks.png' },
 ]
 
 // Match a dish name to an icon based on keywords
@@ -314,27 +346,47 @@ export function getCategoryNeonImage(id) {
 // `category` but the menu section says something more specific (e.g. all of
 // Nancy's drinks are category='cocktails', but the Famous Frozens section
 // wants a frozen-glass icon vs the Cocktails section's collins-glass icon).
-// Keys are normalized (trim + lowercase) so DB drift in casing/whitespace
-// doesn't silently break the lookup.
-const MENU_SECTION_IMAGES = {
-  'famous frozens': '/categories/icons/frozen_drinks.png',
-  'cocktails': '/categories/icons/cocktails.png',
-}
+//
+// Keyword-based so future menus get auto-matched without code changes —
+// "Signature Cocktails", "Classic Cocktails", "Frozen Drinks", etc. all
+// just work the next time menu-refresh ingests them. Order matters: more
+// specific keywords first (e.g. "frozen" before "cocktail" so a section
+// named "Frozen Cocktails" gets the frozen icon).
+const MENU_SECTION_ICON_RULES = [
+  // Frozen drink-y sections only. Avoid bare 'frozen' since that would
+  // false-match dessert sections like 'Frozen Treats' / 'Frozen Desserts'.
+  { keyword: 'frozen cocktail', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frozen drink', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frozens', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'slush', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frosé', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'frose', icon: '/categories/icons/frozen_drinks.png' },
+  // Cocktail-y sections
+  { keyword: 'cocktail', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'martini', icon: '/categories/icons/cocktails.png' },
+  { keyword: 'margarita', icon: '/categories/icons/cocktails.png' },
+]
 
 export function getMenuSectionImage(menuSection) {
   if (!menuSection) return null
   const key = String(menuSection).trim().toLowerCase()
-  const src = MENU_SECTION_IMAGES[key] || null
-  return src ? src + '?v=4' : null
+  for (var i = 0; i < MENU_SECTION_ICON_RULES.length; i++) {
+    if (key.includes(MENU_SECTION_ICON_RULES[i].keyword)) {
+      return MENU_SECTION_ICON_RULES[i].icon + '?v=4'
+    }
+  }
+  return null
 }
 
 // Preload category images for smooth Browse page loading
 export function preloadCategoryImages() {
   const sources = [
     ...Object.values(CATEGORY_IMAGES),
-    ...Object.values(MENU_SECTION_IMAGES),
+    ...MENU_SECTION_ICON_RULES.map(r => r.icon),
   ]
-  sources.forEach(src => {
+  // Dedupe — multiple keywords can point at the same icon.
+  const unique = Array.from(new Set(sources))
+  unique.forEach(src => {
     const img = new Image()
     img.src = src
   })
