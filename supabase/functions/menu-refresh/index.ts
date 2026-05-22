@@ -47,6 +47,62 @@ function sortedArraysEqual(a: string[], b: string[]): boolean {
   return true
 }
 
+// Secondary upsert-match key — collapses dishes that exact-name match misses.
+// MUST stay in sync with normalizeDishKey in ./extractors.ts (which has the
+// Vitest coverage). See test cases there for the rationale on each rule.
+const NORMALIZE_STOPWORDS_INLINE = new Set([
+  'the', 'a', 'an', 'and', 'with', 'of', 'on', 'in', 'or', 'over', 'n',
+  'gf', 'df', 'v', 've', 'vg', 'vgn',
+])
+const NORMALIZE_ABBREV_INLINE: Record<string, string> = {
+  chix: 'chicken', chkn: 'chicken', brgr: 'burger', burg: 'burger',
+}
+const CATEGORY_REDUNDANT_WORDS_INLINE: Record<string, string[]> = {
+  donuts: ['donut', 'donuts'],
+  burger: ['burger', 'burgers'],
+  pizza: ['pizza', 'pizzas'],
+  salad: ['salad', 'salads'],
+  sandwich: ['sandwich', 'sandwiches'],
+  'fish-sandwich': ['sandwich', 'sandwiches'],
+  taco: ['taco', 'tacos'],
+  burrito: ['burrito', 'burritos'],
+  enchiladas: ['enchilada', 'enchiladas'],
+  fries: ['fries'],
+  'onion rings': ['rings'],
+  pasta: ['pasta', 'pastas'],
+  wrap: ['wrap', 'wraps'],
+  wings: ['wings', 'wing'],
+  cookie: ['cookie', 'cookies'],
+}
+const NUMERIC_PAREN_RE_INLINE = /\([^)]*\d[^)]*\)/g
+const ANY_PAREN_RE_INLINE = /\([^)]*\)/g
+
+function normalizeDishKey(rawName: string, category: string | null | undefined): string {
+  if (!rawName) return ''
+  const cat = (category || '').toLowerCase().trim()
+  const lowered = rawName.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+  const protectedParens = lowered.replace(NUMERIC_PAREN_RE_INLINE, (m) => {
+    const digits = m.match(/\d+/g)?.join('-') ?? ''
+    return ` qty${digits} `
+  })
+  const cleaned = protectedParens
+    .replace(ANY_PAREN_RE_INLINE, ' ')
+    .replace(/[*]/g, ' ')
+    .replace(/['’`"]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!cleaned) return ''
+  const redundant = new Set(CATEGORY_REDUNDANT_WORDS_INLINE[cat] || [])
+  const tokens = cleaned
+    .split(' ')
+    .map((t) => NORMALIZE_ABBREV_INLINE[t] ?? t)
+    .filter((t) => t && !NORMALIZE_STOPWORDS_INLINE.has(t))
+  const filtered = tokens.filter((t) => !redundant.has(t))
+  const final = filtered.length > 0 ? filtered : tokens
+  return final.slice().sort().join(' ')
+}
+
 /**
  * Menu Refresh Edge Function
  *
@@ -955,28 +1011,150 @@ async function upsertDishes(
   supabase: ReturnType<typeof createClient>,
   restaurantId: string,
   extracted: MenuExtractionResult
-): Promise<{ inserted: number; updated: number; unchanged: number }> {
-  // Get existing dishes
+): Promise<{ inserted: number; updated: number; unchanged: number; fuzzyMatched: number; batchDedupSkipped: number; crossCategorySkipped: number }> {
+  // Get existing dishes. Ordered by created_at so "first row wins" ties in
+  // the normalized-key lookup are deterministic and stable across runs —
+  // older rows are more likely to be the canonical ones holding votes.
   const { data: existingDishes, error: fetchErr } = await supabase
     .from('dishes')
-    .select('id, name, category, menu_section, price, photo_url, description, dietary_tags')
+    .select('id, name, category, menu_section, price, photo_url, description, dietary_tags, created_at')
     .eq('restaurant_id', restaurantId)
+    .order('created_at', { ascending: true })
 
   if (fetchErr) {
     throw new Error(`Failed to fetch existing dishes: ${fetchErr.message}`)
   }
 
+  // Primary lookup: exact lowercase name (cheap, unambiguous).
+  // Secondary lookup: normalized key — catches near-duplicate name variants
+  // ("Boston Cream" vs "Boston Cream Donut", "Chix Sandwich" vs
+  // "Chicken Sandwich", "Jollof Rice" vs "Jollof Rice (Ghana)") so a refresh
+  // doesn't insert a parallel row for a dish that already exists under a
+  // slightly different spelling. Oldest row wins ties.
   const existingByName = new Map<string, typeof existingDishes[0]>()
+  const existingByNormKey = new Map<string, typeof existingDishes[0]>()
   for (const d of (existingDishes || [])) {
-    existingByName.set(d.name.toLowerCase(), d)
+    // Oldest row wins both maps — guarded by has() so a later same-name row
+    // doesn't overwrite the canonical (vote-bearing) one. The fetch is
+    // ordered by created_at ASC so "first seen" == "oldest".
+    const nameKey = d.name.toLowerCase()
+    if (!existingByName.has(nameKey)) {
+      existingByName.set(nameKey, d)
+    }
+    const normKey = normalizeDishKey(d.name, d.category)
+    if (normKey && !existingByNormKey.has(normKey)) {
+      existingByNormKey.set(normKey, d)
+    }
+  }
+
+  // Within-batch dedup: collapse name-variants the LLM emitted twice in a
+  // single extraction. When two extracted dishes collide on
+  // (category, normalized-key) we keep the one that's most useful to upsert:
+  //   1. Prefer the variant whose name exact-matches an existing DB row
+  //      (stable update target, preserves vote attribution).
+  //   2. Otherwise prefer the variant with more populated fields
+  //      (non-null price, description, non-empty dietary_tags).
+  //   3. Otherwise prefer the longer/more descriptive name.
+  // This avoids silently dropping the better data when the LLM emits both
+  // "Boston Cream" and "Boston Cream Donut" in one extraction.
+  // Weighted by trust: price is the highest-signal column (always sourced
+  // directly from the menu), description is moderately reliable, dietary
+  // tags are the noisiest LLM-derived field. These weights only affect the
+  // within-batch tiebreaker — exact-name matches still dominate.
+  function dataRichness(d: typeof extracted.dishes[0]): number {
+    return (
+      (d.price != null ? 3 : 0) +
+      (d.description ? 2 : 0) +
+      (Array.isArray(d.dietary_tags) && d.dietary_tags.length > 0 ? 1 : 0)
+    )
+  }
+  function shouldReplace(
+    current: typeof extracted.dishes[0],
+    candidate: typeof extracted.dishes[0],
+  ): boolean {
+    const currentExact = existingByName.has(current.name.toLowerCase())
+    const candidateExact = existingByName.has(candidate.name.toLowerCase())
+    if (candidateExact && !currentExact) return true
+    if (currentExact && !candidateExact) return false
+    const curRich = dataRichness(current)
+    const candRich = dataRichness(candidate)
+    if (candRich !== curRich) return candRich > curRich
+    return candidate.name.length > current.name.length
+  }
+
+  const dedupedByBatchKey = new Map<string, typeof extracted.dishes[0]>()
+  const unkeyedDishes: typeof extracted.dishes = []
+  let batchDedupSkipped = 0
+  for (const dish of extracted.dishes) {
+    const dishNormKey = normalizeDishKey(dish.name, dish.category)
+    if (!dishNormKey) {
+      // Names that don't yield a normalized key (e.g. non-Latin or
+      // symbol-only) skip batch-dedup and go straight through.
+      unkeyedDishes.push(dish)
+      continue
+    }
+    const batchKey = `${(dish.category || '').toLowerCase()}|${dishNormKey}`
+    const incumbent = dedupedByBatchKey.get(batchKey)
+    if (!incumbent) {
+      dedupedByBatchKey.set(batchKey, dish)
+    } else if (shouldReplace(incumbent, dish)) {
+      dedupedByBatchKey.set(batchKey, dish)
+      batchDedupSkipped++
+    } else {
+      batchDedupSkipped++
+    }
+  }
+  const candidateDishes = [...dedupedByBatchKey.values(), ...unkeyedDishes]
+
+  // Second-pass dedup: resolve each candidate to its target existing row,
+  // then collapse any candidates that point at the same row. The first-pass
+  // dedup keyed on (category, normKey), so cross-category collisions slip
+  // through (e.g. LLM emits the same dish under both "donuts" and "dessert").
+  // Without this pass we'd update the same DB row twice with last-write-wins
+  // semantics on the category field.
+  type Candidate = typeof extracted.dishes[0]
+  const resolutions: Array<{ dish: Candidate; existing: typeof existingDishes[0] | undefined; viaFuzzy: boolean }> = []
+  const claimedExistingIds = new Map<string, number>()  // existing.id -> resolutions[] index
+  let fuzzyMatchedCount = 0
+  let crossCategorySkipped = 0
+
+  for (const dish of candidateDishes) {
+    const dishNormKey = normalizeDishKey(dish.name, dish.category)
+    let existing = existingByName.get(dish.name.toLowerCase())
+    let viaFuzzy = false
+    if (!existing && dishNormKey) {
+      existing = existingByNormKey.get(dishNormKey)
+      if (existing) viaFuzzy = true
+    }
+
+    if (!existing) {
+      resolutions.push({ dish, existing: undefined, viaFuzzy: false })
+      continue
+    }
+
+    const claimedIdx = claimedExistingIds.get(existing.id)
+    if (claimedIdx === undefined) {
+      claimedExistingIds.set(existing.id, resolutions.length)
+      resolutions.push({ dish, existing, viaFuzzy })
+      if (viaFuzzy) fuzzyMatchedCount++
+    } else {
+      // Collision — two candidates target the same existing row. Keep the
+      // one with richer data (same tiebreaker as the first-pass dedup).
+      const incumbent = resolutions[claimedIdx]
+      if (shouldReplace(incumbent.dish, dish)) {
+        if (incumbent.viaFuzzy) fuzzyMatchedCount--
+        resolutions[claimedIdx] = { dish, existing, viaFuzzy }
+        if (viaFuzzy) fuzzyMatchedCount++
+      }
+      crossCategorySkipped++
+    }
   }
 
   let inserted = 0
   let updated = 0
   let unchanged = 0
 
-  for (const dish of extracted.dishes) {
-    const existing = existingByName.get(dish.name.toLowerCase())
+  for (const { dish, existing } of resolutions) {
 
     if (existing) {
       // Check if anything changed
@@ -1029,7 +1207,14 @@ async function upsertDishes(
       .eq('id', restaurantId)
   }
 
-  return { inserted, updated, unchanged }
+  return {
+    inserted,
+    updated,
+    unchanged,
+    fuzzyMatched: fuzzyMatchedCount,
+    batchDedupSkipped,
+    crossCategorySkipped,
+  }
 }
 
 serve(async (req) => {
@@ -1271,6 +1456,9 @@ serve(async (req) => {
                   resolved_pdf_url: fetchResult.pdfUrl,
                   winning_strategy: 'pdf-direct',
                   attempts: pdfAttempts,
+                  fuzzy_matched: stats.fuzzyMatched,
+                  batch_dedup_skipped: stats.batchDedupSkipped,
+                  cross_category_skipped: stats.crossCategorySkipped,
                 },
                 lock_expires_at: null,
                 updated_at: new Date().toISOString(),
@@ -1278,6 +1466,9 @@ serve(async (req) => {
               results.push({
                 job_id: job.id, status: 'success', restaurant: restaurant.name,
                 dishes: pdfExtracted.dishes.length, inserted: stats.inserted, updated: stats.updated,
+                fuzzy_matched: stats.fuzzyMatched,
+                batch_dedup_skipped: stats.batchDedupSkipped,
+                cross_category_skipped: stats.crossCategorySkipped,
                 strategy: 'pdf-direct',
               })
               continue
@@ -1714,6 +1905,9 @@ serve(async (req) => {
               candidates_found: candidates.length,
               winning_strategy: winningStrategy,
               attempts,
+              fuzzy_matched: stats.fuzzyMatched,
+              batch_dedup_skipped: stats.batchDedupSkipped,
+              cross_category_skipped: stats.crossCategorySkipped,
             },
             lock_expires_at: null,
             updated_at: new Date().toISOString(),
@@ -1722,6 +1916,9 @@ serve(async (req) => {
           results.push({
             job_id: job.id, status: 'success', restaurant: restaurant.name,
             dishes: extracted.dishes.length, inserted: stats.inserted, updated: stats.updated,
+            fuzzy_matched: stats.fuzzyMatched,
+            batch_dedup_skipped: stats.batchDedupSkipped,
+            cross_category_skipped: stats.crossCategorySkipped,
             rendered: renderSucceeded,
             strategy: winningStrategy,
           })
@@ -1836,6 +2033,9 @@ serve(async (req) => {
       inserted?: number
       updated?: number
       unchanged?: number
+      fuzzy_matched?: number
+      batch_dedup_skipped?: number
+      cross_category_skipped?: number
       total_dishes?: number
     }> = []
 
@@ -1951,6 +2151,9 @@ serve(async (req) => {
           inserted: stats.inserted,
           updated: stats.updated,
           unchanged: stats.unchanged,
+          fuzzy_matched: stats.fuzzyMatched,
+          batch_dedup_skipped: stats.batchDedupSkipped,
+          cross_category_skipped: stats.crossCategorySkipped,
           total_dishes: extracted.dishes.length,
         })
       } catch (err) {

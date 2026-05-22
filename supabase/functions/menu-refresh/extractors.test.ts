@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeDescription, sanitizeDietaryTags, sortedArraysEqual, ALLOWED_DIETARY_TAGS } from './extractors.ts'
+import { sanitizeDescription, sanitizeDietaryTags, sortedArraysEqual, ALLOWED_DIETARY_TAGS, normalizeDishKey } from './extractors.ts'
 
 describe('sanitizeDescription', () => {
   it('returns null for non-string input', () => {
@@ -115,5 +115,105 @@ describe('sortedArraysEqual', () => {
   it('returns false when one is empty and other is not', () => {
     expect(sortedArraysEqual([], ['vegan'])).toBe(false)
     expect(sortedArraysEqual(['vegan'], [])).toBe(false)
+  })
+})
+
+describe('normalizeDishKey', () => {
+  // SHOULD MERGE: real duplicate patterns observed in production data
+  it('collapses category-suffix variants', () => {
+    expect(normalizeDishKey('Boston Cream', 'donuts'))
+      .toBe(normalizeDishKey('Boston Cream Donut', 'donuts'))
+    expect(normalizeDishKey('Old Fashioned', 'donuts'))
+      .toBe(normalizeDishKey('Old Fashioned Donut', 'donuts'))
+  })
+
+  it('strips identity-neutral parenthetical tags (region, notes)', () => {
+    expect(normalizeDishKey('Jollof Rice', 'entree'))
+      .toBe(normalizeDishKey('Jollof Rice (Ghana)', 'entree'))
+    expect(normalizeDishKey('SOS Pwa', 'entree'))
+      .toBe(normalizeDishKey('SOS Pwa (Haiti)', 'entree'))
+  })
+
+  it('strips asterisks (raw/footnote markers)', () => {
+    expect(normalizeDishKey('Littleneck Clams', 'clams'))
+      .toBe(normalizeDishKey('Littleneck Clams*', 'clams'))
+  })
+
+  it('expands common abbreviations', () => {
+    expect(normalizeDishKey('Chix Sandwich', 'sandwich'))
+      .toBe(normalizeDishKey('Chicken Sandwich', 'sandwich'))
+    expect(normalizeDishKey('Brgr Wrap', 'wrap'))
+      .toBe(normalizeDishKey('Burger Wrap', 'wrap'))
+  })
+
+  it('normalizes punctuation and connective words', () => {
+    expect(normalizeDishKey('Fish & Chips', 'fish-and-chips'))
+      .toBe(normalizeDishKey('Fish-n- Chips', 'fish-and-chips'))
+    expect(normalizeDishKey('Fish and Chips', 'fish-and-chips'))
+      .toBe(normalizeDishKey('Fish & Chips', 'fish-and-chips'))
+  })
+
+  it('normalizes apostrophes and quote variants', () => {
+    expect(normalizeDishKey("Atria's Truffle Fries", 'fries'))
+      .toBe(normalizeDishKey("Atrias Truffle Fries", 'fries'))
+    expect(normalizeDishKey('Atria’s Truffle Fries', 'fries'))
+      .toBe(normalizeDishKey("Atria's Truffle Fries", 'fries'))
+  })
+
+  it('normalizes diacritics so accents do not split keys', () => {
+    expect(normalizeDishKey('Jalapeño Poppers', 'appetizer'))
+      .toBe(normalizeDishKey('Jalapeno Poppers', 'appetizer'))
+    expect(normalizeDishKey('Café Latte', 'coffee'))
+      .toBe(normalizeDishKey('Cafe Latte', 'coffee'))
+  })
+
+  it('treats whitespace and minor punctuation differences as equal', () => {
+    expect(normalizeDishKey('Hummus ,Veggie & Quinoa Wrap', 'wrap'))
+      .toBe(normalizeDishKey('Hummus, Veggie & Quinoa Wrap', 'wrap'))
+  })
+
+  // SHOULD NOT MERGE: legitimately different dishes
+  it('keeps size modifiers distinct', () => {
+    expect(normalizeDishKey('Half Roast Chicken', 'chicken'))
+      .not.toBe(normalizeDishKey('Whole Roast Chicken', 'chicken'))
+  })
+
+  it('keeps kid/adult portion variants distinct', () => {
+    expect(normalizeDishKey('Kids Burger', 'burger'))
+      .not.toBe(normalizeDishKey('Burger', 'burger'))
+  })
+
+  it('keeps modifier-prefixed versions distinct from base', () => {
+    expect(normalizeDishKey('Cod Sandwich', 'fish-sandwich'))
+      .not.toBe(normalizeDishKey('Fat Cod Sandwich', 'fish-sandwich'))
+  })
+
+  it('preserves numeric/quantity parentheticals', () => {
+    // Quantity is identity-bearing — must NOT collapse different counts.
+    expect(normalizeDishKey('Tacos (3)', 'taco'))
+      .not.toBe(normalizeDishKey('Tacos (6)', 'taco'))
+    expect(normalizeDishKey('Wings (10 pc)', 'wings'))
+      .not.toBe(normalizeDishKey('Wings (6 pc)', 'wings'))
+  })
+
+  it('strips dietary shorthand letters (already in dietary_tags column)', () => {
+    // "Plain GF" and "Plain GF Donut" are the same dish; the gluten-free
+    // marker belongs in dietary_tags, not the name.
+    expect(normalizeDishKey('Plain GF', 'donuts'))
+      .toBe(normalizeDishKey('Plain GF Donut', 'donuts'))
+  })
+
+  it('returns empty string for empty/whitespace input', () => {
+    expect(normalizeDishKey('', 'donuts')).toBe('')
+    expect(normalizeDishKey('   ', 'donuts')).toBe('')
+    // Caller must guard against empty keys to avoid bad matches.
+  })
+
+  it('is stable when category is null/undefined', () => {
+    expect(normalizeDishKey('Boston Cream Donut', null))
+      .toBe(normalizeDishKey('Boston Cream Donut', undefined))
+    // Without the donuts category, "donut" no longer strips.
+    expect(normalizeDishKey('Boston Cream Donut', null))
+      .not.toBe(normalizeDishKey('Boston Cream', null))
   })
 })
