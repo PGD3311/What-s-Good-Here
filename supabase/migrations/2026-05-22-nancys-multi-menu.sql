@@ -15,7 +15,7 @@
 -- ROLLBACK:
 --   ALTER TABLE dishes DROP COLUMN IF EXISTS menu_group;
 --   ALTER TABLE restaurants DROP COLUMN IF EXISTS menu_group_order;
---   -- The 139 inserted Upstairs dishes would need to be deleted manually:
+--   -- The 113 inserted Upstairs dishes would need to be deleted manually:
 --   -- DELETE FROM dishes WHERE restaurant_id = (SELECT id FROM restaurants
 --   --   WHERE name = 'Nancy''s Restaurant') AND menu_group = 'Upstairs';
 --   -- (only safe if no votes have landed against them yet)
@@ -150,11 +150,10 @@ WHERE name = 'Nancy''s Restaurant';
 
 -- =============================================================
 -- 5. Insert Upstairs dishes
--- Source: 2026 Open Menu PDF (food + drinks). Commodity bottled beers
--- (Budweiser, Coors, Heineken etc.) intentionally omitted — they add noise
--- without rating signal. Beer/wine use category='cocktails' as a placeholder
--- until a proper beer/wine taxonomy is added (see TODO).
--- Each insert is guarded by NOT EXISTS so the migration is safely re-runnable.
+-- Source: 2026 Open Menu PDF. Food + signature cocktails + frozens only —
+-- standard beer/wine list intentionally omitted (low rating signal, list
+-- changes seasonally). Each insert is guarded by NOT EXISTS so the
+-- migration is safely re-runnable.
 -- =============================================================
 DO $$
 DECLARE
@@ -411,82 +410,21 @@ BEGIN
     WHERE d.restaurant_id = nancys_id AND d.name = x.name AND d.menu_group = 'Upstairs'
   );
 
-  -- Wine: Sparkling & Rosé (price = glass, full glass|bottle in description)
-  INSERT INTO dishes (restaurant_id, name, category, menu_section, menu_group, price, description)
-  SELECT nancys_id, x.name, 'cocktails', 'Wine - Sparkling & Rosé', 'Upstairs', x.price, x.description
-  FROM (VALUES
-    ('Prosecco, Maschio', 10, 'Veneto · Glass $10'),
-    ('Goldeneye Brut Rosé', 14, 'Sparkling Rosé · North Coast · Glass $14 | Bottle $52'),
-    ('Château Sainte Marguerite', 14, 'Rosé · Côtes de Provence · Glass $14 | Bottle $52'),
-    ('J. de Villebois Sancerre Rosé', 16, 'Rosé · Sancerre · Glass $16 | Bottle $60'),
-    ('Perrier-Jouët Grand Brut', 140, 'Champagne · Bottle only · $140')
-  ) AS x(name, price, description)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM dishes d
-    WHERE d.restaurant_id = nancys_id AND d.name = x.name AND d.menu_group = 'Upstairs'
-  );
-
-  -- Wine: White (price = glass, full glass|bottle in description)
-  INSERT INTO dishes (restaurant_id, name, category, menu_section, menu_group, price, description)
-  SELECT nancys_id, x.name, 'cocktails', 'Wine - White', 'Upstairs', x.price, x.description
-  FROM (VALUES
-    ('André & Michel Quenard Chignin', 12, 'Jacquère · Savoie · Glass $12 | Bottle $44'),
-    ('Mezzacorona Pinot Grigio', 10, 'Trentino · Glass $10 | Bottle $36'),
-    ('Sassoregale Vermentino', 12, 'Maremma Toscana · Glass $12 | Bottle $44'),
-    ('Delaille Sauvignon Blanc', 12, 'Val de Loire · Glass $12 | Bottle $44'),
-    ('Kim Crawford Sauvignon Blanc', 14, 'Marlborough · Glass $14 | Bottle $52'),
-    ('Frog''s Leap Sauvignon Blanc', 16, 'Rutherford · Glass $16 | Bottle $60'),
-    ('Sonoma-Cutrer Chardonnay', 12, 'Sonoma Coast · Glass $12 | Bottle $44'),
-    ('Diatom Chardonnay', 16, 'Santa Barbara · Glass $16 | Bottle $60'),
-    ('La Cadette Bourgogne Blanc', 18, 'Chardonnay · Burgundy · Glass $18 | Bottle $68'),
-    ('Alois Lageder White Blend', 12, 'Trentino-Alto Adige · Glass $12 | Bottle $44')
-  ) AS x(name, price, description)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM dishes d
-    WHERE d.restaurant_id = nancys_id AND d.name = x.name AND d.menu_group = 'Upstairs'
-  );
-
-  -- Wine: Red (price = glass, full glass|bottle in description)
-  INSERT INTO dishes (restaurant_id, name, category, menu_section, menu_group, price, description)
-  SELECT nancys_id, x.name, 'cocktails', 'Wine - Red', 'Upstairs', x.price, x.description
-  FROM (VALUES
-    ('Lapierre Raisins Gaulois', 14, 'Gamay · Loire Valley · Glass $14 | Bottle $52'),
-    ('Paitin Starda', 14, 'Nebbiolo · Langhe · Glass $14 | Bottle $52'),
-    ('Bouchard Aîné & Fils Pinot Noir', 12, 'Vin de France · Glass $12 | Bottle $44'),
-    ('Violet Hill Pinot Noir', 14, 'Santa Barbara County · Glass $14 | Bottle $52'),
-    ('Hess Maverick Cabernet Sauvignon', 14, 'Paso Robles · Glass $14 | Bottle $52')
-  ) AS x(name, price, description)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM dishes d
-    WHERE d.restaurant_id = nancys_id AND d.name = x.name AND d.menu_group = 'Upstairs'
-  );
-
-  -- Beer: Drafts (regional/distinctive brews only — skipping commodity bottles
-  -- like Bud/Coors/Heineken etc. which add noise without rating signal)
-  INSERT INTO dishes (restaurant_id, name, category, menu_section, menu_group, price, description)
-  SELECT nancys_id, x.name, 'cocktails', 'Beer - Drafts', 'Upstairs', NULL, x.description
-  FROM (VALUES
-    ('Nancy''s HPA', 'Harpoon · Boston, MA · 5%'),
-    ('East Chop Lighthouse', 'Offshore · Oak Bluffs, MA · 4.2%'),
-    ('Voodoo Ranger Juicy Haze IPA', 'Fort Collins, CO · 7.5%'),
-    ('Blue Moon', 'Denver, CO · 5.4%'),
-    ('Pactolian Pilsner', 'Austin Street · Portland, ME · 5%'),
-    ('Summer Rays Golden Ale', 'Cisco · Nantucket, MA · 4.4%')
-  ) AS x(name, description)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM dishes d
-    WHERE d.restaurant_id = nancys_id AND d.name = x.name AND d.menu_group = 'Upstairs'
-  );
+  -- Beer + wine intentionally omitted. Considered but dropped after launch
+  -- review: rating signal on standard wine/beer pours is low, and the wine
+  -- list is too long/seasonal to be worth maintaining as discrete dishes.
+  -- Signature cocktails + frozens stay because they're house creations with
+  -- real rating value.
 
 END $$;
 
 -- =============================================================
 -- Verification queries (run these after the migration to sanity-check)
 -- =============================================================
--- 1. Dish counts by group. Expected: Snack Bar: 49, Upstairs: 139
+-- 1. Dish counts by group. Expected: Snack Bar: 49, Upstairs: 113
 --    (Upstairs breakdown: 14 apps + 9 handhelds + 4 salads + 7 entrees + 6 fried
 --     + 4 lobster + 8 sushi apps + 9 specialty rolls + 8 plates + 11 nigiri
---     + 16 sushi rolls + 6 frozens + 11 cocktails + 20 wines + 6 drafts = 139)
+--     + 16 sushi rolls + 6 frozens + 11 cocktails = 113)
 -- SELECT menu_group, COUNT(*) FROM dishes
 --   WHERE restaurant_id = (SELECT id FROM restaurants WHERE name = 'Nancy''s Restaurant')
 --   GROUP BY menu_group;
