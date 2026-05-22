@@ -310,9 +310,31 @@ export function getCategoryNeonImage(id) {
   return src ? src + '?v=4' : null
 }
 
+// menu_section → icon overrides. Useful when multiple dishes share the same
+// `category` but the menu section says something more specific (e.g. all of
+// Nancy's drinks are category='cocktails', but the Famous Frozens section
+// wants a frozen-glass icon vs the Cocktails section's collins-glass icon).
+// Keys are normalized (trim + lowercase) so DB drift in casing/whitespace
+// doesn't silently break the lookup.
+const MENU_SECTION_IMAGES = {
+  'famous frozens': '/categories/icons/frozen_drinks.png',
+  'cocktails': '/categories/icons/cocktails.png',
+}
+
+export function getMenuSectionImage(menuSection) {
+  if (!menuSection) return null
+  const key = String(menuSection).trim().toLowerCase()
+  const src = MENU_SECTION_IMAGES[key] || null
+  return src ? src + '?v=4' : null
+}
+
 // Preload category images for smooth Browse page loading
 export function preloadCategoryImages() {
-  Object.values(CATEGORY_IMAGES).forEach(src => {
+  const sources = [
+    ...Object.values(CATEGORY_IMAGES),
+    ...Object.values(MENU_SECTION_IMAGES),
+  ]
+  sources.forEach(src => {
     const img = new Image()
     img.src = src
   })

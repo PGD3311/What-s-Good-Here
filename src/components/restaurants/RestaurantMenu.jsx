@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MIN_VOTES_FOR_RANKING } from '../../constants/app'
 import { getRatingColor } from '../../utils/ranking'
+import { getMenuSectionImage } from '../../constants/categories'
 
 // Split-pane restaurant menu: section nav on left, dishes on right
 export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuSectionOrder = [] }) {
@@ -263,6 +264,7 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
             const displayRating = (dish.has_variants && dish.best_variant_rating)
               ? dish.best_variant_rating
               : dish.avg_rating
+            const sectionIcon = getMenuSectionImage(dish.menu_section)
 
             return (
               <button
@@ -279,6 +281,16 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
+                      {sectionIcon && (
+                        <img
+                          src={sectionIcon}
+                          alt=""
+                          aria-hidden="true"
+                          loading="lazy"
+                          className="flex-shrink-0 object-contain"
+                          style={{ width: '18px', height: '18px' }}
+                        />
+                      )}
                       <span
                         className="font-semibold"
                         style={{

@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { getRatingColor } from '../utils/ranking'
-import { getCategoryNeonImage, getCategoryEmoji, getDishNameIcon } from '../constants/categories'
+import { getCategoryNeonImage, getCategoryEmoji, getDishNameIcon, getMenuSectionImage } from '../constants/categories'
 import { RestaurantAvatar } from './RestaurantAvatar'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
@@ -63,6 +63,14 @@ export const DishListItem = memo(function DishListItem({
   const orderUrl = dish.order_url
   const restaurantLat = dish.restaurant_lat || dish.lat
   const restaurantLng = dish.restaurant_lng || dish.lng
+
+  // Resolve icon once, reuse across both icon render paths (category-icon
+  // mode and photo-thumbnail-fallback mode below). Precedence:
+  // dish-name keyword > menu_section override > category default.
+  const resolvedIcon =
+    getDishNameIcon(dishName) ||
+    getMenuSectionImage(dish.menu_section) ||
+    getCategoryNeonImage(category)
 
   var handleClick = onClick || function () { navigate('/dish/' + dishId) }
 
@@ -127,10 +135,11 @@ export const DishListItem = memo(function DishListItem({
           className="flex-shrink-0 flex items-center justify-center"
           style={{ width: isPodium ? '72px' : '64px', height: isPodium ? '72px' : '64px', marginLeft: '4px' }}
         >
-          {(getDishNameIcon(dishName) || getCategoryNeonImage(category)) ? (
+          {resolvedIcon ? (
             <img
-              src={getDishNameIcon(dishName) || getCategoryNeonImage(category)}
+              src={resolvedIcon}
               alt=""
+              aria-hidden="true"
               className="w-full h-full object-contain"
               loading="lazy"
             />
@@ -352,10 +361,11 @@ export const DishListItem = memo(function DishListItem({
           >
             {photoUrl ? (
               <img src={photoUrl} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
-            ) : (getDishNameIcon(dishName) || getCategoryNeonImage(category)) ? (
+            ) : resolvedIcon ? (
               <img
-                src={getDishNameIcon(dishName) || getCategoryNeonImage(category)}
+                src={resolvedIcon}
                 alt=""
+                aria-hidden="true"
                 className="object-contain"
                 style={{ width: '56px', height: '56px' }}
                 loading="lazy"
