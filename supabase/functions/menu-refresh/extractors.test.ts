@@ -127,11 +127,36 @@ describe('normalizeDishKey', () => {
       .toBe(normalizeDishKey('Old Fashioned Donut', 'donuts'))
   })
 
-  it('strips identity-neutral parenthetical tags (region, notes)', () => {
+  it('keeps non-numeric parenthetical content as identity-bearing', () => {
+    // Region tags differ but the key conservatively keeps them separate —
+    // we can't tell "(Ghana)" (identity-neutral) from "(Shrimp)" (identity-
+    // bearing modifier) without a knowledge base. Cleanup happens in the
+    // separate cleanup-duplicate-dishes script which uses price as the gate.
     expect(normalizeDishKey('Jollof Rice', 'entree'))
-      .toBe(normalizeDishKey('Jollof Rice (Ghana)', 'entree'))
+      .not.toBe(normalizeDishKey('Jollof Rice (Ghana)', 'entree'))
     expect(normalizeDishKey('SOS Pwa', 'entree'))
-      .toBe(normalizeDishKey('SOS Pwa (Haiti)', 'entree'))
+      .not.toBe(normalizeDishKey('SOS Pwa (Haiti)', 'entree'))
+  })
+
+  it('keeps protein/portion variants in parens distinct', () => {
+    // Critical false-positive guard — Sharky's Cantina and similar
+    // menus offer the same dish with different proteins at different
+    // prices. These must NOT collapse.
+    expect(normalizeDishKey('Loaded Quesadilla Plato (Shrimp)', 'quesadilla'))
+      .not.toBe(normalizeDishKey('Loaded Quesadilla Plato (Steak)', 'quesadilla'))
+    expect(normalizeDishKey('Jumbo Shrimp Cocktail (Half Dozen)', 'shrimp'))
+      .not.toBe(normalizeDishKey('Jumbo Shrimp Cocktail (Dozen)', 'shrimp'))
+    expect(normalizeDishKey('French Onion Soup (Bowl)', 'apps'))
+      .not.toBe(normalizeDishKey('French Onion Soup (Cup)', 'apps'))
+  })
+
+  it('keeps dietary-marker variants distinct', () => {
+    // "GF Boston Cream" at $4 and "Boston Cream" at $3.50 are different
+    // SKUs — the marker is price-bearing identity.
+    expect(normalizeDishKey('GF Boston Cream', 'donuts'))
+      .not.toBe(normalizeDishKey('Boston Cream', 'donuts'))
+    expect(normalizeDishKey('Truffled Chicken Frites GF', 'chicken'))
+      .not.toBe(normalizeDishKey('Truffled Chicken Frites', 'chicken'))
   })
 
   it('strips asterisks (raw/footnote markers)', () => {

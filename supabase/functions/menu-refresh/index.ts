@@ -52,7 +52,6 @@ function sortedArraysEqual(a: string[], b: string[]): boolean {
 // Vitest coverage). See test cases there for the rationale on each rule.
 const NORMALIZE_STOPWORDS_INLINE = new Set([
   'the', 'a', 'an', 'and', 'with', 'of', 'on', 'in', 'or', 'over', 'n',
-  'gf', 'df', 'v', 've', 'vg', 'vgn',
 ])
 const NORMALIZE_ABBREV_INLINE: Record<string, string> = {
   chix: 'chicken', chkn: 'chicken', brgr: 'burger', burg: 'burger',
@@ -75,7 +74,6 @@ const CATEGORY_REDUNDANT_WORDS_INLINE: Record<string, string[]> = {
   cookie: ['cookie', 'cookies'],
 }
 const NUMERIC_PAREN_RE_INLINE = /\([^)]*\d[^)]*\)/g
-const ANY_PAREN_RE_INLINE = /\([^)]*\)/g
 
 function normalizeDishKey(rawName: string, category: string | null | undefined): string {
   if (!rawName) return ''
@@ -86,7 +84,6 @@ function normalizeDishKey(rawName: string, category: string | null | undefined):
     return ` qty${digits} `
   })
   const cleaned = protectedParens
-    .replace(ANY_PAREN_RE_INLINE, ' ')
     .replace(/[*]/g, ' ')
     .replace(/['’`"]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
@@ -1011,7 +1008,7 @@ async function upsertDishes(
   supabase: ReturnType<typeof createClient>,
   restaurantId: string,
   extracted: MenuExtractionResult
-): Promise<{ inserted: number; updated: number; unchanged: number; fuzzyMatched: number; batchDedupSkipped: number; crossCategorySkipped: number }> {
+): Promise<{ inserted: number; updated: number; unchanged: number; fuzzyMatched: number; batchDedupSkipped: number; crossCategorySkipped: number; priceGateRejected: number }> {
   // Get existing dishes. Ordered by created_at so "first row wins" ties in
   // the normalized-key lookup are deterministic and stable across runs —
   // older rows are more likely to be the canonical ones holding votes.
@@ -1093,10 +1090,28 @@ async function upsertDishes(
       unkeyedDishes.push(dish)
       continue
     }
+    // Include price in the batch key when both incumbent and candidate
+    // have explicit prices — this prevents collapsing size/protein
+    // variants the LLM emitted as separate items at different prices.
+    // When either price is null, fall back to normKey-only matching so
+    // the better-data row still wins the tiebreaker.
     const batchKey = `${(dish.category || '').toLowerCase()}|${dishNormKey}`
     const incumbent = dedupedByBatchKey.get(batchKey)
     if (!incumbent) {
       dedupedByBatchKey.set(batchKey, dish)
+    } else if (incumbent.price != null && dish.price != null && Math.abs(incumbent.price - dish.price) > 0.01) {
+      // Price disagreement — these are different SKUs, both keep going.
+      // Re-key the second under a price-suffixed batch key so it survives
+      // but still gets deduped against any subsequent identical-price hits.
+      const suffixedKey = `${batchKey}|p${dish.price}`
+      if (!dedupedByBatchKey.has(suffixedKey)) {
+        dedupedByBatchKey.set(suffixedKey, dish)
+      } else if (shouldReplace(dedupedByBatchKey.get(suffixedKey)!, dish)) {
+        dedupedByBatchKey.set(suffixedKey, dish)
+        batchDedupSkipped++
+      } else {
+        batchDedupSkipped++
+      }
     } else if (shouldReplace(incumbent, dish)) {
       dedupedByBatchKey.set(batchKey, dish)
       batchDedupSkipped++
@@ -1118,13 +1133,30 @@ async function upsertDishes(
   let fuzzyMatchedCount = 0
   let crossCategorySkipped = 0
 
+  // Price-equality gate for fuzzy matches — both null treated as "no
+  // signal" (allow), but two explicit prices that disagree means these
+  // are different SKUs (e.g., "GF Boston Cream" $4 vs "Boston Cream"
+  // $3.50, or "Loaded Plato (Shrimp)" $25 vs "(Steak)" $24). Exact-name
+  // matches bypass this gate because the name itself is strong evidence.
+  const PRICE_TOL = 0.01
+  function pricesAgree(a: number | null | undefined, b: number | null | undefined): boolean {
+    if (a == null || b == null) return true
+    return Math.abs(a - b) <= PRICE_TOL
+  }
+
+  let priceGateRejected = 0
   for (const dish of candidateDishes) {
     const dishNormKey = normalizeDishKey(dish.name, dish.category)
     let existing = existingByName.get(dish.name.toLowerCase())
     let viaFuzzy = false
     if (!existing && dishNormKey) {
-      existing = existingByNormKey.get(dishNormKey)
-      if (existing) viaFuzzy = true
+      const fuzzyCandidate = existingByNormKey.get(dishNormKey)
+      if (fuzzyCandidate && pricesAgree(dish.price ?? null, fuzzyCandidate.price ?? null)) {
+        existing = fuzzyCandidate
+        viaFuzzy = true
+      } else if (fuzzyCandidate) {
+        priceGateRejected++
+      }
     }
 
     if (!existing) {
@@ -1214,6 +1246,7 @@ async function upsertDishes(
     fuzzyMatched: fuzzyMatchedCount,
     batchDedupSkipped,
     crossCategorySkipped,
+    priceGateRejected,
   }
 }
 
@@ -1459,6 +1492,7 @@ serve(async (req) => {
                   fuzzy_matched: stats.fuzzyMatched,
                   batch_dedup_skipped: stats.batchDedupSkipped,
                   cross_category_skipped: stats.crossCategorySkipped,
+                  price_gate_rejected: stats.priceGateRejected,
                 },
                 lock_expires_at: null,
                 updated_at: new Date().toISOString(),
@@ -1469,6 +1503,7 @@ serve(async (req) => {
                 fuzzy_matched: stats.fuzzyMatched,
                 batch_dedup_skipped: stats.batchDedupSkipped,
                 cross_category_skipped: stats.crossCategorySkipped,
+                price_gate_rejected: stats.priceGateRejected,
                 strategy: 'pdf-direct',
               })
               continue
@@ -1908,6 +1943,7 @@ serve(async (req) => {
               fuzzy_matched: stats.fuzzyMatched,
               batch_dedup_skipped: stats.batchDedupSkipped,
               cross_category_skipped: stats.crossCategorySkipped,
+              price_gate_rejected: stats.priceGateRejected,
             },
             lock_expires_at: null,
             updated_at: new Date().toISOString(),
@@ -1919,6 +1955,7 @@ serve(async (req) => {
             fuzzy_matched: stats.fuzzyMatched,
             batch_dedup_skipped: stats.batchDedupSkipped,
             cross_category_skipped: stats.crossCategorySkipped,
+            price_gate_rejected: stats.priceGateRejected,
             rendered: renderSucceeded,
             strategy: winningStrategy,
           })
@@ -2036,6 +2073,7 @@ serve(async (req) => {
       fuzzy_matched?: number
       batch_dedup_skipped?: number
       cross_category_skipped?: number
+      price_gate_rejected?: number
       total_dishes?: number
     }> = []
 
@@ -2154,6 +2192,7 @@ serve(async (req) => {
           fuzzy_matched: stats.fuzzyMatched,
           batch_dedup_skipped: stats.batchDedupSkipped,
           cross_category_skipped: stats.crossCategorySkipped,
+          price_gate_rejected: stats.priceGateRejected,
           total_dishes: extracted.dishes.length,
         })
       } catch (err) {

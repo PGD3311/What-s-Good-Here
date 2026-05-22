@@ -40,11 +40,13 @@ export function sortedArraysEqual(a: string[], b: string[]): boolean {
   return true
 }
 
-// Tokens collapsed away during normalization. Glue words plus dietary
-// shorthand letters that belong in dietary_tags, not the name.
+// Glue words collapsed away during normalization. Dietary shorthand
+// letters (GF, V, VG, etc.) are intentionally NOT in this list — they
+// are price-bearing identity tokens in practice (e.g., "GF Boston Cream"
+// at $4 vs "Boston Cream" at $3.50 are different SKUs, not the same dish
+// with a redundant marker).
 const NORMALIZE_STOPWORDS = new Set([
   'the', 'a', 'an', 'and', 'with', 'of', 'on', 'in', 'or', 'over', 'n',
-  'gf', 'df', 'v', 've', 'vg', 'vgn',
 ])
 
 // Common menu-code abbreviations that get expanded so "Chix Wrap" matches
@@ -81,11 +83,14 @@ const CATEGORY_REDUNDANT_WORDS: Record<string, string[]> = {
 }
 
 // Matches parenthetical groups that contain at least one digit — used to
-// PRESERVE quantity/size info like "(3)", "(10 pc)", "(7-8 oz)". Identity-
-// bearing parentheticals (counts, sizes, weights) should stay; identity-
-// neutral parentheticals (region tags, descriptive notes) get stripped.
+// collapse quantity/size info like "(3)" or "(10 pc)" into a single qty
+// token so different counts stay distinct. Non-numeric parentheticals
+// (e.g., "(Shrimp)", "(Half Dozen)", "(Ghana)") are LEFT IN PLACE — we
+// can't reliably distinguish identity-neutral region tags from identity-
+// bearing modifiers like protein options or portion sizes without a
+// knowledge base. Erring on the side of "keep separate" prevents the
+// upsert from silently merging different SKUs at different prices.
 const NUMERIC_PAREN_RE = /\([^)]*\d[^)]*\)/g
-const ANY_PAREN_RE = /\([^)]*\)/g
 
 /**
  * Build a normalized matching key for a dish name. Two dishes with the same
@@ -110,20 +115,21 @@ export function normalizeDishKey(rawName: string, category: string | null | unde
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
 
-  // Step 2: protect parentheticals containing digits (quantity/size info
-  // like "(3)" or "(10 pc)") by collapsing their contents into a single
-  // identity token before stripping other parens. We replace e.g.
-  // "Tacos (3)" with "tacos qty3"; quantity differences then survive
-  // the rest of the pipeline.
+  // Step 2: collapse numeric parens to qty tokens so quantity differences
+  // ("(3)" vs "(6)") survive the rest of the pipeline. Non-numeric parens
+  // are LEFT IN PLACE — their contents become regular tokens that
+  // differentiate variants like "(Shrimp)" vs "(Steak)" or "(Half Dozen)"
+  // vs "(Dozen)".
   const protectedParens = lowered.replace(NUMERIC_PAREN_RE, (m) => {
     const digits = m.match(/\d+/g)?.join('-') ?? ''
     return ` qty${digits} `
   })
 
-  // Step 3: strip remaining (non-numeric) parentheticals, asterisks,
-  // apostrophes, and collapse punctuation.
+  // Step 3: strip asterisks, apostrophes, and remaining punctuation.
+  // Paren BRACKETS are stripped here (punctuation), but their contents
+  // were already preserved as plain tokens by step 2 (for numeric) or
+  // left in place (for non-numeric).
   const cleaned = protectedParens
-    .replace(ANY_PAREN_RE, ' ')
     .replace(/[*]/g, ' ')
     .replace(/['’`"]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
