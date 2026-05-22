@@ -29,6 +29,13 @@ ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS menu_group_order TEXT[] DEFAULT
 -- =============================================================
 -- 2. Replace get_restaurant_dishes RPC to project menu_group
 -- =============================================================
+-- DROP first: CREATE OR REPLACE FUNCTION cannot change the shape of an
+-- existing RETURNS TABLE. We're adding the menu_group column, so the
+-- shape changes and Postgres rejects the replace. Dropping is safe here
+-- because we recreate immediately after, in the same transaction, with
+-- the same name + arg signature; existing callers see no downtime.
+DROP FUNCTION IF EXISTS get_restaurant_dishes(UUID);
+
 CREATE OR REPLACE FUNCTION get_restaurant_dishes(
   p_restaurant_id UUID
 )
