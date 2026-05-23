@@ -211,7 +211,7 @@ export const HomeListMode = memo(function HomeListMode({
 
             {/* Top 10 carousel — swipe between Near You, Pizza, Burgers, etc. */}
             <div id="top10-carousel">
-              <Top10Carousel ref={carouselRef} location={location} radius={radius} onCategoryChange={onCategoryChange} />
+              <Top10Carousel ref={carouselRef} location={location} radius={radius} dietaryTags={dietaryTags} onCategoryChange={onCategoryChange} />
             </div>
           </>
         ) : rankedError ? (

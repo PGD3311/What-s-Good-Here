@@ -25,7 +25,7 @@ var LOAD_MORE_COUNT = 5
  * is at most 3 queries. React Query caches by key so scrolling back to a
  * visited tab is instant.
  */
-export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius, onCategoryChange }, ref) {
+export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius, onCategoryChange, dietaryTags = null }, ref) {
   var [activeIndex, setActiveIndex] = useState(0)
   var [limits, setLimits] = useState({}) // { tabId: visibleCount }
   var scrollRef = useRef(null)
@@ -104,7 +104,7 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
   // Parent fetches the active tab's data for the count badge. React Query
   // dedupes — the same query key from CarouselTabContent hits the cache.
   var activeCategoryFilter = activeTab.id === 'nearby' ? null : activeTab.id
-  var activeDishesQuery = useDishes(location, radius, activeCategoryFilter, null, null)
+  var activeDishesQuery = useDishes(location, radius, activeCategoryFilter, null, dietaryTags)
   var activeTotal = (activeDishesQuery.dishes || []).length
   var visibleCount = Math.min(activeTotal, activeLimit)
 
@@ -229,6 +229,7 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
                   tab={tab}
                   location={location}
                   radius={radius}
+                  dietaryTags={dietaryTags}
                   tabLimit={getLimit(tab.id)}
                   onShowMore={function () { handleShowMore(tab.id) }}
                 />
@@ -253,9 +254,9 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
  *   unranked (0-vote) dishes so sparse categories aren't half-empty
  * - "Show N more" reveals additional ranked + unranked beyond tabLimit
  */
-function CarouselTabContent({ tab, location, radius, tabLimit, onShowMore }) {
+function CarouselTabContent({ tab, location, radius, dietaryTags = null, tabLimit, onShowMore }) {
   var categoryFilter = tab.id === 'nearby' ? null : tab.id
-  var { dishes, loading } = useDishes(location, radius, categoryFilter, null, null)
+  var { dishes, loading } = useDishes(location, radius, categoryFilter, null, dietaryTags)
   var allDishes = dishes || []
 
   // Split ranked vs unranked (vote-phantom fix in PR #257 makes this honest).
