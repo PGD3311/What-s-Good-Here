@@ -44,21 +44,32 @@ CREATE TABLE check_ins (
   visited_at TIMESTAMPTZ NOT NULL,
 
   -- Optional: only set for kind='live'. Lets us audit proximity later
-  -- and gives the v3 map something to draw with sub-restaurant precision
-  -- (different tables at the same restaurant, dock vs. street, etc.).
+  -- and gives the v3 map something to draw with sub-restaurant precision.
   lat DOUBLE PRECISION,
   lng DOUBLE PRECISION,
+
+  -- Live records: distance the client claimed to be from the restaurant
+  -- pin at check-in time. Useful for fraud forensics + tuning the 150m
+  -- threshold. NULL for logged.
+  distance_m_at_checkin DOUBLE PRECISION,
 
   -- Optional free-text note ("first time trying the bisque"). 280 char cap.
   note TEXT,
 
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  -- Future-proofing: lets us distinguish manual entries from gps_live,
+  -- admin_import, backfill, etc. Mirrors votes.source.
+  source TEXT NOT NULL DEFAULT 'user_manual'
+    CHECK (source IN ('user_manual', 'gps_live', 'admin_import', 'backfill')),
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Prevent accidental double-tap on Live (debounce at DB level).
--- Same user can't have two live check-ins to the same restaurant within 1h.
-CREATE UNIQUE INDEX uniq_live_recent ON check_ins (user_id, restaurant_id)
-WHERE kind = 'live' AND visited_at > NOW() - INTERVAL '1 hour';
+-- 1-hour debounce is enforced inside submit_check_in (NOW() isn't allowed
+-- in a partial-index predicate). This index supports that lookup cheaply
+-- AND covers the v3 places-been map query.
+CREATE INDEX idx_check_ins_user_restaurant_live ON check_ins (user_id, restaurant_id, visited_at DESC)
+WHERE kind = 'live';
 
 CREATE INDEX idx_check_ins_user_visited ON check_ins (user_id, visited_at DESC);
 CREATE INDEX idx_check_ins_restaurant ON check_ins (restaurant_id, visited_at DESC);
@@ -82,13 +93,24 @@ CREATE INDEX idx_check_in_dishes_dish ON check_in_dishes (dish_id);
 ALTER TABLE check_ins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE check_in_dishes ENABLE ROW LEVEL SECURITY;
 
--- Read: own check-ins, plus check-ins of public users (block-list filtered
--- via existing is_blocked_pair helper).
+-- Read: own check-ins always; check-ins of public users (display_name set)
+-- with block-list filtering — mirrors profiles_select_public_or_own semantics
+-- so anon/blocked viewers can't read check-ins from nameless/restricted users.
 CREATE POLICY check_ins_select_own_or_public ON check_ins
   FOR SELECT
   USING (
     user_id = (select auth.uid())
-    OR (auth.uid() IS NULL OR NOT is_blocked_pair(auth.uid(), user_id))
+    OR (
+      EXISTS (
+        SELECT 1 FROM profiles p
+        WHERE p.id = check_ins.user_id
+          AND p.display_name IS NOT NULL
+      )
+      AND (
+        (select auth.uid()) IS NULL
+        OR NOT is_blocked_pair((select auth.uid()), check_ins.user_id)
+      )
+    )
   );
 
 -- Write: only your own
@@ -135,8 +157,10 @@ DECLARE
   v_user_id UUID := (select auth.uid());
   v_visited_at TIMESTAMPTZ;
   v_distance_m DOUBLE PRECISION;
+  v_persist_distance DOUBLE PRECISION;
+  v_source TEXT;
+  v_rate JSONB;
   v_check_in check_ins;
-  v_dish UUID;
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
@@ -146,9 +170,14 @@ BEGIN
     RAISE EXCEPTION 'kind must be live or logged';
   END IF;
 
-  -- Note length guard (UI also enforces; defense in depth)
   IF p_note IS NOT NULL AND length(p_note) > 280 THEN
     RAISE EXCEPTION 'note exceeds 280 chars';
+  END IF;
+
+  -- Canonical rate-limit infra (consistent with vote / photo / dish_create).
+  v_rate := check_and_record_rate_limit('check_in', 20, 3600);
+  IF NOT (v_rate->>'allowed')::BOOLEAN THEN
+    RAISE EXCEPTION 'rate_limit: %', v_rate->>'message';
   END IF;
 
   IF p_kind = 'live' THEN
@@ -156,9 +185,14 @@ BEGIN
       RAISE EXCEPTION 'live check-in requires lat/lng';
     END IF;
 
-    -- Server-side proximity check (≤150m). Belt and suspenders against
-    -- a tampered client that lies about its GPS.
-    SELECT haversine_meters(p_lat, p_lng, r.lat, r.lng)
+    -- Server-side proximity check (≤150m). Inline haversine — the codebase
+    -- doesn't expose a haversine_meters helper; existing nearby queries
+    -- (schema.sql:3029, 3046) inline the same 6371000 * ACOS(...) math.
+    SELECT 6371000 * ACOS(
+             LEAST(1.0, COS(RADIANS(p_lat)) * COS(RADIANS(r.lat))
+                        * COS(RADIANS(r.lng) - RADIANS(p_lng))
+                        + SIN(RADIANS(p_lat)) * SIN(RADIANS(r.lat)))
+           )
       INTO v_distance_m
       FROM restaurants r WHERE r.id = p_restaurant_id;
 
@@ -170,7 +204,21 @@ BEGIN
       RAISE EXCEPTION 'too far from restaurant for live check-in (%.0fm)', v_distance_m;
     END IF;
 
+    -- 1-hour debounce (replaces the invalid NOW()-in-partial-index attempt).
+    -- Cheap via idx_check_ins_user_restaurant_live.
+    IF EXISTS (
+      SELECT 1 FROM check_ins
+      WHERE user_id = v_user_id
+        AND restaurant_id = p_restaurant_id
+        AND kind = 'live'
+        AND visited_at > NOW() - INTERVAL '1 hour'
+    ) THEN
+      RAISE EXCEPTION 'duplicate: live check-in for this restaurant in the last hour';
+    END IF;
+
     v_visited_at := NOW();
+    v_persist_distance := v_distance_m;
+    v_source := 'gps_live';
   ELSE  -- logged
     IF p_visited_at IS NULL THEN
       RAISE EXCEPTION 'logged check-in requires visited_at';
@@ -179,35 +227,34 @@ BEGIN
       RAISE EXCEPTION 'visited_at cannot be in the future';
     END IF;
     v_visited_at := p_visited_at;
+    v_persist_distance := NULL;
+    v_source := 'user_manual';
   END IF;
 
-  -- Rate limit: 20 check-ins/hour per user (lightweight abuse cap)
-  IF (SELECT COUNT(*) FROM check_ins
-      WHERE user_id = v_user_id
-        AND created_at > NOW() - INTERVAL '1 hour') >= 20 THEN
-    RAISE EXCEPTION 'rate_limit: too many check-ins this hour';
-  END IF;
-
-  INSERT INTO check_ins (user_id, restaurant_id, kind, visited_at, lat, lng, note)
+  INSERT INTO check_ins (
+    user_id, restaurant_id, kind, visited_at, lat, lng,
+    distance_m_at_checkin, note, source
+  )
   VALUES (
     v_user_id, p_restaurant_id, p_kind, v_visited_at,
     CASE WHEN p_kind = 'live' THEN p_lat END,
     CASE WHEN p_kind = 'live' THEN p_lng END,
-    p_note
+    v_persist_distance,
+    p_note,
+    v_source
   )
   RETURNING * INTO v_check_in;
 
-  -- Optional dish tags. We trust the IDs but constrain to dishes at this
-  -- restaurant — caller can't tag dishes from another restaurant.
-  IF p_dish_ids IS NOT NULL THEN
-    FOREACH v_dish IN ARRAY p_dish_ids LOOP
-      IF EXISTS (SELECT 1 FROM dishes d
-                 WHERE d.id = v_dish AND d.restaurant_id = p_restaurant_id) THEN
-        INSERT INTO check_in_dishes (check_in_id, dish_id)
-        VALUES (v_check_in.id, v_dish)
-        ON CONFLICT DO NOTHING;
-      END IF;
-    END LOOP;
+  -- Optional dish tags. Single set-based insert; the JOIN filters to dishes
+  -- that actually belong to this restaurant so callers can't tag stranger
+  -- dishes by ID. ON CONFLICT covers duplicate IDs in the input array.
+  IF p_dish_ids IS NOT NULL AND array_length(p_dish_ids, 1) > 0 THEN
+    INSERT INTO check_in_dishes (check_in_id, dish_id)
+    SELECT v_check_in.id, d.id
+    FROM dishes d
+    JOIN unnest(p_dish_ids) AS x(id) ON x.id = d.id
+    WHERE d.restaurant_id = p_restaurant_id
+    ON CONFLICT DO NOTHING;
   END IF;
 
   RETURN v_check_in;
@@ -217,7 +264,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 GRANT EXECUTE ON FUNCTION submit_check_in TO authenticated;
 ```
 
-`haversine_meters` already exists in the codebase (used by `find_nearby_restaurants`). Reuse it.
+**Note on haversine:** the codebase doesn't expose a `haversine_meters(...)` helper. Existing nearby queries (`find_nearby_restaurants`, restaurant proximity) inline the same `6371000 * ACOS(...)` math. We follow that pattern. Extracting a shared SQL function is a separate cleanup.
 
 ### 4.2 `delete_check_in`
 
@@ -327,13 +374,46 @@ Bottom sheet (matches `DietSheet` pattern). Two modes:
 
 One line: `<CheckInButton restaurant={restaurant} nearbyRestaurant={nearby} />` near the existing action buttons (Order/Directions). Already has `useNearbyRestaurant` data flowing through if needed.
 
+### 5.7 Minimal retrieval surface — "Your visits" strip
+
+v1 needs a place for the user to *see* their check-in lands. Cheapest viable surface: a "Your visits here" line on the restaurant-detail page when the user has ≥1 check-in for that restaurant.
+
+```jsx
+// Inside RestaurantDetail body, native-iOS only
+{checkInsForThisRestaurant.length > 0 && (
+  <p className="text-sm">
+    You've checked in {checkInsForThisRestaurant.length}{' '}
+    {checkInsForThisRestaurant.length === 1 ? 'time' : 'times'} —
+    last on {formatDate(latestVisit)}.
+  </p>
+)}
+```
+
+Data source: filter `useUserCheckIns(currentUser.id)` client-side by `restaurant_id`. No new RPC needed.
+
+This is the smallest addition that keeps v1 from feeling like a stub (per codex feedback). Profile-side "Recent visits" list lives in v2.
+
+### 5.8 Web placeholder — don't silently hide
+
+For web/PWA users (where `CheckInButton` is gated off), render a tiny inline placeholder instead of nothing:
+
+```jsx
+{!Capacitor.isNativePlatform() && (
+  <a href="https://apps.apple.com/app/whats-good-here" className="text-sm">
+    Check-ins live in the iOS app — open it to log this visit
+  </a>
+)}
+```
+
+Avoids the "the feature doesn't exist?" failure mode for web-first signups. (Codex callout — silent hide reads as missing functionality.)
+
 ## 6. Native-iOS gating
 
-Per locked decision #7: all check-in UI is gated to `Capacitor.isNativePlatform()`. Web/PWA never mounts `CheckInButton` or any v2/v3 surface.
+Per locked decision #7: the **interactive check-in UI** (`CheckInButton`, `CheckInSheet`, the "your visits" strip in §5.7) is gated to `Capacitor.isNativePlatform()`. Web/PWA mounts the §5.8 placeholder link instead of silently hiding — "Check-ins live in the iOS app — open it to log this visit."
 
 Rationale: GPS reliability on PWA varies wildly across browsers; native gives us a clean story for the "live presence is real" promise. Once Capacitor APNs is wired in v2, push notifications land on native first anyway.
 
-**Reasoning that's NEW since the brainstorm:** we're past v1.0 launch. Native-gating now is even safer than at design time — no risk of a "feature visible on web but broken on native" cliff, since v1.3 is the next App Store cut and ships with check-ins.
+We're past v1.0 launch, so v1.3 ships check-ins with the App Store cut — no "feature visible on web but broken on native" cliff.
 
 ## 7. Verification checklist
 
@@ -349,13 +429,23 @@ Rationale: GPS reliability on PWA varies wildly across browsers; native gives us
 - [ ] No `console.*` — use `logger` (CLAUDE.md 1.7)
 - [ ] Brand colors via `var(--color-*)`, no Tailwind color classes (CLAUDE.md 1.3)
 
-## 8. Open questions (codex pass + Dan)
+## 8. Open questions
 
-1. **`uniq_live_recent` partial index with `NOW()` predicate** — Postgres rejects non-IMMUTABLE functions in partial index predicates. Need to enforce the 1-hour dedupe in the RPC body instead, OR use a different mechanism (e.g. application-level unique on `(user_id, restaurant_id, date_trunc('hour', visited_at))` for the partial index). I'll likely move the check into `submit_check_in`.
-2. **`get_user_check_ins` exposes `note` to all readers** — fine for v1, but if v3 adds a "private check-in" toggle, the SELECT policy + RPC return need updating in lockstep.
-3. **Dish tagging on logged (retroactive) check-ins** — the dish must have existed at the restaurant on `visited_at`. We don't track dish add dates strictly. Living with "trust current menu" for v1; flag if abuse emerges.
-4. **Rate limit (20/hr) generous or tight?** — matches vote rate limit. Live check-ins probably don't hit it; abuse vector is logged-spam.
-5. **Push notification scope for v2** — APNs token capture needs Capacitor plugin install. Out of scope here.
+Resolved in codex pass (see §3.1, §3.3, §4.1, §5.7, §5.8 for the applied fixes):
+
+- ~~Partial index with NOW() not allowed~~ → moved to in-RPC check with helper index
+- ~~Custom rate-limit~~ → use canonical `check_and_record_rate_limit`
+- ~~RLS too broad (anon reads private profiles)~~ → added `display_name IS NOT NULL` gate mirroring profiles policy
+- ~~haversine_meters helper assumed~~ → inline `6371000 * ACOS(...)` math (matches existing nearby queries)
+- ~~Silent web hide~~ → "Check-ins live in the iOS app" placeholder
+- ~~v1 felt like a stub~~ → "You've checked in N times" retrieval surface on restaurant-detail
+
+Still open / parked for follow-up:
+
+1. **Dish tagging on logged check-ins** — dish must have existed at restaurant on `visited_at`. We don't track dish add dates strictly. Living with "trust current menu" for v1; revisit if abuse emerges.
+2. **`visibility` enum for private check-ins** — codex flagged that retrofit is painful. Punting because (a) no user request, (b) `source` + `note`-can-be-null + RLS already give us flexibility, (c) adding now is unused complexity. Tracker entry: if a "private mode" request lands, design as `visibility TEXT CHECK IN ('public','followers','private')` and update SELECT policy in lockstep.
+3. **Push notification scope** — APNs token capture needs Capacitor plugin install. v2.
+4. **Same-restaurant integrity at DB layer** — currently enforced only in the RPC's INSERT...SELECT. A future trigger could catch any direct DML; skip for v1.
 
 ## 9. Implementation order
 
