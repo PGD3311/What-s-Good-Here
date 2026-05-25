@@ -18,6 +18,7 @@ import { useLocationContext } from '../context/LocationContext'
 import { useDishes } from '../hooks/useDishes'
 import { LoginModal } from '../components/Auth/LoginModal'
 import { RestaurantDishes, RestaurantMenu, MenuImportStatus, CheckInButton } from '../components/restaurants'
+import { useUserCheckIns } from '../hooks/useUserCheckIns'
 import { useMenuImportStatus } from '../hooks/useMenuImportStatus'
 import { useNearbyRestaurant } from '../hooks/useNearbyRestaurant'
 import { useRestaurantSpecials } from '../hooks/useSpecials'
@@ -164,6 +165,17 @@ export function RestaurantDetail() {
   // Check if user is physically near this restaurant
   const { nearbyRestaurant } = useNearbyRestaurant()
   const isHere = nearbyRestaurant?.id === restaurantId
+
+  // Pull this user's check-ins so the v1 "you've been here N times" strip
+  // under the check-in button can render without an extra round-trip.
+  // Filtered client-side — useUserCheckIns returns all their check-ins.
+  const { checkIns: myCheckIns } = useUserCheckIns(user?.id)
+  const myVisitsHere = useMemo(
+    function () {
+      return (myCheckIns || []).filter(function (ci) { return ci.restaurant_id === restaurantId })
+    },
+    [myCheckIns, restaurantId],
+  )
 
   // Fetch specials and events for this restaurant
   const { specials } = useRestaurantSpecials(restaurantId)
@@ -581,6 +593,15 @@ export function RestaurantDetail() {
               a small "in the iOS app" link. Spec: 2026-05-25-check-ins-v1-spec.md */}
           <div className="flex items-center gap-3 flex-wrap">
             <CheckInButton restaurant={restaurant} nearbyRestaurant={nearbyRestaurant} />
+            {myVisitsHere.length > 0 && (
+              <span style={{
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '13px',
+                color: 'var(--color-text-tertiary)',
+              }}>
+                You've been here {myVisitsHere.length} {myVisitsHere.length === 1 ? 'time' : 'times'}
+              </span>
+            )}
           </div>
 
         </div>
