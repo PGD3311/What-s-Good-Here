@@ -63,7 +63,7 @@ export const ALL_CATEGORIES = [
   { id: 'pokebowl', label: 'Poke Bowl', emoji: '🥗' },
   { id: 'soup', label: 'Soup', emoji: '🍜' },
   { id: 'fries', label: 'Fries', emoji: '🍟' },
-  { id: 'apps', label: 'Appetizers', emoji: '🍤' },
+  { id: 'apps', label: 'Appetizers', emoji: '🧆' },
   { id: 'fried chicken', label: 'Fried Chicken', emoji: '🍗' },
   { id: 'entree', label: 'Entree', emoji: '🍽️' },
   { id: 'asian', label: 'Asian', emoji: '🥢' },
