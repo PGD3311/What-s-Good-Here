@@ -45,7 +45,15 @@ export function useCheckIn() {
   }, [queryClient])
 
   const deleteCheckIn = useCallback(async (checkInId) => {
+    // Same in-flight dedup as submit — a double-tap on a delete button
+    // could otherwise fire two RPCs where the second returns "not found"
+    // and surfaces as a noisy error after the first succeeded.
+    if (inFlightRef.current.has(checkInId)) {
+      return { success: false, error: 'Delete already in progress' }
+    }
+
     try {
+      inFlightRef.current.add(checkInId)
       setSubmitting(true)
       setError(null)
       const ok = await checkInsApi.deleteCheckIn(checkInId)
@@ -56,7 +64,8 @@ export function useCheckIn() {
       setError(err.message)
       return { success: false, error: err.message }
     } finally {
-      setSubmitting(false)
+      inFlightRef.current.delete(checkInId)
+      setSubmitting(inFlightRef.current.size > 0)
     }
   }, [queryClient])
 

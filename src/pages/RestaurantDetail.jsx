@@ -164,7 +164,6 @@ export function RestaurantDetail() {
 
   // Check if user is physically near this restaurant
   const { nearbyRestaurant } = useNearbyRestaurant()
-  const isHere = nearbyRestaurant?.id === restaurantId
 
   // Pull this user's check-ins so the v1 "you've been here N times" strip
   // under the check-in button can render without an extra round-trip.

@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { createClassifiedError } from '../utils/errorHandler'
 import { logger } from '../utils/logger'
+import { validateUserContent } from '../lib/reviewBlocklist'
 
 /**
  * Check-ins API — backs the native-iOS "I've been here" feature.
@@ -26,6 +27,16 @@ export const checkInsApi = {
    */
   async submitCheckIn({ restaurantId, kind, visitedAt = null, lat = null, lng = null, note = null, dishIds = null }) {
     try {
+      // API-boundary validation: enforce the content blocklist even when
+      // a caller bypasses the sheet UI (e.g. a future direct-API path).
+      // The sheet pre-validates for UX; this is defense in depth.
+      if (note) {
+        const contentError = validateUserContent(note, 'Note')
+        if (contentError) {
+          throw new Error(contentError)
+        }
+      }
+
       const { data, error } = await supabase.rpc('submit_check_in', {
         p_restaurant_id: restaurantId,
         p_kind: kind,

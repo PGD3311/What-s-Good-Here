@@ -4,6 +4,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useDishes } from '../../hooks/useDishes'
 import { useLocationContext } from '../../context/LocationContext'
 import { useCheckIn } from '../../hooks/useCheckIn'
+import { validateUserContent } from '../../lib/reviewBlocklist'
 
 const MAX_NOTE_CHARS = 280
 
@@ -28,6 +29,10 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
 
   const [note, setNote] = useState('')
   const [visitedDate, setVisitedDate] = useState(todayIso())
+  // Track explicit user edits to visitedDate so we can re-evaluate
+  // "today" at submit time if the user opened the sheet before
+  // midnight and submitted after.
+  const [visitedDateTouched, setVisitedDateTouched] = useState(false)
   const [selectedDishIds, setSelectedDishIds] = useState([])
 
   // Pull this restaurant's dish list for the optional dish tagger. Skipped
@@ -40,6 +45,7 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
     if (open) {
       setNote('')
       setVisitedDate(todayIso())
+      setVisitedDateTouched(false)
       setSelectedDishIds([])
     }
   }, [open])
@@ -54,7 +60,18 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
     })
   }
 
+  // Disable submit when the prerequisites for the selected mode aren't met,
+  // so the failure mode is a greyed button instead of a post-tap toast.
+  const noteValidationError = validateUserContent(note, 'Note')
+  const canSubmit = !submitting && !noteValidationError && (mode !== 'live' || !!location)
+
   async function handleSubmit() {
+    // Re-validate at submit (cheap defense against pasted-then-disabled UI).
+    if (noteValidationError) {
+      toast.error(noteValidationError)
+      return
+    }
+
     const params = {
       restaurantId: restaurant.id,
       kind: mode,
@@ -70,7 +87,10 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
       params.lat = location.lat
       params.lng = location.lng
     } else {
-      params.visitedAt = new Date(visitedDate + 'T12:00:00').toISOString()
+      // If the user opened the sheet before midnight and submitted after,
+      // and never touched the date field, re-snap to "today" at submit.
+      const effectiveDate = visitedDateTouched ? visitedDate : todayIso()
+      params.visitedAt = new Date(effectiveDate + 'T12:00:00').toISOString()
     }
 
     const result = await submitCheckIn(params)
@@ -152,10 +172,25 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
                 type="date"
                 value={visitedDate}
                 max={todayIso()}
-                onChange={function (e) { setVisitedDate(e.target.value) }}
+                onChange={function (e) {
+                  setVisitedDate(e.target.value)
+                  setVisitedDateTouched(true)
+                }}
                 style={inputStyle}
               />
             </label>
+          )}
+
+          {mode === 'live' && !location && (
+            <p style={{
+              marginBottom: '14px',
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: '13px',
+              color: 'var(--color-danger)',
+              fontStyle: 'italic',
+            }}>
+              Enable location to confirm you're here.
+            </p>
           )}
 
           <label style={{ display: 'block', marginBottom: '16px' }}>
@@ -242,7 +277,7 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={!canSubmit}
             style={{
               flex: '2 1 auto', minHeight: '48px',
               background: 'var(--color-primary)',
@@ -251,8 +286,8 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
               color: 'var(--color-text-on-primary, #FFFFFF)',
               fontFamily: 'Outfit, sans-serif',
               fontWeight: 700, fontSize: '15px',
-              cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.7 : 1,
+              cursor: canSubmit ? 'pointer' : 'not-allowed',
+              opacity: canSubmit ? 1 : 0.5,
             }}
           >
             {submitting ? 'Saving…' : mode === 'live' ? 'Check in' : 'Log visit'}
