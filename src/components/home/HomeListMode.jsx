@@ -105,40 +105,37 @@ export const HomeListMode = memo(function HomeListMode({
               onSearchChange={onSearchChange}
               initialQuery={searchQuery}
               rightSlot={
-                <button
-                  onClick={function (e) { e.stopPropagation(); onRadiusSheetOpen() }}
-                  aria-label={radius === 0 ? 'Showing dishes everywhere' : 'Search radius: ' + radius + ' miles'}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg font-bold flex-shrink-0"
-                  style={{
-                    fontSize: '12px',
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text-secondary)',
-                    border: '1px solid var(--color-divider)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {radius === 0 ? 'All' : radius + ' mi'}
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {onDietOpen ? (
+                    <DietButton
+                      compact
+                      selected={dietaryTags}
+                      labels={dietaryLabels}
+                      onOpen={onDietOpen}
+                    />
+                  ) : null}
+                  <button
+                    onClick={function (e) { e.stopPropagation(); onRadiusSheetOpen() }}
+                    aria-label={radius === 0 ? 'Showing dishes everywhere' : 'Search radius: ' + radius + ' miles'}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg font-bold flex-shrink-0"
+                    style={{
+                      fontSize: '12px',
+                      background: 'var(--color-bg)',
+                      color: 'var(--color-text-secondary)',
+                      border: '1px solid var(--color-divider)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {radius === 0 ? 'All' : radius + ' mi'}
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
               }
             />
           </div>
         </div>
-
-        {/* Dietary filter trigger — sits just under the search row, right-aligned
-            so it doesn't compete with the search bar visually. Only render when a
-            handler is wired in (keeps the test/storybook surfaces simple). */}
-        {onDietOpen ? (
-          <div className="px-5 pt-1 pb-1 flex justify-end">
-            <DietButton
-              selected={dietaryTags}
-              labels={dietaryLabels}
-              onOpen={onDietOpen}
-            />
-          </div>
-        ) : null}
 
         {/* Location banner */}
         <div className="px-4">

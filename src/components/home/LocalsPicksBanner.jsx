@@ -171,7 +171,6 @@ export function LocalsPicksBanner() {
   if (!curators || curators.length === 0) return null
 
   var curatorCount = curators.length
-  var dishCount = curators.reduce(function (sum, c) { return sum + (c.item_count || 0) }, 0)
 
   return (
     <button
@@ -179,7 +178,7 @@ export function LocalsPicksBanner() {
       onClick={function () { navigate('/locals') }}
       style={BANNER_OUTER}
       className="active:scale-[0.99] transition-transform"
-      aria-label={'Open Locals’ Picks. ' + curatorCount + ' islanders, ' + dishCount + ' dishes.'}
+      aria-label={'Open Locals’ Picks. ' + curatorCount + ' islander' + (curatorCount === 1 ? '' : 's') + '.'}
     >
       <div style={BANNER_GRAIN} />
       <div style={BANNER_BODY}>
@@ -187,7 +186,7 @@ export function LocalsPicksBanner() {
         <div style={TITLE}>The Locals&rsquo; <span style={TITLE_ACCENT}>Picks</span></div>
         <div style={SUB}>
           What <span style={SUB_BOLD}>{curatorCount} islander{curatorCount === 1 ? '' : 's'}</span> actually order &mdash;<br />
-          their {dishCount} favorite dish{dishCount === 1 ? '' : 'es'}.
+          see their favorites.
         </div>
         <div style={CTA}>See what they order <span style={{ fontWeight: 800, marginLeft: '1px' }}>&rarr;</span></div>
       </div>

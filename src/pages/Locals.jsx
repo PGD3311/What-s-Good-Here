@@ -124,12 +124,12 @@ export function Locals() {
   )
 }
 
-function Header({ curatorCount, dishCount, year }) {
+function Header({ year }) {
   return (
     <div style={HEADER}>
       <div style={EYEBROW}>ask a local</div>
       <div style={TITLE}>The Locals' <span style={TITLE_ACCENT}>Picks</span></div>
-      <div style={SUB}>{curatorCount} islander{curatorCount === 1 ? '' : 's'} &middot; {dishCount} dish{dishCount === 1 ? '' : 'es'} &middot; {year}</div>
+      <div style={SUB}>What islanders actually order &middot; {year}</div>
     </div>
   )
 }
@@ -144,14 +144,12 @@ function ReadTab() {
   var loading = consensusData.loading || curatorsData.loading
   var error = consensusData.error || curatorsData.error
 
-  var curatorCount = curators.length
-  var dishCount = curators.reduce(function (s, c) { return s + (c.item_count || 0) }, 0)
   var year = new Date().getFullYear()
 
   if (error) {
     return (
       <>
-        <Header curatorCount={0} dishCount={0} year={year} />
+        <Header year={year} />
         <p style={EMPTY}>{error?.message || 'Could not load picks.'}</p>
       </>
     )
@@ -159,7 +157,7 @@ function ReadTab() {
   if (loading && curators.length === 0) {
     return (
       <>
-        <Header curatorCount={0} dishCount={0} year={year} />
+        <Header year={year} />
         <p style={EMPTY}>Loading&hellip;</p>
       </>
     )
@@ -167,7 +165,7 @@ function ReadTab() {
 
   return (
     <>
-      <Header curatorCount={curatorCount} dishCount={dishCount} year={year} />
+      <Header year={year} />
 
       {consensus.length > 0 && (
         <>
