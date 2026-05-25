@@ -24,6 +24,7 @@ import { CreatePlaylistModal } from '../components/playlists/CreatePlaylistModal
 import {
   HeroIdentityCard,
   JournalFeed,
+  RecentVisitsList,
 } from '../components/profile'
 import { jitterApi } from '../api/jitterApi'
 
@@ -462,7 +463,7 @@ export function Profile() {
               zIndex: 10,
             }}
           >
-            {['journal', 'playlists', 'saved'].map((tab) => (
+            {['journal', 'visits', 'playlists', 'saved'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -505,6 +506,28 @@ export function Profile() {
                 ratings={ratedDishes}
                 loading={votesLoading}
               />
+            </>
+          )}
+
+          {/* --- Visits tab --- (v1 retrieval surface for check-ins; v2+
+              brings in the "rate the burger from Atria yesterday" cold-open
+              banner that nudges from this same data) */}
+          {activeTab === 'visits' && (
+            <>
+              <div className="px-4 pt-5 pb-1">
+                <h2
+                  style={{
+                    fontFamily: "'Amatic SC', cursive",
+                    color: 'var(--color-text-primary)',
+                    fontSize: '32px',
+                    fontWeight: 700,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  Your Visits
+                </h2>
+              </div>
+              <RecentVisitsList userId={user?.id} />
             </>
           )}
 
