@@ -17,7 +17,7 @@ import { followsApi } from '../api/followsApi'
 import { useLocationContext } from '../context/LocationContext'
 import { useDishes } from '../hooks/useDishes'
 import { LoginModal } from '../components/Auth/LoginModal'
-import { RestaurantDishes, RestaurantMenu, MenuImportStatus } from '../components/restaurants'
+import { RestaurantDishes, RestaurantMenu, MenuImportStatus, CheckInButton } from '../components/restaurants'
 import { useMenuImportStatus } from '../hooks/useMenuImportStatus'
 import { useNearbyRestaurant } from '../hooks/useNearbyRestaurant'
 import { useRestaurantSpecials } from '../hooks/useSpecials'
@@ -576,6 +576,12 @@ export function RestaurantDetail() {
               )}
             </div>
           )}
+
+          {/* Check-in entry point — native shows the action button, web shows
+              a small "in the iOS app" link. Spec: 2026-05-25-check-ins-v1-spec.md */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <CheckInButton restaurant={restaurant} nearbyRestaurant={nearbyRestaurant} />
+          </div>
 
         </div>
       </div>
