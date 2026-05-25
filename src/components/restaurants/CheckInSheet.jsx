@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { useDishes } from '../../hooks/useDishes'
@@ -24,6 +25,7 @@ const MAX_NOTE_CHARS = 280
  * → sticky footer) so the two bottom sheets feel cousin-shaped.
  */
 export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
+  const navigate = useNavigate()
   const { location } = useLocationContext()
   const containerRef = useFocusTrap(open, onClose)
 
@@ -95,7 +97,36 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
 
     const result = await submitCheckIn(params)
     if (result.success) {
-      toast.success(mode === 'live' ? 'Checked in!' : 'Visit logged.')
+      const baseMessage = mode === 'live' ? 'Checked in!' : 'Visit logged.'
+
+      // Rate-nudge (cheap v1): when the user tagged at least one dish,
+      // surface a "Rate it →" action on the success toast so they can
+      // close the loop while the memory's fresh. Routes to the first
+      // tagged dish — the dish page has the existing rate UI plus links
+      // back to others at this restaurant if they want more.
+      //
+      // Locked design decision #4 calls for a richer 24h-persistent
+      // cold-open banner ("rate the burger from Atria yesterday") plus a
+      // Journal "Pending" shelf — both ship in v2. This is the toast-only
+      // shortcut: ephemeral, fires once, no "once per check-in" memory.
+      //
+      // We don't pre-check "have they already rated this" — if they have,
+      // the dish page just shows their existing rating, no harm done.
+      if (selectedDishIds.length > 0) {
+        const firstDishId = selectedDishIds[0]
+        toast.success(baseMessage, {
+          action: {
+            label: 'Rate it →',
+            onClick: function () {
+              toast.dismiss()
+              navigate('/dish/' + firstDishId)
+            },
+          },
+          duration: 8000,
+        })
+      } else {
+        toast.success(baseMessage)
+      }
       onClose()
     } else {
       toast.error(result.error || 'Could not submit check-in.')

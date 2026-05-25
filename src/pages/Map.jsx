@@ -10,6 +10,7 @@ import { RadiusSheet } from '../components/LocationPicker'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { ModeFAB } from '../components/ModeFAB'
 import { HomeListMode, MapCategoryBar } from '../components/home'
+import { ProximityCheckInBanner } from '../components/restaurants'
 import { getSessionItem, setSessionItem } from '../lib/storage'
 import { logger } from '../utils/logger'
 import { parseDietParam, serializeDietParam } from '../utils/dietUrlParams'
@@ -353,6 +354,11 @@ export function Map() {
   return (
     <main id="main-content" className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <h1 className="sr-only">What's Good Here</h1>
+
+      {/* Proximity check-in nudge — native-iOS only, shows when GPS puts the
+          user ≤150m of a restaurant. Position:fixed so it sits above both
+          list and map mode without fighting them for layout space. */}
+      <ProximityCheckInBanner />
 
       {/* LIST MODE */}
       {mode === 'list' && (
