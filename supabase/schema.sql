@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS votes (
   dish_id UUID REFERENCES dishes(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   would_order_again BOOLEAN,
-  rating_10 DECIMAL(3, 1),
+  rating_10 DECIMAL(3, 1) CHECK (rating_10 IS NULL OR (rating_10 >= 1 AND rating_10 <= 10)),
   review_text TEXT,
   review_created_at TIMESTAMP WITH TIME ZONE,
   vote_position INT,
@@ -1141,9 +1141,15 @@ RETURNS TABLE (
   dietary_tags TEXT[]
 ) AS $$
 DECLARE
-  lat_delta DECIMAL := radius_miles / 69.0;
-  lng_delta DECIMAL := radius_miles / (69.0 * COS(RADIANS(user_lat)));
+  v_radius INT := LEAST(GREATEST(COALESCE(radius_miles, 50), 1), 500);
+  lat_delta DECIMAL := v_radius / 69.0;
+  lng_delta DECIMAL := v_radius / (69.0 * COS(RADIANS(user_lat)));
 BEGIN
+  IF filter_dietary_tags IS NOT NULL AND array_length(filter_dietary_tags, 1) > 20 THEN
+    RAISE EXCEPTION 'filter_dietary_tags accepts at most 20 entries (got %)', array_length(filter_dietary_tags, 1)
+      USING ERRCODE = '22023';
+  END IF;
+
   RETURN QUERY
   WITH global_stats AS (
     SELECT COALESCE(AVG(dishes.avg_rating), 7.0) AS global_mean
@@ -1175,7 +1181,7 @@ BEGIN
     FROM nearby_restaurants nr
   ),
   filtered_restaurants AS (
-    SELECT * FROM restaurants_with_distance WHERE distance <= radius_miles
+    SELECT * FROM restaurants_with_distance WHERE distance <= v_radius
   ),
   variant_stats AS (
     SELECT
@@ -2243,6 +2249,11 @@ BEGIN
     RAISE EXCEPTION 'rating_10 is required';
   END IF;
 
+  IF p_rating_10 < 1 OR p_rating_10 > 10 THEN
+    RAISE EXCEPTION 'rating_10 must be between 1 and 10 (got %)', p_rating_10
+      USING ERRCODE = '22023';
+  END IF;
+
   INSERT INTO votes (
     dish_id,
     user_id,
@@ -3102,8 +3113,9 @@ RETURNS TABLE (
   total_votes BIGINT
 ) AS $$
 DECLARE
-  lat_delta DECIMAL := p_radius_miles / 69.0;
-  lng_delta DECIMAL := p_radius_miles / (69.0 * COS(RADIANS(p_lat)));
+  v_radius INT := LEAST(GREATEST(COALESCE(p_radius_miles, 50), 1), 500);
+  lat_delta DECIMAL := v_radius / 69.0;
+  lng_delta DECIMAL := v_radius / (69.0 * COS(RADIANS(p_lat)));
 BEGIN
   RETURN QUERY
   WITH nearby AS (
@@ -3131,7 +3143,7 @@ BEGIN
     COALESCE(SUM(d.total_votes), 0)::BIGINT AS total_votes
   FROM nearby n
   LEFT JOIN dishes d ON d.restaurant_id = n.id AND d.parent_dish_id IS NULL
-  WHERE n.distance_miles <= p_radius_miles
+  WHERE n.distance_miles <= v_radius
   GROUP BY n.id, n.name, n.address, n.lat, n.lng, n.is_open, n.cuisine, n.town,
            n.google_place_id, n.website_url, n.phone, n.distance_miles
   ORDER BY n.distance_miles ASC;
