@@ -23,7 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
-.env*.local
+
+# Environment / secrets. Match every .env variant so a stray .env.production
+# or .env.staging never gets accidentally committed. .env.example is the only
+# tracked one — it documents required vars without containing any values.
+.env
+.env.*
+!.env.example
 
 # Mock presentations
 restaurant-presentation.html
@@ -37,7 +43,6 @@ presentation-style-3-friendly.html
 # Git worktrees
 .worktrees
 stats.html
-.env
 supabase/.temp/
 
 # Playwright

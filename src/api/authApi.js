@@ -281,8 +281,8 @@ export const authApi = {
    *
    * Apple rule 4.8: any app with third-party social login must offer Sign in
    * with Apple as an equivalent option. The button that calls this is gated
-   * on FEATURES.APPLE_SIGNIN_ENABLED and stays hidden in production until the
-   * Supabase Apple provider is configured.
+   * on FEATURES.APPLE_SIGNIN_ENABLED, which defaults to ON since launch via
+   * PR #170; set VITE_FEATURES_APPLE_SIGNIN=false to hide for debugging.
    *
    * Web flow uses signInWithOAuth → full-page redirect to Apple → Supabase
    * validates the ID token on the callback. Native (Capacitor) flow uses the
