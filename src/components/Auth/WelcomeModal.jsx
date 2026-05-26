@@ -24,6 +24,13 @@ const STEPS = [
     description: 'Your ratings help locals and visitors discover what\'s actually good.',
   },
   {
+    id: 'at-the-spot',
+    icon: 'location',
+    title: 'Walk in. Rate the dish.',
+    subtitle: 'We do the rest.',
+    description: "Open the app at any of our restaurants — we'll detect you're there. Tap to check in, then rate what you ordered.",
+  },
+  {
     id: 'photos',
     icon: 'camera',
     title: 'Snap it before you eat it',
@@ -224,6 +231,11 @@ export function WelcomeModal() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
                   </svg>
+                ) : currentStep.icon === 'location' ? (
+                  <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                  </svg>
                 ) : null}
             </div>
           )}
@@ -267,6 +279,48 @@ export function WelcomeModal() {
                   }}
                 >
                   {n}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* At-the-spot step visual — numbered 3-step stepper, no emoji */}
+          {currentStep.id === 'at-the-spot' && (
+            <div className="flex justify-center items-start gap-2 mb-6">
+              {[
+                { num: 1, label: 'Walk in' },
+                { num: 2, label: 'Check in' },
+                { num: 3, label: 'Rate' },
+              ].map(({ num, label }, i) => (
+                <div key={num} className="flex items-start gap-2">
+                  <div className="flex flex-col items-center" style={{ width: 64 }}>
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm"
+                      style={{
+                        background: 'var(--color-primary)',
+                        color: 'var(--color-text-on-primary)',
+                      }}
+                    >
+                      {num}
+                    </div>
+                    <span
+                      className="text-xs font-medium mt-2 text-center"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                  {i < 2 && (
+                    <div
+                      className="mt-4"
+                      aria-hidden="true"
+                      style={{
+                        width: 16,
+                        height: 1,
+                        background: 'var(--color-divider)',
+                      }}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -324,7 +378,8 @@ export function WelcomeModal() {
           <p className="mt-6 text-xs text-center" style={{ color: 'var(--color-text-tertiary)' }}>
             {step === 0 && "Trusted by island food lovers"}
             {step === 1 && "Dishes need 5+ votes to get ranked"}
-            {step === 2 && "Your photos help everyone eat better"}
+            {step === 2 && "No pings — just open the app when you're there"}
+            {step === 3 && "Your photos help everyone eat better"}
           </p>
         </div>
       </div>
