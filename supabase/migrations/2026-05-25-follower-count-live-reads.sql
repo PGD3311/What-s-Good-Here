@@ -1,10 +1,39 @@
--- search_user_follows: paginated alphabetical search of a user's
--- followers or following list. Mirrors the hardening pattern in
--- search_users_with_followers (input validation, limit clamp, security
--- definer + locked search_path).
+-- Switch follower-list reads from the denormalized profiles.follower_count
+-- column to live COUNT(*) against the follows table.
 --
--- Returns (display_name, id) tuple-ordered rows for stable cursor pagination.
+-- The denormalized column has drifted multiple times (see
+-- 20260516_fix_follower_count_trigger.sql for the prior incident). The trigger
+-- architecture is load-bearing on protect_profile_fields honoring the
+-- 'app.allow_follow_count_update' bypass, but several sync migrations and the
+-- curator-flag-trigger-bypass migration redefine the trigger functions
+-- WITHOUT that bypass — re-running any of them silently downgrades the fix.
+-- This migration eliminates the read-side dependency so UX never sees drift.
+--
+-- The column itself stays for one release as a soak period; a follow-up
+-- migration drops it once we're confident no other readers remain.
 
+-- 1. get_follower_counts: batch live follower-count lookup for a set of
+--    user IDs. Used by _paginateFollows after fetching the recency-ordered
+--    follow rows. Returns one row per user_id present in the follows table;
+--    callers must default missing IDs to 0.
+CREATE OR REPLACE FUNCTION get_follower_counts(p_user_ids UUID[])
+RETURNS TABLE (
+  user_id UUID,
+  follower_count INT
+)
+LANGUAGE SQL STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT f.followed_id AS user_id, COUNT(*)::INT AS follower_count
+  FROM follows f
+  WHERE f.followed_id = ANY(p_user_ids)
+  GROUP BY f.followed_id;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_follower_counts(UUID[]) TO anon, authenticated;
+
+-- 2. search_user_follows: same shape as before, but follower_count is now
+--    a live subquery against follows instead of p.follower_count.
 CREATE OR REPLACE FUNCTION search_user_follows(
   p_user_id UUID,
   p_direction TEXT,
@@ -26,10 +55,6 @@ AS $$
 DECLARE
   v_limit INT := LEAST(GREATEST(COALESCE(p_limit, 20), 1), 100);
   v_query TEXT := NULLIF(TRIM(COALESCE(p_query, '')), '');
-  -- Cursor is "active" only when both halves are present. A half-set cursor
-  -- would make the tuple comparison (display_name, id) > (cursor_name, NULL)
-  -- evaluate to NULL — filtering every row out (empty-page bug). Treat any
-  -- partial cursor as "no cursor" so callers degrade gracefully.
   v_use_cursor BOOLEAN := (p_cursor_name IS NOT NULL AND p_cursor_id IS NOT NULL);
 BEGIN
   IF p_direction NOT IN ('followers', 'following') THEN
@@ -40,11 +65,6 @@ BEGIN
     RAISE EXCEPTION 'p_user_id is required' USING ERRCODE = '22023';
   END IF;
 
-  -- follower_count is computed as a live subquery against follows rather
-  -- than read from p.follower_count (denormalized) — see
-  -- migrations/2026-05-25-follower-count-live-reads.sql for the rationale.
-  -- Backported here so re-applying this older migration is idempotent and
-  -- can't downgrade the live-count read.
   IF p_direction = 'followers' THEN
     RETURN QUERY
       SELECT p.id, p.display_name, p.avatar_url,
@@ -78,4 +98,5 @@ $$;
 GRANT EXECUTE ON FUNCTION search_user_follows(UUID, TEXT, TEXT, TEXT, UUID, INT) TO anon, authenticated;
 
 -- ROLLBACK:
--- DROP FUNCTION IF EXISTS search_user_follows(UUID, TEXT, TEXT, TEXT, UUID, INT);
+-- DROP FUNCTION IF EXISTS get_follower_counts(UUID[]);
+-- And restore search_user_follows from migrations/20260516_search_user_follows.sql.

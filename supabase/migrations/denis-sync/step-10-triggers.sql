@@ -3,9 +3,14 @@
 -- =============================================
 
 -- 10a. Update follow counts
+-- Opts into the protect_profile_fields bypass via the
+-- 'app.allow_follow_count_update' transaction-local flag — without this,
+-- every counter increment is silently reverted by the protect trigger.
+-- See migrations/20260516_fix_follower_count_trigger.sql for context.
 CREATE OR REPLACE FUNCTION update_follow_counts()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
+  PERFORM set_config('app.allow_follow_count_update', 'true', true);
   IF TG_OP = 'INSERT' THEN
     UPDATE profiles SET following_count = following_count + 1 WHERE id = NEW.follower_id;
     UPDATE profiles SET follower_count = follower_count + 1 WHERE id = NEW.followed_id;

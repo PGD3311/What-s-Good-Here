@@ -19,9 +19,14 @@ BEGIN;
 CREATE OR REPLACE FUNCTION protect_profile_fields()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Counters are derived state — never settable by anyone.
-  NEW.follower_count := OLD.follower_count;
-  NEW.following_count := OLD.following_count;
+  -- Counters: revert unless update_follow_counts opted in via
+  -- set_config('app.allow_follow_count_update', 'true', true) on the trigger
+  -- on follows. Without this guard, every legitimate counter increment is
+  -- silently dropped — see migrations/20260516_fix_follower_count_trigger.sql.
+  IF current_setting('app.allow_follow_count_update', true) IS DISTINCT FROM 'true' THEN
+    NEW.follower_count := OLD.follower_count;
+    NEW.following_count := OLD.following_count;
+  END IF;
 
   -- Curator flag: revert unless the caller explicitly opted in via
   -- set_config('app.allow_curator_grant', 'true', true) inside a
@@ -118,12 +123,17 @@ COMMIT;
 --
 -- ROLLBACK:
 -- BEGIN;
+--   -- Restore only the curator bypass; keep the follow-count bypass added
+--   -- in migrations/20260516_fix_follower_count_trigger.sql intact so the
+--   -- denormalized profiles.follower_count keeps tracking new follows.
 --   CREATE OR REPLACE FUNCTION protect_profile_fields()
 --   RETURNS TRIGGER AS $$
 --   BEGIN
+--     IF current_setting('app.allow_follow_count_update', true) IS DISTINCT FROM 'true' THEN
+--       NEW.follower_count := OLD.follower_count;
+--       NEW.following_count := OLD.following_count;
+--     END IF;
 --     NEW.is_local_curator := OLD.is_local_curator;
---     NEW.follower_count := OLD.follower_count;
---     NEW.following_count := OLD.following_count;
 --     RETURN NEW;
 --   END;
 --   $$ LANGUAGE plpgsql;

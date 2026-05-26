@@ -166,18 +166,12 @@ INSERT INTO follows (follower_id, followed_id) VALUES
   ('aaaaaaaa-0005-4000-a000-000000000005', 'aaaaaaaa-0006-4000-a000-000000000006')
 ON CONFLICT (follower_id, followed_id) DO NOTHING;
 
--- Step 6: Update follower_count on profiles
-UPDATE profiles SET follower_count = (
-  SELECT COUNT(*) FROM follows WHERE followed_id = profiles.id
-)
-WHERE id IN (
-  'aaaaaaaa-0001-4000-a000-000000000001',
-  'aaaaaaaa-0002-4000-a000-000000000002',
-  'aaaaaaaa-0003-4000-a000-000000000003',
-  'aaaaaaaa-0004-4000-a000-000000000004',
-  'aaaaaaaa-0005-4000-a000-000000000005',
-  'aaaaaaaa-0006-4000-a000-000000000006'
-);
+-- profiles.follower_count / following_count are maintained by the
+-- trigger_update_follow_counts AFTER trigger on follows. The hand-rolled
+-- UPDATE that used to live here was both redundant and blocked by
+-- protect_profile_fields (no bypass flag set) — pure cruft that masked
+-- the underlying trigger bug. The follower-list API also reads counts
+-- live from the follows table, so the denorm column isn't a UX concern.
 
 -- =============================================
 -- IMPORTANT: After running this, log in as your

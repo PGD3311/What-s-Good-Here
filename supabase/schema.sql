@@ -1485,6 +1485,27 @@ RETURNS INTEGER LANGUAGE SQL STABLE SET search_path = public AS $$
   SELECT COUNT(*)::INTEGER FROM follows WHERE follower_id = user_id;
 $$;
 
+-- Batch live follower-count lookup for a set of user IDs. Used by the
+-- follow-list API after fetching recency-ordered follow rows so per-row
+-- subtitles read live counts instead of the denormalized profiles
+-- column (which has drifted multiple times — see
+-- 20260516_fix_follower_count_trigger.sql and
+-- 2026-05-25-follower-count-live-reads.sql for context).
+CREATE OR REPLACE FUNCTION get_follower_counts(p_user_ids UUID[])
+RETURNS TABLE (
+  user_id UUID,
+  follower_count INT
+)
+LANGUAGE SQL STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT f.followed_id AS user_id, COUNT(*)::INT AS follower_count
+  FROM follows f
+  WHERE f.followed_id = ANY(p_user_ids)
+  GROUP BY f.followed_id;
+$$;
+GRANT EXECUTE ON FUNCTION get_follower_counts(UUID[]) TO anon, authenticated;
+
 -- Check if user A follows user B
 CREATE OR REPLACE FUNCTION is_following(follower UUID, followed UUID)
 RETURNS BOOLEAN LANGUAGE SQL STABLE SET search_path = public AS $$
@@ -1534,7 +1555,8 @@ BEGIN
 
   IF p_direction = 'followers' THEN
     RETURN QUERY
-      SELECT p.id, p.display_name, p.avatar_url, p.follower_count,
+      SELECT p.id, p.display_name, p.avatar_url,
+             (SELECT COUNT(*)::INT FROM follows ff WHERE ff.followed_id = p.id) AS follower_count,
              f.created_at AS followed_at
       FROM follows f
       JOIN profiles p ON p.id = f.follower_id
@@ -1546,7 +1568,8 @@ BEGIN
       LIMIT v_limit;
   ELSE
     RETURN QUERY
-      SELECT p.id, p.display_name, p.avatar_url, p.follower_count,
+      SELECT p.id, p.display_name, p.avatar_url,
+             (SELECT COUNT(*)::INT FROM follows ff WHERE ff.followed_id = p.id) AS follower_count,
              f.created_at AS followed_at
       FROM follows f
       JOIN profiles p ON p.id = f.followed_id

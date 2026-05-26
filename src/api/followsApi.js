@@ -42,24 +42,36 @@ async function _paginateFollows(userId, direction, { limit = 20, cursor = null }
   const results = hasMore ? followData.slice(0, limit) : followData
 
   const userIds = results.map(f => f[selectCol])
-  const { data: profiles, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, display_name, avatar_url, follower_count')
-    .in('id', userIds)
 
-  if (profileError) {
-    logger.warn('Error fetching follower profiles:', profileError)
-    // Continue without profile data
+  // Profile metadata + live follower counts in parallel. follower_count is
+  // sourced from the live follows table (via get_follower_counts) rather
+  // than profiles.follower_count, which has a history of drift — see
+  // supabase/migrations/2026-05-25-follower-count-live-reads.sql.
+  const [profilesResult, countsResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, display_name, avatar_url')
+      .in('id', userIds),
+    supabase.rpc('get_follower_counts', { p_user_ids: userIds }),
+  ])
+
+  if (profilesResult.error) {
+    logger.warn('Error fetching follower profiles:', profilesResult.error)
+  }
+  if (countsResult.error) {
+    logger.warn('Error fetching live follower counts:', countsResult.error)
   }
 
   const profileMap = {}
-  ;(profiles || []).forEach(p => { profileMap[p.id] = p })
+  ;(profilesResult.data || []).forEach(p => { profileMap[p.id] = p })
+  const countMap = {}
+  ;(countsResult.data || []).forEach(r => { countMap[r.user_id] = r.follower_count })
 
   const users = results.map(f => ({
     id: f[selectCol],
     display_name: profileMap[f[selectCol]]?.display_name || 'Anonymous',
     avatar_url: profileMap[f[selectCol]]?.avatar_url || null,
-    follower_count: profileMap[f[selectCol]]?.follower_count || 0,
+    follower_count: countMap[f[selectCol]] || 0,
     followed_at: f.created_at,
   }))
 
