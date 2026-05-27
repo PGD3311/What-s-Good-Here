@@ -118,9 +118,13 @@ export const localListsApi = {
         validateContentField(item.note, 'Local list note')
       }
 
+      // Supabase JS client serializes JS arrays directly to JSONB. Calling
+      // JSON.stringify() first sends a JSON string, which Postgres receives
+      // as a JSONB scalar — and jsonb_array_length() on a scalar throws
+      // "cannot get array length of a scalar" inside save_my_local_list.
       const { data, error } = await supabase.rpc('save_my_local_list', {
         p_tagline: tagline || null,
-        p_items: JSON.stringify(items),
+        p_items: Array.isArray(items) ? items : [],
       })
       if (error) throw createClassifiedError(error)
       return data
