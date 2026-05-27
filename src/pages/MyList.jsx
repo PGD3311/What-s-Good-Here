@@ -224,7 +224,7 @@ export function MyList() {
   }
 
   return (
-    <div style={{ background: 'var(--color-bg)', minHeight: '100vh', paddingBottom: '100px' }}>
+    <div style={{ background: 'var(--color-bg)', minHeight: '100vh', paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))' }}>
       {/* Header */}
       <div className="px-4 pt-4 pb-2">
         <h1 style={{
@@ -537,18 +537,24 @@ export function MyList() {
         </div>
       )}
 
-      {/* Save button (fixed bottom) */}
+      {/* Save button (fixed bottom).
+          IMPORTANT: this page is wrapped in <Layout>, which renders <BottomNav>
+          at position: fixed; bottom: 0; z-index: 50. Without a vertical offset,
+          this Save bar sits at the same bottom: 0 and same z-index — BottomNav
+          renders last in the DOM, so it visually covers the Save bar entirely.
+          That's why curators previously saw no Save button.
+          Fix: anchor this bar at the top edge of the BottomNav (64px nav height
+          + safe-area-inset-bottom), and bump z-index to 51 as defense in depth. */}
       <div
         style={{
           position: 'fixed',
-          bottom: 0,
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
           left: 0,
           right: 0,
           padding: '12px 16px',
-          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
           background: 'var(--color-bg)',
           borderTop: '1px solid var(--color-divider)',
-          zIndex: 50,
+          zIndex: 51,
         }}
       >
         {saveMessage && (
