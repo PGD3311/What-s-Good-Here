@@ -99,6 +99,28 @@ export const userPlaylistsApi = {
     }
   },
 
+  async cloneLocalList(curatorUserId) {
+    if (!curatorUserId) throw contentError('Missing curator')
+    const rl = checkPlaylistCreateRateLimit()
+    if (!rl.allowed) throw rateLimitError(rl.retryAfterMs)
+    try {
+      const { data, error } = await supabase.rpc('clone_local_list_to_playlist', {
+        p_curator_user_id: curatorUserId,
+      })
+      if (error) throw createClassifiedError(error)
+      const row = Array.isArray(data) ? data[0] : data
+      return {
+        playlistId: row?.playlist_id,
+        copiedCount: row?.copied_count ?? 0,
+        slug: row?.slug,
+        title: row?.title,
+      }
+    } catch (error) {
+      logger.error('userPlaylistsApi.cloneLocalList:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
   async removeDish(playlistId, dishId) {
     try {
       const { error } = await supabase.rpc('remove_dish_from_playlist', {
