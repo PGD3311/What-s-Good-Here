@@ -16,7 +16,7 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '28000';
   END IF;
   IF v_user = p_curator_user_id THEN
-    RAISE EXCEPTION 'Cannot clone your own list' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Cannot clone your own list' USING ERRCODE = 'P0001';
   END IF;
   IF is_blocked_pair(v_user, p_curator_user_id) THEN
     RAISE EXCEPTION 'Cannot clone this list' USING ERRCODE = '42501';
@@ -28,6 +28,8 @@ BEGIN
   IF v_curator_name IS NULL THEN
     RAISE EXCEPTION 'Curator not found' USING ERRCODE = 'P0002';
   END IF;
+
+  PERFORM fn_check_content_blocklist(LEFT(v_curator_name || '''s picks', 60), 'Playlist title');
 
   -- Verify the curator has an active list. Defensive: client should already
   -- know this from get_local_list_by_user, but RLS allows arbitrary user IDs.
@@ -48,6 +50,16 @@ BEGIN
   )
   RETURNING * INTO v_new_playlist;
 
+  -- Validate curator-supplied notes against the content blocklist before
+  -- copying. add_dish_to_playlist enforces this on every new note; mirror
+  -- that behavior on clone so the blocklist can be tightened after the fact.
+  PERFORM fn_check_content_blocklist(li.note, 'Note')
+  FROM local_list_items li
+  JOIN local_lists ll ON ll.id = li.list_id
+  WHERE ll.user_id = p_curator_user_id
+    AND ll.is_active = true
+    AND li.note IS NOT NULL;
+
   -- Copy items in curator's order. We renumber positions starting at 1 in case
   -- the curator's list has gaps (constraint is 1..10, so usually 1..N already).
   WITH src AS (
@@ -62,6 +74,10 @@ BEGIN
   FROM src;
 
   GET DIAGNOSTICS v_copied = ROW_COUNT;
+
+  IF v_copied = 0 THEN
+    RAISE EXCEPTION 'Curator has no items to clone' USING ERRCODE = 'P0002';
+  END IF;
 
   RETURN QUERY SELECT v_new_playlist.id, v_copied, v_new_playlist.slug, v_new_playlist.title;
 END;
