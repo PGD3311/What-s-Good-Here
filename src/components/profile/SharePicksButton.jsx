@@ -1,4 +1,4 @@
-import { shareOrCopy } from '../../utils/share'
+import { shareOrCopy, canonicalShareUrl } from '../../utils/share'
 import { capture } from '../../lib/analytics'
 import { toast } from 'sonner'
 
@@ -12,10 +12,11 @@ import { toast } from 'sonner'
  */
 export function SharePicksButton({ userId, userName, location }) {
   var handleShare = async function () {
-    var url = window.location.origin + '/user/' + userId
+    var path = '/user/' + userId
     if (location) {
-      url += '?location=' + encodeURIComponent(location)
+      path += '?location=' + encodeURIComponent(location)
     }
+    var url = canonicalShareUrl(path)
 
     var result = await shareOrCopy({
       url: url,
@@ -30,7 +31,9 @@ export function SharePicksButton({ userId, userName, location }) {
       success: result.success,
     })
 
-    if (result.success && result.method !== 'native') {
+    // shareOrCopy returns 'native_capacitor' or 'web_share' for OS share sheets
+    // (which have their own UI feedback) — toast only for clipboard fallbacks.
+    if (result.success && result.method !== 'native_capacitor' && result.method !== 'web_share') {
       toast.success('Link copied!', { duration: 2000 })
     }
   }

@@ -7,7 +7,7 @@ import { ReportModal } from '../components/ReportModal'
 import { PlaceAttributions } from '../components/PlaceAttributions'
 import { logger } from '../utils/logger'
 import { getUserMessage } from '../utils/errorHandler'
-import { shareOrCopy } from '../utils/share'
+import { shareOrCopy, canonicalShareUrl } from '../utils/share'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
 import { restaurantsApi } from '../api/restaurantsApi'
@@ -390,7 +390,7 @@ export function RestaurantDetail() {
           <button
             onClick={async () => {
               const result = await shareOrCopy({
-                url: `${window.location.origin}/restaurants/${restaurantId}`,
+                url: canonicalShareUrl(`/restaurants/${restaurantId}`),
                 title: restaurant.name,
                 text: `Check out ${restaurant.name} on What's Good Here!`,
               })

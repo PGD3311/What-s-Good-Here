@@ -9,7 +9,7 @@ import { PlaylistOwnerMenu } from '../components/playlists/PlaylistOwnerMenu'
 import { getCategoryNeonImage, categoryEmojiFor } from '../constants/categories'
 import { AddDishSearchSheet } from '../components/playlists/AddDishSearchSheet'
 import { capture } from '../lib/analytics'
-import { shareOrCopy } from '../utils/share'
+import { shareOrCopy, canonicalShareUrl } from '../utils/share'
 import { toast } from 'sonner'
 
 export function Playlist() {
@@ -95,8 +95,11 @@ export function Playlist() {
   }
 
   var handleShare = async function () {
+    // canonicalShareUrl returns wghapp.com on Capacitor where window.location
+    // origin is 'WhatsGoodHere://localhost' (unshareable). On web, this is
+    // the same as window.location.href for /playlist/:id.
     var result = await shareOrCopy({
-      url: window.location.href,
+      url: canonicalShareUrl('/playlist/' + id),
       title: playlist.title,
       text: playlist.title + ' — a food playlist on What\'s Good Here',
     })

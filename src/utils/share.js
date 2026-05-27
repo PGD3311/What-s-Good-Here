@@ -2,6 +2,27 @@ import { Capacitor } from '@capacitor/core'
 import { Share } from '@capacitor/share'
 import { logger } from './logger'
 
+// Canonical public origin for share/invite URLs. Inside the iOS Capacitor
+// WebView, window.location.origin is 'WhatsGoodHere://localhost' (per the
+// scheme set in capacitor.config.ts); Android uses 'https://localhost'.
+// Neither is shareable — recipients can't open those schemes, so links
+// silently fall back to the homepage. Always serve external links from
+// the canonical public domain instead.
+const CANONICAL_ORIGIN = 'https://wghapp.com'
+
+/**
+ * Build an absolute URL safe to share/copy. On Capacitor (native iOS/Android)
+ * returns a wghapp.com URL; on web returns window.location.origin + path.
+ * @param {string} path - Path beginning with '/', e.g. '/playlist/abc'.
+ * @returns {string} Absolute URL.
+ */
+export function canonicalShareUrl(path) {
+  if (Capacitor?.isNativePlatform?.()) {
+    return `${CANONICAL_ORIGIN}${path}`
+  }
+  return `${window.location.origin}${path}`
+}
+
 /**
  * Share or copy a URL with platform-appropriate behavior.
  *
@@ -86,7 +107,7 @@ export async function shareOrCopy({ url, title, text }) {
  * @returns {{ url: string, title: string, text: string }}
  */
 export function buildDishShareData(dish) {
-  const url = `${window.location.origin}/dish/${dish.dish_id}`
+  const url = canonicalShareUrl(`/dish/${dish.dish_id}`)
   return {
     url,
     title: `${dish.dish_name} at ${dish.restaurant_name}`,
@@ -100,7 +121,7 @@ export function buildDishShareData(dish) {
  * @returns {{ url: string, title: string, text: string }}
  */
 export function buildRestaurantShareData(restaurant) {
-  const url = `${window.location.origin}/restaurants/${restaurant.id}`
+  const url = canonicalShareUrl(`/restaurants/${restaurant.id}`)
   return {
     url,
     title: restaurant.name,

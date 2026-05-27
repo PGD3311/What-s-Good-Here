@@ -7,6 +7,7 @@ import { restaurantsApi } from '../api/restaurantsApi'
 import { adminApi } from '../api/adminApi'
 import { restaurantManagerApi } from '../api/restaurantManagerApi'
 import { ALL_CATEGORIES } from '../constants/categories'
+import { canonicalShareUrl } from '../utils/share'
 
 function formatRetryAfter(seconds) {
   if (seconds >= 3600) {
@@ -295,7 +296,7 @@ export function Admin() {
         setMessage({ type: 'error', text: result?.error || 'Failed to mint invite' })
         return
       }
-      const link = `${window.location.origin}/curator-invite/${result.token}`
+      const link = canonicalShareUrl(`/curator-invite/${result.token}`)
       setCuratorInviteLink(link)
       setCuratorInviteExpires(result.expires_at || '')
 
@@ -334,7 +335,7 @@ export function Admin() {
 
     try {
       const { id, token } = await restaurantManagerApi.createInvite(inviteRestaurantId)
-      const link = `${window.location.origin}/invite/${token}`
+      const link = canonicalShareUrl(`/invite/${token}`)
       setInviteLink(link)
       setInviteId(id)
       setSendResult(null)
