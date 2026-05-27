@@ -5660,6 +5660,67 @@ LANGUAGE SQL STABLE AS $$
 $$;
 GRANT EXECUTE ON FUNCTION get_local_list_by_user(UUID) TO anon, authenticated;
 
+CREATE OR REPLACE FUNCTION clone_local_list_to_playlist(p_curator_user_id UUID)
+RETURNS TABLE (playlist_id UUID, copied_count INT, slug TEXT, title TEXT)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user UUID := auth.uid();
+  v_curator_name TEXT;
+  v_new_playlist user_playlists;
+  v_copied INT;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '28000';
+  END IF;
+  IF v_user = p_curator_user_id THEN
+    RAISE EXCEPTION 'Cannot clone your own list' USING ERRCODE = '22023';
+  END IF;
+  IF is_blocked_pair(v_user, p_curator_user_id) THEN
+    RAISE EXCEPTION 'Cannot clone this list' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT p.display_name INTO v_curator_name
+  FROM profiles p WHERE p.id = p_curator_user_id;
+  IF v_curator_name IS NULL THEN
+    RAISE EXCEPTION 'Curator not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  PERFORM 1 FROM local_lists ll
+   WHERE ll.user_id = p_curator_user_id AND ll.is_active = true;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Curator has no active list' USING ERRCODE = 'P0002';
+  END IF;
+
+  INSERT INTO user_playlists (user_id, title, description, is_public, slug)
+  VALUES (
+    v_user,
+    LEFT(v_curator_name || '''s picks', 60),
+    'Saved from ' || v_curator_name || '''s Local List',
+    false,
+    fn_playlist_slug_from_title(LEFT(v_curator_name || '''s picks', 60), v_user)
+  )
+  RETURNING * INTO v_new_playlist;
+
+  WITH src AS (
+    SELECT li.dish_id, li.note,
+           ROW_NUMBER() OVER (ORDER BY li."position") AS new_pos
+    FROM local_list_items li
+    JOIN local_lists ll ON ll.id = li.list_id
+    WHERE ll.user_id = p_curator_user_id AND ll.is_active = true
+  )
+  INSERT INTO user_playlist_items (playlist_id, dish_id, position, note)
+  SELECT v_new_playlist.id, src.dish_id, src.new_pos, src.note
+  FROM src;
+
+  GET DIAGNOSTICS v_copied = ROW_COUNT;
+
+  RETURN QUERY SELECT v_new_playlist.id, v_copied, v_new_playlist.slug, v_new_playlist.title;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION clone_local_list_to_playlist(UUID) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION clone_local_list_to_playlist(UUID) TO authenticated, service_role;
+
 
 -- get_ranked_dishes — only best_photos CTE changes. Full final body lives in
 -- supabase/migrations/20260415_h3_ugc_reporting_blocking.sql since the
