@@ -2,6 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useLocalListDetail } from '../hooks/useLocalListDetail'
 import { LocalsPicksStamp } from '../components/home/LocalsPicksStamp'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { useAuth } from '../context/AuthContext'
 
 var PAGE = {
   background: 'linear-gradient(180deg, var(--color-paper-cream-light) 0%, var(--color-paper-cream-dark) 100%)',
@@ -52,10 +53,23 @@ var AVATAR_WRAP = {
 }
 
 var ITEM = { marginBottom: '11px', padding: '0 2px' }
-var ITEM_HEAD = { display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '1px' }
-var ITEM_NAME = { fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }
+// minWidth:0 on ITEM_HEAD lets the name + dotted-leader flex children shrink
+// below their intrinsic width (default flex min-width is 'auto'); without it,
+// long dish names push past the right edge and the rating clips off-screen.
+var ITEM_HEAD = { display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '1px', minWidth: 0 }
+// overflow + ellipsis on the name span keeps the newspaper-list look (rating
+// stays right-aligned, dotted leader still connects) even for very long names.
+var ITEM_NAME = {
+  fontSize: '14px',
+  fontWeight: 600,
+  color: 'var(--color-text-primary)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: 0,
+}
 var DOTS = { flex: 1, minWidth: '8px', borderBottom: '1.5px dotted rgba(0,0,0,.25)', alignSelf: 'flex-end', marginBottom: '5px' }
-var RATING = { fontWeight: 700, fontSize: '16px', color: 'var(--color-rating)', fontVariantNumeric: 'tabular-nums' }
+var RATING = { fontWeight: 700, fontSize: '16px', color: 'var(--color-rating)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }
 var META = { display: 'flex', gap: '6px', fontSize: '11px', paddingLeft: '2px' }
 var REST = { color: 'var(--color-accent-gold)', fontWeight: 600 }
 var NOTE = { fontSize: '12.5px', color: 'var(--color-text-secondary)', lineHeight: 1.4, marginTop: '4px', paddingLeft: '2px', fontStyle: 'italic' }
@@ -66,7 +80,11 @@ export function LocalsCurator() {
   useDocumentTitle('A local’s picks')
   var { userId } = useParams()
   var navigate = useNavigate()
+  var { user } = useAuth()
   var { items, loading, error } = useLocalListDetail(userId)
+  // True when the logged-in curator is viewing their own published list.
+  // Surfaces an Edit shortcut so they don't have to remember the /my-list URL.
+  var isOwner = !!user && String(user.id) === String(userId)
 
   if (loading) {
     return <div style={PAGE}><div style={GRAIN} /><div style={INNER}><p style={EMPTY}>Loading&hellip;</p></div></div>
@@ -86,7 +104,25 @@ export function LocalsCurator() {
       <div style={INNER}>
         <div style={NAV_ROW}>
           <button type="button" style={CLOSE} onClick={function () { navigate('/locals') }}>&larr; All locals</button>
-          <span style={PAGENO}>the menu</span>
+          {isOwner ? (
+            <button
+              type="button"
+              onClick={function () { navigate('/my-list') }}
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--color-accent-gold)',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+            >
+              Edit &rarr;
+            </button>
+          ) : (
+            <span style={PAGENO}>the menu</span>
+          )}
         </div>
         <div style={STAMP_TINY}>
           <LocalsPicksStamp seed={11} includeRibbon={false} size={44} />
@@ -116,7 +152,24 @@ export function LocalsCurator() {
                   <button
                     type="button"
                     onClick={function () { navigate('/dish/' + item.dish_id) }}
-                    style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      font: 'inherit',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      // Truncate at the button so very long names ellipsis
+                      // reliably (text-overflow on an outer span isn't
+                      // guaranteed to clip an inline-block child).
+                      display: 'block',
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      textAlign: 'left',
+                    }}
+                    title={item.dish_name}
                   >
                     {item.dish_name}
                   </button>

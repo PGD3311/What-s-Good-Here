@@ -452,6 +452,47 @@ export function Profile() {
             </div>
           )}
 
+          {/* Local Curator entry — visible only when profile.is_local_curator
+              is true. Routes to /my-list, where the curator manages and
+              saves their Top 10 + bio. Prior to this entry point, curators
+              had no obvious path back from the Profile page — the only
+              way in was the post-invite redirect or the buried "Add to my
+              list" buttons on dish detail pages. */}
+          {profile?.is_local_curator && (
+            <div className="px-4 py-3" style={{ background: 'var(--color-surface)' }}>
+              <Link
+                to="/my-list"
+                className="w-full rounded-2xl p-4 flex items-center gap-4 transition-all hover:scale-[0.99] active:scale-[0.98]"
+                style={{
+                  background: 'var(--color-surface-elevated)',
+                  border: '1px solid var(--color-accent-gold)',
+                  textDecoration: 'none',
+                }}
+              >
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'var(--color-accent-gold)', color: 'var(--color-text-on-primary)' }}
+                  aria-hidden="true"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897L16.862 4.487zM19.5 15.75v3.75a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V8.25A2.25 2.25 0 016.75 6H10.5" />
+                  </svg>
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="font-bold" style={{ fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--color-text-primary)' }}>
+                    Edit my Top 10
+                  </h3>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                    Update your list and bio
+                  </p>
+                </div>
+                <svg className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-text-tertiary)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          )}
+
           {/* Tabs: Journal / Playlists / Saved */}
           <div
             className="flex"
