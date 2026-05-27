@@ -1,8 +1,9 @@
 // App-wide constants
 
 // Minimum votes required for a dish to be considered "ranked"
-// Dishes with fewer votes show as "Early" with less prominent display
-export const MIN_VOTES_FOR_RANKING = 5
+// Dishes with fewer votes show as "Early" with less prominent display.
+// Pre-launch / low traffic: 1 (show any rated dish). Bump to 5, then 10 as volume grows.
+export const MIN_VOTES_FOR_RANKING = 1
 
 // Maximum character length for review text
 export const MAX_REVIEW_LENGTH = 200
