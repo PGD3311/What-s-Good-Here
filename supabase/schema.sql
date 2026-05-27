@@ -5682,9 +5682,13 @@ BEGIN
   -- Curator's display_name drives the new playlist title.
   SELECT p.display_name INTO v_curator_name
   FROM profiles p WHERE p.id = p_curator_user_id;
-  IF v_curator_name IS NULL THEN
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Curator not found' USING ERRCODE = 'P0002';
   END IF;
+  -- profiles.display_name is NOT NULL via the handle_new_user trigger
+  -- (eater-XXXX placeholder). Defensive fallback if that invariant ever
+  -- regresses so we don't blow up the recipient flow.
+  v_curator_name := COALESCE(v_curator_name, 'A local');
 
   PERFORM fn_check_content_blocklist(LEFT(v_curator_name || '''s picks', 60), 'Playlist title');
 
@@ -5706,6 +5710,17 @@ BEGIN
     fn_playlist_slug_from_title(LEFT(v_curator_name || '''s picks', 60), v_user)
   )
   RETURNING * INTO v_new_playlist;
+
+  -- Lock the curator's items for the duration of this transaction so the
+  -- curator can't modify notes between blocklist validation and the items
+  -- copy below. FOR SHARE permits concurrent reads; the curator's own
+  -- update_local_list_items / equivalent path takes a stronger lock and
+  -- will wait for our commit.
+  PERFORM 1
+  FROM local_list_items li
+  JOIN local_lists ll ON ll.id = li.list_id
+  WHERE ll.user_id = p_curator_user_id AND ll.is_active = true
+  FOR SHARE OF li;
 
   -- Validate curator-supplied notes against the content blocklist before
   -- copying. add_dish_to_playlist enforces this on every new note; mirror
