@@ -54,16 +54,16 @@ BEGIN
   )
   RETURNING * INTO v_new_playlist;
 
-  -- Lock the curator's items for the duration of this transaction so the
-  -- curator can't modify notes between blocklist validation and the items
-  -- copy below. FOR SHARE permits concurrent reads; the curator's own
-  -- update_local_list_items / equivalent path takes a stronger lock and
-  -- will wait for our commit.
+  -- Lock the curator's parent list row AND the existing item rows for the
+  -- duration of this transaction. FOR SHARE OF ll blocks the curator's
+  -- add/replace paths (which take FOR UPDATE on local_lists), so no new
+  -- items can be inserted between blocklist validation and the items copy
+  -- below. FOR SHARE OF li blocks direct UPDATE/DELETE on existing items.
   PERFORM 1
   FROM local_list_items li
   JOIN local_lists ll ON ll.id = li.list_id
   WHERE ll.user_id = p_curator_user_id AND ll.is_active = true
-  FOR SHARE OF li;
+  FOR SHARE OF ll, li;
 
   -- Validate curator-supplied notes against the content blocklist before
   -- copying. add_dish_to_playlist enforces this on every new note; mirror
