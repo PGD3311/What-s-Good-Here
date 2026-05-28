@@ -3,6 +3,8 @@ import { useLocalListDetail } from '../hooks/useLocalListDetail'
 import { LocalsPicksStamp } from '../components/home/LocalsPicksStamp'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
+import { ShareLocalListButton } from '../components/locals/ShareLocalListButton'
+import { SaveLocalListButton } from '../components/locals/SaveLocalListButton'
 
 var PAGE = {
   background: 'linear-gradient(180deg, var(--color-paper-cream-light) 0%, var(--color-paper-cream-dark) 100%)',
@@ -104,25 +106,28 @@ export function LocalsCurator() {
       <div style={INNER}>
         <div style={NAV_ROW}>
           <button type="button" style={CLOSE} onClick={function () { navigate('/locals') }}>&larr; All locals</button>
-          {isOwner ? (
-            <button
-              type="button"
-              onClick={function () { navigate('/my-list') }}
-              style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                color: 'var(--color-accent-gold)',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-              }}
-            >
-              Edit &rarr;
-            </button>
-          ) : (
-            <span style={PAGENO}>the menu</span>
-          )}
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+            <ShareLocalListButton curatorUserId={userId} curatorName={first.display_name} />
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={function () { navigate('/my-list') }}
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--color-accent-gold)',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                Edit &rarr;
+              </button>
+            ) : (
+              <SaveLocalListButton curatorUserId={userId} curatorName={first.display_name} />
+            )}
+          </div>
         </div>
         <div style={STAMP_TINY}>
           <LocalsPicksStamp seed={11} includeRibbon={false} size={44} />
