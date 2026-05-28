@@ -1,9 +1,10 @@
 // App-wide constants
 
-// Minimum votes required for a dish to be considered "ranked"
-// Dishes with fewer votes show as "Early" with less prominent display.
-// Pre-launch / low traffic: 1 (show any rated dish). Bump to 5, then 10 as volume grows.
-export const MIN_VOTES_FOR_RANKING = 1
+// Minimum votes required for a dish to be considered "ranked".
+// Dishes with fewer votes show as "Early" and rank BELOW all ranked dishes
+// (the get_ranked_dishes RPC tiers on this same threshold — keep them in sync).
+// Pre-launch: 3 (a single fluke/troll vote can't top a well-voted dish). Bump to 5, then 10 as volume grows.
+export const MIN_VOTES_FOR_RANKING = 3
 
 // Maximum character length for review text
 export const MAX_REVIEW_LENGTH = 200

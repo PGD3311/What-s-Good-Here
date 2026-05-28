@@ -1319,7 +1319,21 @@ BEGIN
            rvc.recent_votes,
            bp.photo_url,
            d.description, d.dietary_tags
-  ORDER BY search_score DESC NULLS LAST, total_votes DESC;
+  -- Two-tier "earn your spot" ranking:
+  --   1. Dishes with >= 3 votes (MIN_VOTES_FOR_RANKING — keep in sync with
+  --      src/constants/app.js) rank ABOVE under-voted dishes, so a fresh
+  --      1-vote 10.0 can't leapfrog a 50-vote favorite.
+  --   2. Within each tier, sort by the displayed rating (highest first), then
+  --      vote count. Distance does NOT reorder — it only gates the radius via
+  --      the WHERE clause above.
+  -- The tier test mirrors the total_votes output expression exactly (ORDER BY
+  -- expressions bind to input columns, not output aliases) so variant parents,
+  -- whose count comes from vs.total_child_votes, tier correctly.
+  ORDER BY
+    (COALESCE(vs.total_child_votes,
+      SUM(CASE WHEN v.source = 'user' THEN 1.0 WHEN v.source = 'ai_estimated' THEN 0.5 ELSE 0 END)) >= 3) DESC,
+    avg_rating DESC NULLS LAST,
+    total_votes DESC;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;
 
