@@ -25,8 +25,12 @@ export function ShareLocalListButton({ curatorUserId, curatorName }) {
       method: result.method,
       success: result.success,
     })
-    if (result.success && result.method !== 'native_capacitor' && result.method !== 'web_share') {
-      toast.success('Link copied!', { duration: 2000 })
+    if (result.method === 'clipboard' || result.method === 'execCommand') {
+      if (result.success) {
+        toast.success('Link copied!', { duration: 2000 })
+      } else {
+        toast.error("Couldn't copy link — please try again", { duration: 3000 })
+      }
     }
   }
 
