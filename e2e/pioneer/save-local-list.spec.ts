@@ -7,9 +7,13 @@ import { test, expect } from '@playwright/test'
 // browser arrives already authenticated. The signed-out test below opts
 // out of that storage state explicitly.
 
-// Before running: set E2E_CURATOR_ID to a real userId that has an active
-// local_list with >=3 items. Find one via Supabase SQL Editor:
-//   SELECT user_id FROM local_lists WHERE is_active = true LIMIT 1;
+// Before running: set E2E_CURATOR_ID to a userId that:
+//   1. has an active local_list with >=3 items
+//   2. is NOT the signed-in pioneer account (else the page shows Edit, not Save)
+//   3. is not blocked by the pioneer account
+// Find a candidate via Supabase SQL Editor:
+//   SELECT user_id FROM local_lists WHERE is_active = true
+//     AND user_id <> '<PIONEER_USER_ID>' LIMIT 1;
 
 test.describe('Save a Local List into my playlists', () => {
   test('signed-in user clones a curator list and lands on the new playlist', async ({ page }) => {
