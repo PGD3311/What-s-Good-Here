@@ -41,7 +41,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Validate type against allowlist to prevent open redirect
-  const ALLOWED_TYPES: Record<string, string> = { dish: 'dish', restaurant: 'restaurants' }
+  const ALLOWED_TYPES: Record<string, string> = {
+    dish: 'dish',
+    restaurant: 'restaurants',
+    local_list: 'locals',
+  }
   const routePath = ALLOWED_TYPES[type]
   if (!routePath) {
     return res.redirect(302, '/')
@@ -120,6 +124,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         title = restaurant.name
         description = `See what's good at ${restaurant.name}${restaurant.town ? ' in ' + restaurant.town : ''}`
         imageUrl = `${BASE_URL}/api/og-image?type=restaurant&id=${id}`
+      }
+    } else if (type === 'local_list') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, avatar_url')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (profile) {
+        const name = profile.display_name || 'A local'
+        title = `${name}'s picks on What's Good Here`
+        description = `${name}'s Top 10 dishes on Martha's Vineyard`
+        if (profile.avatar_url) imageUrl = profile.avatar_url
+        else imageUrl = `${BASE_URL}/og-image.png`
       }
     }
   } catch {
