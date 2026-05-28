@@ -60,11 +60,51 @@ var DISH_NAME = { fontSize: '13px', fontWeight: 700, lineHeight: 1.1, color: 'va
 var ROW_REST = { fontSize: '10.5px', color: 'var(--color-accent-gold)', marginTop: '1px' }
 var RATING = { fontSize: '15px', fontWeight: 700, color: 'var(--color-rating)', flexShrink: 0 }
 
-var CURATOR_NAME_LINE = { display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '2px' }
-var CURATOR_NAME = { fontFamily: "'Amatic SC', cursive", fontSize: '20px', fontWeight: 700, lineHeight: 1, color: 'var(--color-text-primary)' }
-var CURATOR_ROLE = { fontSize: '10.5px', color: 'var(--color-text-tertiary)' }
-var CURATOR_PICK = { fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.2 }
+var CURATOR_NAME = { fontFamily: "'Amatic SC', cursive", fontSize: '24px', fontWeight: 700, lineHeight: 1, color: 'var(--color-text-primary)', marginBottom: '4px' }
+var CURATOR_TAGLINE = { fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.3 }
 var CHEVRON = { color: 'var(--color-text-tertiary)', fontSize: '18px', fontWeight: 300, flexShrink: 0 }
+
+// Curator avatar — small circular photo (or initial-chip fallback) for the
+// profile-style "or pick a local" rows. Inlined here rather than imported
+// from LocalsPicksBanner because the banner uses a tight 36px stack and we
+// want a larger 48px solo avatar with different border treatment.
+var AVATAR_SIZE = 48
+var AVATAR_RING = {
+  width: AVATAR_SIZE,
+  height: AVATAR_SIZE,
+  borderRadius: '50%',
+  border: '2px solid var(--color-paper-cream-light)',
+  flexShrink: 0,
+  overflow: 'hidden',
+  background: 'var(--color-primary)',
+  color: '#FFFFFF',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontFamily: 'Outfit, sans-serif',
+  fontWeight: 700,
+  fontSize: AVATAR_SIZE * 0.4,
+  lineHeight: 1,
+  boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+}
+
+function CuratorAvatar({ curator }) {
+  if (curator && curator.avatar_url) {
+    return (
+      <div style={AVATAR_RING} aria-hidden="true">
+        <img
+          src={curator.avatar_url}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          draggable={false}
+        />
+      </div>
+    )
+  }
+  // 'A' to match the 'Anonymous' name fallback below — '?' looked like an error.
+  var initial = (curator && curator.display_name ? curator.display_name.charAt(0) : 'A').toUpperCase()
+  return <div style={AVATAR_RING} aria-hidden="true">{initial}</div>
+}
 
 var TAB_BAR = {
   display: 'flex',
@@ -193,7 +233,7 @@ function ReadTab() {
       )}
 
       <div style={SECTION_LABEL}>or pick a local</div>
-      <div style={SECTION_SUB}>scan their #1 &mdash; find one that catches your eye</div>
+      <div style={SECTION_SUB}>tap a local to see their full top 10</div>
 
       {curators.map(function (c) {
         return (
@@ -205,17 +245,10 @@ function ReadTab() {
             className="active:scale-[0.99] transition-transform"
             aria-label={'Open ' + (c.display_name || 'curator') + '’s list'}
           >
+            <CuratorAvatar curator={c} />
             <div style={ROW_BODY}>
-              <div style={CURATOR_NAME_LINE}>
-                <span style={CURATOR_NAME}>{c.display_name || 'Anonymous'}</span>
-                {c.curator_tagline && <span style={CURATOR_ROLE}>{c.curator_tagline}</span>}
-              </div>
-              {c.top_dish_name && (
-                <div style={CURATOR_PICK}>
-                  #1 <b style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{c.top_dish_name}</b>
-                  {c.top_restaurant_name && <span> at <span style={{ color: 'var(--color-accent-gold)', fontWeight: 600 }}>{c.top_restaurant_name}</span></span>}
-                </div>
-              )}
+              <div style={CURATOR_NAME}>{c.display_name || 'Anonymous'}</div>
+              {c.curator_tagline && <div style={CURATOR_TAGLINE}>{c.curator_tagline}</div>}
             </div>
             <span style={CHEVRON}>&rsaquo;</span>
           </button>
