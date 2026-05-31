@@ -341,7 +341,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1|thin-fallback-v1'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [
@@ -690,6 +690,12 @@ const MAX_IMAGE_CANDIDATES = 3
 const MAX_PDF_CANDIDATES = 6
 const MAX_SUB_PAGES = 4
 const MAX_MENU_IFRAMES = 2
+// When the primary extraction returns this many dishes or fewer, also try
+// sub-page traversal + iframe extraction and union the results. Catches
+// thin specials/prix-fixe pages that hide the real menu (e.g. Saltie Girl's
+// /menu is a 6-item prix-fixe; the real menu is at /boston-menus/).
+// Tunable — drop to 8 if cost spikes, raise to 12 if misses persist.
+const THIN_EXTRACTION_THRESHOLD = 10
 // Render fallback #2 fires more broadly than fallback #1: even on plain HTML
 // sites without a CMS signature, if everything else returned 0 dishes the page
 // might just be a JS-loaded shell. One Browserless call per failed job is cheap
@@ -1709,16 +1715,25 @@ serve(async (req) => {
             }
           }
 
-          // Sub-page fallback (Pattern 1): when /menu is just a navigation page
-          // linking to /brunch /lunch /dinner /breakfast (Webflow / WordPress /
-          // multi-service restaurants split the menu across pages). Fetch each
-          // sub-page, run extraction on each, merge results.
-          //
-          // Iframe fallback runs alongside: some restaurants embed their menu
-          // in a cross-origin iframe (checkle.menu, popmenu, singleplatform,
-          // Toast). findMenuIframes pulls those URLs so the same loop fetches
-          // and extracts them.
-          if (extracted.dishes.length === 0) {
+          // Two-tier fallback: sub-page traversal + iframe extraction fires when
+          // the primary extraction is EMPTY (true 0-dish failure) OR THIN
+          // (<= THIN_EXTRACTION_THRESHOLD dishes — a likely specials/prix-fixe
+          // page hiding the real menu, e.g. Saltie Girl's /menu vs /boston-menus/).
+          // Sub-page strategies:
+          //  - Some restaurants split menu across /brunch /lunch /dinner pages
+          //    (Webflow / WordPress / multi-service restaurants).
+          //  - Some embed the menu in a cross-origin iframe (checkle.menu,
+          //    popmenu, singleplatform, Toast). findMenuIframes pulls those URLs
+          //    so the same loop fetches and extracts them.
+          // Merge semantics: seed with primary's dishes; for each sub-page dish,
+          // dedup by (lowercase name, lowercase section). On conflict, prefer
+          // the row with richer fields (price+description+dietary_tags weighted
+          // 3/2/1 — mirrors upsertDishes); ties go to primary.
+          const primaryDishCount = extracted.dishes.length
+          const primaryIsEmpty = primaryDishCount === 0
+          const primaryIsThin = !primaryIsEmpty && primaryDishCount <= THIN_EXTRACTION_THRESHOLD
+          let mergeTelemetry: Record<string, unknown> | null = null
+          if (primaryIsEmpty || primaryIsThin) {
             const subPages = findSubMenuPages(rawHtml, menuUrl, MAX_SUB_PAGES)
             const menuIframes = findMenuIframes(rawHtml, MAX_MENU_IFRAMES)
             const subUrls: Array<{ url: string; strategy: 'sub-page' | 'iframe' }> = [
@@ -1726,16 +1741,47 @@ serve(async (req) => {
               ...menuIframes.map(url => ({ url, strategy: 'iframe' as const })),
             ]
             if (subUrls.length > 0) {
-              console.log(`${restaurant.name}: trying ${subPages.length} sub-pages + ${menuIframes.length} menu iframes`)
-              // Dedupe across sub-pages by (lowercased name, lowercased section).
-              // Many restaurants list the same dish on /lunch and /dinner; without
-              // deduping we'd report inflated dishes_found, and even though
-              // upsertDishes coalesces by name later, keeping the merged result
-              // honest matters for telemetry and for pages that genuinely share
-              // sections (e.g. desserts).
-              const seenDishes = new Set<string>()
-              const mergedDishes: typeof extracted.dishes = []
-              const mergedSections: string[] = []
+              const mergeReason = primaryIsEmpty ? 'empty_primary' : 'thin_primary'
+              console.log(`${restaurant.name}: ${mergeReason} (${primaryDishCount} dishes), trying ${subPages.length} sub-pages + ${menuIframes.length} menu iframes`)
+
+              const dishKey = (d: { name: string; menu_section?: string | null }) =>
+                `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`
+              const dataRichness = (d: { price?: number | null; description?: string | null; dietary_tags?: string[] | null }) =>
+                ((d.price != null ? 3 : 0) +
+                 (d.description ? 2 : 0) +
+                 (Array.isArray(d.dietary_tags) && d.dietary_tags.length > 0 ? 1 : 0))
+
+              // Seed merged state with primary's dishes. When primary is empty,
+              // mergedByKey starts empty too — that recovers the original
+              // "sub-pages fully replace" behavior for the empty case.
+              const mergedByKey = new Map<string, typeof extracted.dishes[0]>()
+              for (const dish of extracted.dishes) {
+                mergedByKey.set(dishKey(dish), dish)
+              }
+              const mergedSections: string[] = [...extracted.menu_section_order]
+              let subContribCount = 0
+              let dedupedCount = 0
+
+              const ingestSubDishes = (subDishes: typeof extracted.dishes, sectionsFromSub: string[]) => {
+                for (const dish of subDishes) {
+                  const key = dishKey(dish)
+                  const incumbent = mergedByKey.get(key)
+                  if (!incumbent) {
+                    mergedByKey.set(key, dish)
+                    subContribCount++
+                  } else {
+                    // Conflict: prefer richer record; tie → keep primary (incumbent).
+                    if (dataRichness(dish) > dataRichness(incumbent)) {
+                      mergedByKey.set(key, dish)
+                    }
+                    dedupedCount++
+                  }
+                }
+                for (const sec of sectionsFromSub) {
+                  if (!mergedSections.includes(sec)) mergedSections.push(sec)
+                }
+              }
+
               for (const { url: subUrl, strategy } of subUrls) {
                 try {
                   const subFetch = await fetchRawHtml(subUrl)
@@ -1745,15 +1791,7 @@ serve(async (req) => {
                   if (subFetch.type === 'pdf') {
                     const subPdfResult = await extractMenuFromPdfsWithClaude([subFetch.pdfUrl], restaurant.name)
                     attempts.push({ strategy, url_count: 1, dishes_found: subPdfResult.dishes.length, url: subUrl })
-                    for (const dish of subPdfResult.dishes) {
-                      const key = `${dish.name.toLowerCase()}|${(dish.menu_section || '').toLowerCase()}`
-                      if (seenDishes.has(key)) continue
-                      seenDishes.add(key)
-                      mergedDishes.push(dish)
-                    }
-                    for (const sec of subPdfResult.menu_section_order) {
-                      if (!mergedSections.includes(sec)) mergedSections.push(sec)
-                    }
+                    ingestSubDishes(subPdfResult.dishes, subPdfResult.menu_section_order)
                     continue
                   }
                   let subText = extractMenuTextFromHtml(subFetch.html)
@@ -1799,23 +1837,30 @@ serve(async (req) => {
                   }
                   const subResult = await extractMenuWithClaude(subText, restaurant.name)
                   attempts.push({ strategy, url_count: 1, dishes_found: subResult.dishes.length, url: subUrl })
-                  for (const dish of subResult.dishes) {
-                    const key = `${dish.name.toLowerCase()}|${(dish.menu_section || '').toLowerCase()}`
-                    if (seenDishes.has(key)) continue
-                    seenDishes.add(key)
-                    mergedDishes.push(dish)
-                  }
-                  for (const sec of subResult.menu_section_order) {
-                    if (!mergedSections.includes(sec)) mergedSections.push(sec)
-                  }
+                  ingestSubDishes(subResult.dishes, subResult.menu_section_order)
                 } catch (err) {
                   const message = err instanceof Error ? err.message : String(err)
                   console.error(`${restaurant.name}: ${strategy} ${subUrl} failed:`, message)
                   attempts.push({ strategy, url_count: 1, dishes_found: 0, url: subUrl, error: message })
                 }
               }
-              if (mergedDishes.length > 0) {
-                extracted = { dishes: mergedDishes, menu_section_order: mergedSections }
+
+              const mergedArr = Array.from(mergedByKey.values())
+              // Only replace `extracted` if we actually gained dishes. When primary
+              // is empty (0), any sub-page contribution wins. When primary is thin,
+              // we already seeded merge with primary; if sub-pages added nothing
+              // new, mergedArr.length === primaryDishCount and we keep `extracted`
+              // as-is (primary survives untouched).
+              if (mergedArr.length > primaryDishCount) {
+                extracted = { dishes: mergedArr, menu_section_order: mergedSections }
+              }
+
+              mergeTelemetry = {
+                merge_reason: mergeReason,
+                primary_count: primaryDishCount,
+                sub_count: subContribCount,
+                added_count: Math.max(0, mergedArr.length - primaryDishCount),
+                deduped_count: dedupedCount,
               }
             }
           }
@@ -1944,6 +1989,7 @@ serve(async (req) => {
               batch_dedup_skipped: stats.batchDedupSkipped,
               cross_category_skipped: stats.crossCategorySkipped,
               price_gate_rejected: stats.priceGateRejected,
+              ...(mergeTelemetry ?? {}),
             },
             lock_expires_at: null,
             updated_at: new Date().toISOString(),

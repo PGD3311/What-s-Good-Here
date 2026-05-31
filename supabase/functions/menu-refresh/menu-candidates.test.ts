@@ -411,6 +411,33 @@ describe('findSubMenuPages', () => {
     const out = findSubMenuPages(html, 'https://x.com/')
     expect(out).toEqual([])
   })
+
+  // Plural-form path matches (regression: Saltie Girl's real menu lives at
+  // /boston-menus/ — the singular-only regex missed it and we extracted only
+  // the 6-item prix-fixe from /menu).
+  it('matches plural "/menus/" (bare plural)', () => {
+    const html = '<a href="/menus/">Menus</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/menus/'])
+  })
+
+  it('matches "/boston-menus/" (plural with location prefix — Saltie Girl regression)', () => {
+    const html = '<a href="/boston-menus/">Menus</a>'
+    const out = findSubMenuPages(html, 'https://www.saltiegirl.com/menu')
+    expect(out).toEqual(['https://www.saltiegirl.com/boston-menus/'])
+  })
+
+  it('still matches singular "/menu/" (no regression)', () => {
+    const html = '<a href="/menu/">Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/menu/'])
+  })
+
+  it('still matches "/our-menu/" (prefixed singular — no regression)', () => {
+    const html = '<a href="/our-menu/">Our Menu</a>'
+    const out = findSubMenuPages(html, 'https://x.com/')
+    expect(out).toEqual(['https://x.com/our-menu/'])
+  })
 })
 
 describe('findMenuIframes', () => {

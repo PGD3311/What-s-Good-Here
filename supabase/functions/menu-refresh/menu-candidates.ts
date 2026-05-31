@@ -219,7 +219,7 @@ const SUB_MENU_PATH_PATTERNS = [
   /\/(?:[\w-]*-)?lunch(?:-menu)?\/?$/i,
   /\/(?:[\w-]*-)?dinner(?:-menu)?\/?$/i,
   /\/(?:[\w-]*-)?breakfast(?:-menu)?\/?$/i,
-  /\/(?:[\w-]*-)?menu(?:-\d+)?\/?$/i,  // /menu-1, /our-menu — but only as standalone path
+  /\/(?:[\w-]*-)?menus?(?:-\d+)?\/?$/i,  // /menu, /menus, /menu-1, /our-menu, /boston-menus — but only as standalone path
 ]
 
 // Anchor-text fallback for sites whose URLs don't follow the convention above —
