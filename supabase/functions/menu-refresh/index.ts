@@ -1360,6 +1360,9 @@ serve(async (req) => {
       const results: Array<Record<string, unknown>> = []
 
       for (const job of jobs) {
+        // Lifted above the try so the catch-block + early-failure writes
+        // can still record merge telemetry when the fallback fired mid-job.
+        let mergeTelemetry: Record<string, unknown> | null = null
         try {
           const { data: restaurant, error: restErr } = await supabase
             .from('restaurants')
@@ -1629,6 +1632,7 @@ serve(async (req) => {
                 render_error: renderError,
                 rendered_text_len: renderedTextLen,
                 candidates_found: candidates.length,
+                ...(mergeTelemetry ?? {}),
               },
               lock_expires_at: null,
               updated_at: new Date().toISOString(),
@@ -1732,7 +1736,6 @@ serve(async (req) => {
           const primaryDishCount = extracted.dishes.length
           const primaryIsEmpty = primaryDishCount === 0
           const primaryIsThin = !primaryIsEmpty && primaryDishCount <= THIN_EXTRACTION_THRESHOLD
-          let mergeTelemetry: Record<string, unknown> | null = null
           if (primaryIsEmpty || primaryIsThin) {
             const subPages = findSubMenuPages(rawHtml, menuUrl, MAX_SUB_PAGES)
             const menuIframes = findMenuIframes(rawHtml, MAX_MENU_IFRAMES)
@@ -1760,10 +1763,13 @@ serve(async (req) => {
               }
               const mergedSections: string[] = [...extracted.menu_section_order]
               let subContribCount = 0
+              let subTotalCount = 0
+              let replacedCount = 0
               let dedupedCount = 0
 
               const ingestSubDishes = (subDishes: typeof extracted.dishes, sectionsFromSub: string[]) => {
                 for (const dish of subDishes) {
+                  subTotalCount++
                   const key = dishKey(dish)
                   const incumbent = mergedByKey.get(key)
                   if (!incumbent) {
@@ -1773,6 +1779,7 @@ serve(async (req) => {
                     // Conflict: prefer richer record; tie → keep primary (incumbent).
                     if (dataRichness(dish) > dataRichness(incumbent)) {
                       mergedByKey.set(key, dish)
+                      replacedCount++
                     }
                     dedupedCount++
                   }
@@ -1859,8 +1866,10 @@ serve(async (req) => {
                 merge_reason: mergeReason,
                 primary_count: primaryDishCount,
                 sub_count: subContribCount,
+                sub_total_count: subTotalCount,
                 added_count: Math.max(0, mergedArr.length - primaryDishCount),
                 deduped_count: dedupedCount,
+                replaced_count: replacedCount,
               }
             }
           }
@@ -1942,6 +1951,7 @@ serve(async (req) => {
                 rendered_text_len: renderedTextLen,
                 candidates_found: candidates.length,
                 attempts,
+                ...(mergeTelemetry ?? {}),
               },
               lock_expires_at: null,
               updated_at: new Date().toISOString(),
@@ -2017,7 +2027,7 @@ serve(async (req) => {
             run_after: newAttemptCount >= job.max_attempts ? undefined : calculateBackoff(newAttemptCount).toISOString(),
             error_code: classified.code,
             error_message: classified.message,
-            error_context: classified.context,
+            error_context: { ...(classified.context ?? {}), ...(mergeTelemetry ?? {}) },
             lock_expires_at: null,
             updated_at: new Date().toISOString(),
           }).eq('id', job.id)
