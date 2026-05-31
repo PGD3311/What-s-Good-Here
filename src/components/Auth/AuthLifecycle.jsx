@@ -46,7 +46,33 @@ export function AuthLifecycle() {
 
       urlHandle = await App.addListener('appUrlOpen', async ({ url }) => {
         const parsed = parseAuthUrl(url)
-        if (!parsed) return // not an auth URL — leave it to the router / other handlers
+        if (!parsed) {
+          // Non-auth Universal Link: iOS launched (or foregrounded) the app
+          // via apple-app-site-association after the user tapped a wghapp.com
+          // link in iMessage / Mail / Safari. Without explicit navigation here,
+          // React Router stays on whatever route was last loaded (home on cold
+          // launch), so every shared /dish, /restaurants, /locals link looks
+          // broken. Custom-scheme URLs (WhatsGoodHere://) are auth-only and
+          // already handled above; only forward http(s) Universal Links.
+          try {
+            const u = new URL(url)
+            if (u.protocol === 'https:' || u.protocol === 'http:') {
+              // Strip extra leading slashes so a malformed link like
+              // https://wghapp.com//evil.com can't masquerade as an external
+              // path; React Router will then 404 cleanly on the bogus route.
+              const path = '/' + (u.pathname || '/').replace(/^\/+/, '')
+              const target = path + (u.search || '') + (u.hash || '')
+              if (target && target !== '/') {
+                // replace: true so the deep link doesn't leave '/' in the
+                // history stack underneath a cold-launched destination.
+                navigate(target, { replace: true })
+              }
+            }
+          } catch (err) {
+            logger.warn('AuthLifecycle non-auth deep link parse failed', err)
+          }
+          return
+        }
         const { code, type } = parsed
         if (inFlightCodes.has(code)) return // duplicate event for the same code
         inFlightCodes.add(code)

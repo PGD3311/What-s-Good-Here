@@ -59,6 +59,15 @@ var ITEM = { marginBottom: '11px', padding: '0 2px' }
 // below their intrinsic width (default flex min-width is 'auto'); without it,
 // long dish names push past the right edge and the rating clips off-screen.
 var ITEM_HEAD = { display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '1px', minWidth: 0 }
+var RANK = {
+  fontFamily: "'Amatic SC', cursive",
+  fontWeight: 700,
+  fontSize: '22px',
+  lineHeight: 1,
+  color: 'var(--color-accent-gold)',
+  flexShrink: 0,
+  minWidth: '22px',
+}
 // overflow + ellipsis on the name span keeps the newspaper-list look (rating
 // stays right-aligned, dotted leader still connects) even for very long names.
 var ITEM_NAME = {
@@ -149,10 +158,11 @@ export function LocalsCurator() {
         <h1 style={TITLE}>{first.display_name || 'Anonymous'}</h1>
         <div style={BYLINE}>{first.description || (first.title || '')}</div>
 
-        {items.map(function (item) {
+        {items.map(function (item, idx) {
           return (
             <div key={item.dish_id} style={ITEM}>
               <div style={ITEM_HEAD}>
+                <span style={RANK}>{idx + 1}.</span>
                 <span style={ITEM_NAME}>
                   <button
                     type="button"
