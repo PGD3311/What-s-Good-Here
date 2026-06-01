@@ -46,11 +46,24 @@ describe('signInWithGoogleNative', () => {
   })
 
   it('maps plugin init failure to AUTH_CONFIG', async () => {
-    initializeMock.mockRejectedValueOnce(new Error('Missing client id'))
-    await expect(signInWithGoogleNative()).rejects.toMatchObject({
-      code: 'AUTH_CONFIG',
-      subcode: 'google_sdk_missing_clientid',
-    })
+    // Pin VITE_GOOGLE_IOS_CLIENT_ID instead of inheriting it from the developer's
+    // .env.local. The module reads it once at import time, so stub the env and
+    // re-import to exercise the no-client-id branch deterministically — this
+    // matches CI, where the var is unset and the subcode is google_sdk_missing_clientid.
+    vi.stubEnv('VITE_GOOGLE_IOS_CLIENT_ID', '')
+    vi.resetModules()
+    try {
+      const { signInWithGoogleNative: signIn } = await import('./nativeAuth')
+      initializeMock.mockRejectedValueOnce(new Error('Missing client id'))
+      await expect(signIn()).rejects.toMatchObject({
+        code: 'AUTH_CONFIG',
+        subcode: 'google_sdk_missing_clientid',
+      })
+    } finally {
+      // Always restore env even if the assertion throws, so a failure here can't
+      // leak the stubbed client id into later tests in this file.
+      vi.unstubAllEnvs()
+    }
   })
 })
 

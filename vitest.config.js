@@ -10,7 +10,8 @@ export default defineConfig({
     exclude: [
       'e2e/**',
       'whats-good-here-soul/**',
-      'node_modules/**',
+      '**/node_modules/**',
+      '.claude/**',
       // Deno-native tests — these use `https://deno.land/std/...` + `https://esm.sh/...`
       // URL imports that Node's ESM loader rejects. Run them with:
       //   deno test --allow-net --allow-env <path>
@@ -22,6 +23,7 @@ export default defineConfig({
       'supabase/functions/apple-token-exchange/index.test.ts',
       'supabase/functions/apple-token-persist/index.test.ts',
       'supabase/functions/delete-account/index.test.ts',
+      'supabase/functions/menu-refresh/bentobox.test.ts',
     ],
   },
 })
