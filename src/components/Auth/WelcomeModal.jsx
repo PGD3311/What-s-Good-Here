@@ -37,6 +37,12 @@ const STEPS = [
     subtitle: 'Real photos from real people',
     description: 'No stock photos. When you order something, snap a quick pic — the community will thank you.',
   },
+  {
+    id: 'help-build',
+    title: 'Before you head in',
+    subtitle: 'The rankings are still filling in.',
+    description: "What's Good Here is just getting started — every dish you rate helps build the map of what's actually good. You're one of the first, so yours really shape it.",
+  },
 ]
 
 export function WelcomeModal() {
@@ -216,7 +222,7 @@ export function WelcomeModal() {
           </div>
 
           {/* Step icon */}
-          {currentStep.id === 'welcome' ? (
+          {currentStep.id === 'welcome' || currentStep.id === 'help-build' ? (
             <div className="flex justify-center mb-6">
               <Seal size={72} variant="icon" />
             </div>
@@ -344,6 +350,16 @@ export function WelcomeModal() {
             </div>
           )}
 
+          {/* Help-build step — the thank-you, in brand color */}
+          {currentStep.id === 'help-build' && (
+            <p
+              className="text-center text-sm font-semibold mb-6"
+              style={{ color: 'var(--color-primary)' }}
+            >
+              Thanks for helping us out. 🙏
+            </p>
+          )}
+
           {/* Nav buttons */}
           <div className="space-y-3">
             {saveError && (
@@ -374,13 +390,15 @@ export function WelcomeModal() {
             )}
           </div>
 
-          {/* Fun footer text */}
-          <p className="mt-6 text-xs text-center" style={{ color: 'var(--color-text-tertiary)' }}>
-            {step === 0 && "Trusted by island food lovers"}
-            {step === 1 && "Dishes need 5+ votes to get ranked"}
-            {step === 2 && "No pings — just open the app when you're there"}
-            {step === 3 && "Your photos help everyone eat better"}
-          </p>
+          {/* Fun footer text — the help-build step (last) intentionally has none */}
+          {currentStep.id !== 'help-build' && (
+            <p className="mt-6 text-xs text-center" style={{ color: 'var(--color-text-tertiary)' }}>
+              {step === 0 && "The future home of food lovers everywhere"}
+              {step === 1 && "Dishes need 5+ votes to get ranked"}
+              {step === 2 && "No pings — just open the app when you're there"}
+              {step === 3 && "Your photos help everyone eat better"}
+            </p>
+          )}
         </div>
       </div>
     </div>
