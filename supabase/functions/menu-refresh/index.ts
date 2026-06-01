@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
 import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+import { safeFetch } from '../_shared/ssrf.ts'
 import { detectBentoBox, buildBentoBoxMenuText, parseSchemaOrgMenuItems } from './bentobox.ts'
 
 // v1.3 dietary tag + description sanitizers (kept in sync with
@@ -401,10 +402,11 @@ async function findMenuUrl(websiteUrl: string): Promise<string | null> {
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 5000)
-      const res = await fetch(candidate, {
+      // safeFetch validates the host + every redirect hop (SSRF guard). A blocked,
+      // malformed, or over-redirecting candidate throws and is skipped by catch.
+      const res = await safeFetch(candidate, {
         method: 'HEAD',
         signal: controller.signal,
-        redirect: 'follow',
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-Bot/1.0)' },
       })
       clearTimeout(timeout)
@@ -834,7 +836,9 @@ async function downloadImageAsBase64(
   signal: AbortSignal
 ): Promise<{ data: string; mediaType: string } | null> {
   try {
-    const resp = await fetch(url, {
+    // safeFetch validates the host + every redirect hop (SSRF guard); a blocked
+    // or malformed image URL throws and is caught below (returns null).
+    const resp = await safeFetch(url, {
       signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-MenuBot/1.0)',
