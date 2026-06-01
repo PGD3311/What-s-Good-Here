@@ -51,6 +51,12 @@ CREATE TABLE IF NOT EXISTS restaurants (
   -- generation counter. Source of truth for the constant is
   -- CURRENT_EXTRACTOR_FINGERPRINT in supabase/functions/menu-refresh/index.ts.
   extractor_fingerprint TEXT,
+  -- Set true by menu-refresh's confidence gate when an auto-extraction looks
+  -- like garbage (thin + price-less + plain-HTML + no sub-page rescue — the
+  -- signature of hallucinating dishes from a JS-shell page). Flags the
+  -- restaurant for a hand-imported menu instead of writing bad dishes. Cleared
+  -- automatically when a later extraction succeeds. See menu-refresh/index.ts.
+  needs_manual_menu BOOLEAN NOT NULL DEFAULT false,
   menu_section_order TEXT[] DEFAULT '{}',
   menu_group_order TEXT[] DEFAULT '{}',
   toast_slug TEXT,
@@ -2771,6 +2777,7 @@ BEGIN
   NEW.menu_last_checked := OLD.menu_last_checked;
   NEW.menu_content_hash := OLD.menu_content_hash;
   NEW.extractor_fingerprint := OLD.extractor_fingerprint;
+  NEW.needs_manual_menu := OLD.needs_manual_menu;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

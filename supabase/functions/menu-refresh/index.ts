@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
 import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+import { detectBentoBox, buildBentoBoxMenuText, parseSchemaOrgMenuItems } from './bentobox.ts'
 
 // v1.3 dietary tag + description sanitizers (kept in sync with
 // ./extractors.ts which exists for Vitest test coverage — Vitest can't
@@ -143,6 +144,8 @@ Keep sections in the same order they appear on the menu. If "Raw Bar" comes befo
 
 Use the restaurant's exact dish names. If they call it "The Big Kahuna Burger", write that — don't shorten to "Kahuna Burger".
 
+**Menu groups (GROUP markers).** Some sources mark distinct menus with a line \`GROUP: <name>\` (e.g. \`GROUP: All Day\`, \`GROUP: Brunch\`). When present, assign every dish below a GROUP marker to that group via the \`menu_group\` field, until the next GROUP marker. If the input has NO GROUP markers, set \`menu_group\` to \`null\` for every dish. Never invent groups — only use the exact GROUP labels given.
+
 ## WGH Category (Internal — Separate from Menu Section)
 
 Each dish also gets a "category" field. This is OUR internal classification, NOT the restaurant's. A dish in the restaurant's "From The Sea" section might get category "lobster roll" or "scallops" or "fish-and-chips" depending on what it actually is.
@@ -244,15 +247,16 @@ Pick the MOST SPECIFIC category that fits. Prefer "lobster roll" over "seafood",
 6. **Skip condiments** — extra sauce, side of dressing, bread roll
 7. **Skip side dishes** — mashed potatoes, green beans, rice, coleslaw, steamed veggies, etc. NOT rateable.
 8. **EXCEPTION: Fries and onion rings ARE included** — people rate these. Keep them.
-9. **Deduplicate sizes, portions, and near-duplicate names within a menu section**:
+9. **Skip tinned/canned/jarred seafood (conservas)** — fish or shellfish sold by the tin/can/jar as a RETAIL product, not a plated dish. Recognize the pattern: many single-species listings grouped by fish type (Sardines, Anchovies, Mackerel, Tuna, Mussels, Cockles, Squid, Octopus, Herring, Cod, etc.), brand/origin names, and descriptions that are only a preservation medium ("in olive oil", "in EVOO", "in escabeche", "in spiced oil", "with lemon", "smoked, tinned") rather than a cooked or composed preparation. A restaurant with a "Tinned Fish" / "Conservas" / "Tins" program lists dozens of these — they are retail items diners buy, not dishes they order and rate, so skip the entire program. **KEEP prepared seafood**: chowders, fried/grilled/roasted preparations, crudo, raw oysters/clams on the half shell, lobster rolls, seafood towers — anything cooked, plated, or composed with accompaniments.
+10. **Deduplicate sizes, portions, and near-duplicate names within a menu section**:
    - **Size/portion variants** (Small/Medium/Large, 10"/14", Cup/Bowl, half/whole, lunch/dinner): output ONE entry per dish. Use the larger/dinner price.
    - **Near-duplicate names** (same menu_section, same category): if two dishes differ only by a redundant category suffix — "Margherita" vs "Margherita Pizza", "Caesar" vs "Caesar Salad", "Lobster" vs "Lobster Roll" when both are in the pizza / salad / lobster-roll section — they are the SAME dish listed twice. Output ONE entry. Prefer the shorter name (without the redundant category word).
    - **Genuinely different portions stay separate:** "Half Roast Chicken" vs "Whole Roast Chicken", "Kids Burger" vs "Burger" — output both.
    - **When in doubt:** if two dishes in the same section have names that a normal human would read as "the same dish at different prices," collapse them. Better to under-count than to duplicate.
-10. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
-11. **One category per dish** — pick the most specific match
-12. **Description rule:** Output an ingredient/preparation line **150 chars or fewer** as \`description\`. Format: comma-separated nouns. List the dish's defining ingredients in the order the menu presents them — protein, signature accompaniments, sauce/finish. Skip filler adjectives ("fresh", "house-made", "perfectly"). If the menu copy fits under 150 chars, keep all of it. **Never truncate mid-word.** Examples: "Hot lobster meat, drawn butter, split-top bun" / "Fried cauliflower, brussels sprouts, sun-dried tomato melange, crispy garlic, smoked sea salt, vichyssoise sauce" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
-13. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively labels the dish as that diet** (not "available" or "on request"). This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free as served, not "can be modified."
+11. **Prices: NEVER INVENT OR GUESS PRICES.** Only set a price if you can see an exact dollar amount next to that specific dish on the source page. If no explicit price is shown for a dish, the price field MUST be \`null\`. Do NOT infer prices from nearby dishes, category averages, or typical market values. Do NOT fill in \`18\` or any default. A null price is always better than a guessed price. If a range is shown (e.g. "$14-18"), use the lower number.
+12. **One category per dish** — pick the most specific match
+13. **Description rule:** Output an ingredient/preparation line **150 chars or fewer** as \`description\`. Format: comma-separated nouns. List the dish's defining ingredients in the order the menu presents them — protein, signature accompaniments, sauce/finish. Skip filler adjectives ("fresh", "house-made", "perfectly"). If the menu copy fits under 150 chars, keep all of it. **Never truncate mid-word.** Examples: "Hot lobster meat, drawn butter, split-top bun" / "Fried cauliflower, brussels sprouts, sun-dried tomato melange, crispy garlic, smoked sea salt, vichyssoise sauce" / "Wagyu beef, bacon jam, brioche bun". If the menu has only marketing copy ("OUR SIGNATURE HAND-CRAFTED..."), output \`null\`. Never invent ingredients you don't see in the source.
+14. **Dietary tags rule:** Output a \`dietary_tags\` array. Allowed tags (and only these): \`vegan\`, \`vegetarian\`, \`gluten_free\`, \`dairy_free\`, \`nut_free\`. **Only emit a tag when the menu definitively labels the dish as that diet** (not "available" or "on request"). This is an allergen-safety contract — a celiac diner trusts \`gluten_free\` to mean the dish is gluten-free as served, not "can be modified."
 
     **Conventional shorthand markers** — treat these as definitive when they appear as a badge, suffix, or column marker on a dish, even without a printed legend. These conventions are standard across restaurant menus:
     - \`V\` → \`vegetarian\`
@@ -302,6 +306,7 @@ Return ONLY valid JSON (no markdown, no code fences):
     {
       "name": "Dish Name",
       "category": "category_id",
+      "menu_group": "All Day",
       "menu_section": "Section Name",
       "price": 18.00,
       "description": "ingredient, ingredient, prep",
@@ -309,11 +314,14 @@ Return ONLY valid JSON (no markdown, no code fences):
     }
   ],
   "menu_section_order": ["Section 1", "Section 2"]
-}`
+}
+
+(menu_group is null when the input has no GROUP markers.)`
 
 interface ExtractedDish {
   name: string
   category: string
+  menu_group: string | null
   menu_section: string
   price: number | null
   description: string | null
@@ -341,7 +349,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1|thin-fallback-v1'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1|thin-fallback-v1|bentobox-jsonld-v1|conservas-skip-v1|menu-groups-v2'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [
@@ -677,7 +685,7 @@ async function fetchMenuContent(url: string): Promise<string> {
 }
 
 interface ExtractionAttempt {
-  strategy: 'image' | 'pdf' | 'html' | 'sub-page' | 'iframe'
+  strategy: 'image' | 'pdf' | 'html' | 'sub-page' | 'iframe' | 'jsonld-menu'
   url_count: number
   top_score?: number
   dishes_found: number
@@ -701,6 +709,15 @@ const THIN_EXTRACTION_THRESHOLD = 10
 // might just be a JS-loaded shell. One Browserless call per failed job is cheap
 // insurance vs. another dead-letter restaurant.
 const SPARSE_TEXT_THRESHOLD = 2000
+
+// Confidence gate: a thin, price-less, plain-HTML extraction that no sub-page
+// rescued is the signature of Sonnet hallucinating dishes from a navigation
+// shell (e.g. a JS tab menu it can't read). We refuse to write those — they go
+// to the needs_manual_menu queue instead of polluting the dishes table. The
+// floor is deliberately low (and the gate also requires a thin count) so a real
+// small menu that happens to list MKT/no-price items isn't falsely gated; the
+// worst case of a false positive is "waits for a human" rather than "garbage".
+const PRICE_COVERAGE_FLOOR = 0.2
 
 // Merge two candidate lists by URL (last-write-wins on score), then re-sort.
 // Used when Browserless renders surface JS-injected assets that weren't in the raw HTML.
@@ -755,7 +772,11 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
+      // 32k headroom for large structured menus — a multi-menu BentoBox source
+      // (e.g. Loco's 5 meal-menus = ~290 items) overran the old 16k cap,
+      // truncating the JSON mid-array → parse failure → 0 dishes. Billed only
+      // on actual output, so this is free for normal-size menus.
+      max_tokens: 32768,
       messages: [
         {
           role: 'user',
@@ -787,6 +808,7 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
     .map((d: ExtractedDish) => ({
       ...d,
       category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+      menu_group: typeof d.menu_group === 'string' && d.menu_group.trim() ? d.menu_group.trim() : null,
       description: sanitizeDescription(d.description),
       dietary_tags: sanitizeDietaryTags(d.dietary_tags),
     }))
@@ -925,6 +947,7 @@ async function extractMenuFromImagesWithClaude(
     .map((d: ExtractedDish) => ({
       ...d,
       category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+      menu_group: typeof d.menu_group === 'string' && d.menu_group.trim() ? d.menu_group.trim() : null,
       description: sanitizeDescription(d.description),
       dietary_tags: sanitizeDietaryTags(d.dietary_tags),
     }))
@@ -997,6 +1020,7 @@ async function extractMenuFromPdfsWithClaude(
     .map((d: ExtractedDish) => ({
       ...d,
       category: VALID_CATEGORIES.includes(d.category) ? d.category : 'entree',
+      menu_group: typeof d.menu_group === 'string' && d.menu_group.trim() ? d.menu_group.trim() : null,
       description: sanitizeDescription(d.description),
       dietary_tags: sanitizeDietaryTags(d.dietary_tags),
     }))
@@ -1013,14 +1037,20 @@ async function extractMenuFromPdfsWithClaude(
 async function upsertDishes(
   supabase: ReturnType<typeof createClient>,
   restaurantId: string,
-  extracted: MenuExtractionResult
+  extracted: MenuExtractionResult,
+  // Only write menu_group when THIS extraction is genuinely group-aware (a
+  // multi-menu source produced GROUP labels). Otherwise ignore any menu_group
+  // value entirely — Sonnet occasionally emits a stray group on a flat menu,
+  // and writing it would clobber a hand-curated grouping (e.g. Nancy's). Flat
+  // sources leave existing menu_group untouched and insert new dishes as NULL.
+  writeGroups = false
 ): Promise<{ inserted: number; updated: number; unchanged: number; fuzzyMatched: number; batchDedupSkipped: number; crossCategorySkipped: number; priceGateRejected: number }> {
   // Get existing dishes. Ordered by created_at so "first row wins" ties in
   // the normalized-key lookup are deterministic and stable across runs —
   // older rows are more likely to be the canonical ones holding votes.
   const { data: existingDishes, error: fetchErr } = await supabase
     .from('dishes')
-    .select('id, name, category, menu_section, price, photo_url, description, dietary_tags, created_at')
+    .select('id, name, category, menu_group, menu_section, price, photo_url, description, dietary_tags, created_at')
     .eq('restaurant_id', restaurantId)
     .order('created_at', { ascending: true })
 
@@ -1199,13 +1229,18 @@ async function upsertDishes(
       const priceChanged = dish.price !== null && dish.price !== existing.price
       const categoryChanged = dish.category !== existing.category
       const sectionChanged = dish.menu_section !== existing.menu_section
+      // Only touch menu_group when this extraction is group-aware (writeGroups)
+      // AND it produced a non-null group. A flat/group-less run never nulls or
+      // overwrites an existing group — preserves hand-curated pills (Nancy's).
+      const groupChanged = writeGroups && (dish.menu_group ?? null) !== null && dish.menu_group !== existing.menu_group
       const descriptionChanged = (dish.description ?? null) !== (existing.description ?? null)
       const tagsChanged = !sortedArraysEqual(dish.dietary_tags || [], existing.dietary_tags || [])
 
-      if (priceChanged || categoryChanged || sectionChanged || descriptionChanged || tagsChanged) {
+      if (priceChanged || categoryChanged || sectionChanged || groupChanged || descriptionChanged || tagsChanged) {
         const updates: Record<string, unknown> = {}
         if (categoryChanged) updates.category = dish.category
         if (sectionChanged) updates.menu_section = dish.menu_section
+        if (groupChanged) updates.menu_group = dish.menu_group
         if (priceChanged) updates.price = dish.price
         if (descriptionChanged) updates.description = dish.description
         if (tagsChanged) updates.dietary_tags = dish.dietary_tags
@@ -1227,6 +1262,8 @@ async function upsertDishes(
           restaurant_id: restaurantId,
           name: dish.name,
           category: dish.category,
+          // Insert NULL unless this is a group-aware run (see writeGroups).
+          menu_group: writeGroups ? (dish.menu_group ?? null) : null,
           menu_section: dish.menu_section || null,
           price: dish.price || null,
           description: dish.description ?? null,
@@ -1551,6 +1588,14 @@ serve(async (req) => {
           let renderSucceeded = false
           let renderError: string | null = null
           let renderedTextLen: number | null = null
+          // True once a structured source (e.g. BentoBox JSON-LD) replaced the
+          // raw shell text. Structured extractions are trusted — they can't
+          // hallucinate — so the confidence gate below exempts them.
+          let bentoSourced = false
+          // Menu-group (pill) metadata from the structured source, used after
+          // extraction to backfill dish.menu_group + set menu_group_order.
+          let bentoGroupOrder: string[] = []
+          let bentoSectionGroups: Record<string, string> = {}
 
           // Discover all menu candidates (PDFs + images) and rank by score.
           // Score combines URL keywords (+menu/+dinner/-beverage/-logo) with
@@ -1586,6 +1631,57 @@ serve(async (req) => {
             }).eq('id', job.id)
             results.push({ job_id: job.id, status: 'unchanged', restaurant: restaurant.name })
             continue
+          }
+
+          // Structured (schema.org JSON-LD) source. Many restaurant CMSs —
+          // BentoBox especially — render menus as JS tabs on one URL, so the raw
+          // HTML is a navigation shell that makes the plain-text extractor
+          // hallucinate. But those pages embed the menu as schema.org `Menu`
+          // JSON-LD: deterministic, price-complete, hallucination-proof. When a
+          // page exposes it, replace the shell text with serialized JSON-LD and
+          // let the normal Sonnet pass handle category/dietary/cuisine tagging +
+          // the canned/retail-product curation rules. The parse is generic (any
+          // CMS); only the /menu/<slug>/ sibling-tab crawl is BentoBox-specific,
+          // so we gate that on detectBentoBox. See bentobox.ts.
+          const isBento = detectBentoBox(rawHtml)
+          if (isBento || parseSchemaOrgMenuItems(rawHtml).length > 0) {
+            try {
+              const structured = await buildBentoBoxMenuText({
+                rawHtml,
+                menuUrl,
+                fetchHtml: async (url) => {
+                  const f = await fetchRawHtml(url)
+                  return f.type === 'html' ? f.html : ''
+                },
+                maxTabPages: MAX_SUB_PAGES,
+                tabAugmentThreshold: THIN_EXTRACTION_THRESHOLD,
+                crawlTabs: isBento,
+              })
+              // Adopt JSON-LD whenever it actually yielded items AND it's the
+              // trustworthy source for this page. Do NOT gate on text length:
+              // a BentoBox shell is padded with nav/footer text, so the real
+              // JSON-LD menu is often *shorter* than the raw text — the old
+              // length check silently skipped the fix (Codex #2). Trust JSON-LD
+              // when the site is BentoBox (HTML is always a shell there), when
+              // the raw text is sparse (shell), or when JSON-LD is simply richer
+              // than the raw text. This avoids regressing content-rich non-Bento
+              // HTML pages that merely carry a tiny "special of the day" snippet.
+              if (
+                structured &&
+                structured.itemCount > 0 &&
+                (isBento || rawTextLen < SPARSE_TEXT_THRESHOLD || structured.text.length > extractionContent.length)
+              ) {
+                extractionContent = structured.text
+                bentoSourced = true
+                bentoGroupOrder = structured.groupOrder
+                bentoSectionGroups = structured.sectionGroups
+                attempts.push({ strategy: 'jsonld-menu', url_count: structured.pagesUsed, dishes_found: structured.itemCount })
+                console.log(`${restaurant.name}: schema.org JSON-LD source${isBento ? ' (BentoBox)' : ''} — ${structured.itemCount} items from ${structured.pagesUsed} page(s)${bentoGroupOrder.length ? `, groups: ${bentoGroupOrder.join(' / ')}` : ''}`)
+              }
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err)
+              console.error(`${restaurant.name}: JSON-LD menu extraction failed:`, message)
+            }
           }
 
           // Render fallback #1: content too short AND CMS requires rendering
@@ -1960,20 +2056,99 @@ serve(async (req) => {
             continue
           }
 
+          const winningStrategy = attempts.find(a => a.dishes_found > 0)?.strategy ?? 'html'
+
+          // Confidence gate: refuse to write a thin, price-less extraction that
+          // came from the plain-text HTML strategy and that no sub-page rescued.
+          // That combination is a heuristic for Sonnet inventing dishes from a
+          // navigation shell (the Saltie Girl failure: 6 fake dishes, 0 prices).
+          // It is NOT a direct shell detector — a genuinely tiny, all-market-
+          // price menu (omakase, raw bar) can trip it. That's an accepted
+          // trade-off: a false positive only routes the restaurant to manual
+          // review (needs_manual_menu) instead of writing garbage — it fails
+          // safe. Structured sources (JSON-LD, PDFs, iframes) and sub-page-
+          // rescued extractions are exempt, since those can't hallucinate.
+          const finalCount = extracted.dishes.length
+          const pricedCount = extracted.dishes.filter(d => d.price != null).length
+          const priceCoverage = finalCount > 0 ? pricedCount / finalCount : 0
+          const subRescued = typeof mergeTelemetry?.added_count === 'number' && mergeTelemetry.added_count > 0
+          const lowConfidence =
+            winningStrategy === 'html' &&
+            !bentoSourced &&
+            !subRescued &&
+            finalCount <= THIN_EXTRACTION_THRESHOLD &&
+            priceCoverage < PRICE_COVERAGE_FLOOR
+          if (lowConfidence) {
+            console.warn(`${restaurant.name}: gated low-confidence extraction (${finalCount} dishes, ${Math.round(priceCoverage * 100)}% priced) — flagged for manual menu, not written`)
+            // Mark for manual review and stamp hash+fingerprint so the next cron
+            // short-circuits instead of re-burning Sonnet on the same shell. A
+            // future fingerprint bump (better extractor) re-tries automatically.
+            await supabase.from('restaurants').update({
+              needs_manual_menu: true,
+              menu_last_checked: new Date().toISOString(),
+              menu_content_hash: rawHash,
+              extractor_fingerprint: CURRENT_EXTRACTOR_FINGERPRINT,
+            }).eq('id', restaurant.id)
+            await supabase.from('menu_import_jobs').update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              dishes_found: finalCount,
+              dishes_inserted: 0, dishes_updated: 0, dishes_unchanged: 0,
+              error_context: {
+                menu_url: menuUrl,
+                cms_detected: cms,
+                reason: 'gated_low_confidence',
+                price_coverage: priceCoverage,
+                winning_strategy: winningStrategy,
+                attempts,
+                ...(mergeTelemetry ?? {}),
+              },
+              lock_expires_at: null,
+              updated_at: new Date().toISOString(),
+            }).eq('id', job.id)
+            results.push({ job_id: job.id, status: 'gated_low_confidence', restaurant: restaurant.name, dishes: finalCount })
+            continue
+          }
+
+          // Menu groups (pills): backfill any dish whose GROUP label Sonnet
+          // dropped, using the structured source's unambiguous section→group
+          // map. Then derive menu_group_order from the groups actually present,
+          // in the source's order. Only multi-menu (BentoBox-tab) restaurants
+          // reach this with a non-empty bentoGroupOrder.
+          if (bentoGroupOrder.length > 0) {
+            for (const dish of extracted.dishes) {
+              if (!dish.menu_group) {
+                const g = bentoSectionGroups[dish.menu_section]
+                if (g) dish.menu_group = g
+              }
+            }
+          }
+
           // Success path: upsert dishes, store raw hash + render telemetry
           // Note: we hash the raw text (rawHash), not the rendered text. Next run can skip
           // cheaply when the raw HTML shell is unchanged. Mild staleness on JS sites is
           // acceptable; the 14-day refresh cron eventually catches updates.
 
-          const stats = await upsertDishes(supabase, restaurant.id, extracted)
+          const stats = await upsertDishes(supabase, restaurant.id, extracted, bentoGroupOrder.length > 0)
 
-          await supabase.from('restaurants').update({
+          const restaurantUpdate: Record<string, unknown> = {
             menu_last_checked: new Date().toISOString(),
             menu_content_hash: rawHash,
             extractor_fingerprint: CURRENT_EXTRACTOR_FINGERPRINT,
-          }).eq('id', restaurant.id)
-
-          const winningStrategy = attempts.find(a => a.dishes_found > 0)?.strategy ?? 'html'
+            // Clear any prior manual-menu flag — a good extraction supersedes it.
+            needs_manual_menu: false,
+          }
+          // Set menu_group_order only when this extraction produced ≥2 real
+          // groups. A group-less extraction leaves the column untouched, so a
+          // hand-curated grouping (e.g. Nancy's) is never wiped.
+          const presentGroups = bentoGroupOrder.filter((g) =>
+            extracted.dishes.some((d) => d.menu_group === g)
+          )
+          if (presentGroups.length >= 2) {
+            restaurantUpdate.menu_group_order = presentGroups
+            console.log(`${restaurant.name}: menu_group_order = ${presentGroups.join(' / ')}`)
+          }
+          await supabase.from('restaurants').update(restaurantUpdate).eq('id', restaurant.id)
 
           await supabase.from('menu_import_jobs').update({
             status: 'completed',
