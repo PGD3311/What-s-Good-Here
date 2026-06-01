@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { jitterTrustVisible } from '../../utils/jitterTrust'
 
 /**
  * Your Review Fingerprint — personal typing identity card.
@@ -13,6 +14,9 @@ export function ProfileJitterCard({ profile, user, userProfile, displayName, isP
   const data = profile.profile_data || {}
   const hasPrivateData = !isPublic && Object.keys(data).length > 0
   const tierInfo = getTierInfo(profile.confidence_level, profile.consistency_score)
+  // The "Building" state is a dead-end on iOS — the soft keyboard can't feed
+  // the typing-rhythm signal, so it never advances. Hide it there. See jitterTrust.js.
+  if (tierInfo.label === 'Building' && !jitterTrustVisible()) return null
   const nextTier = isPublic ? null : getNextTier(profile.confidence_level, profile.review_count, profile.consistency_score)
   const name = displayName || userProfile?.display_name || ''
   const initial = name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || '?'

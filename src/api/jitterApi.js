@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { createClassifiedError } from '../utils/errorHandler'
 import { logger } from '../utils/logger'
+import { jitterTrustVisible } from '../utils/jitterTrust'
 
 export const jitterApi = {
   /**
@@ -109,7 +110,9 @@ export const jitterApi = {
       return 'human_verified'
     }
     if (jitterProfile.review_count > 0) {
-      return 'building'
+      // The "building" state is a dead-end on iOS (rhythm can't be captured on
+      // the soft keyboard), so we don't surface it there. See jitterTrust.js.
+      return jitterTrustVisible() ? 'building' : null
     }
     return null
   },

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { profileApi } from '../../api/profileApi'
 import { logger } from '../../utils/logger'
+import { jitterTrustVisible } from '../../utils/jitterTrust'
 
 /**
  * Hero Identity Card for the Profile page
@@ -61,6 +62,13 @@ export function HeroIdentityCard({
   }
   const jitterData = jitterProfile?.profile_data || {}
   const hasJitterDetail = !!(jitterProfile && Object.keys(jitterData).length > 0)
+  // On iOS the soft keyboard can't feed the typing-rhythm signal, so the
+  // "Building" tier never advances — hide that dead-end state (chip + expanded
+  // panel) there. Verified/Trusted still show. See jitterTrust.js.
+  const jitterTier = jitterProfile
+    ? getTierInfo(jitterProfile.confidence_level, jitterProfile.consistency_score)
+    : null
+  const hideJitter = !!jitterTier && jitterTier.label === 'Building' && !jitterTrustVisible()
 
   return (
     <div
@@ -253,8 +261,8 @@ export function HeroIdentityCard({
         </div>
 
         {/* Compact Jitter Fingerprint — tap to expand */}
-        {jitterProfile && (() => {
-          const tier = getTierInfo(jitterProfile.confidence_level, jitterProfile.consistency_score)
+        {jitterProfile && !hideJitter && (() => {
+          const tier = jitterTier
           return (
             <button
               onClick={hasJitterDetail ? () => setJitterExpanded(!jitterExpanded) : undefined}
@@ -297,7 +305,7 @@ export function HeroIdentityCard({
       </div>
 
       {/* Expanded Jitter Detail Panel */}
-      {jitterExpanded && hasJitterDetail && (
+      {jitterExpanded && hasJitterDetail && !hideJitter && (
         <div
           className="mx-4 mt-3 rounded-xl overflow-hidden"
           style={{
