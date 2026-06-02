@@ -8,8 +8,10 @@ import { PlaylistCover } from '../components/playlists/PlaylistCover'
 import { PlaylistOwnerMenu } from '../components/playlists/PlaylistOwnerMenu'
 import { getCategoryNeonImage, categoryEmojiFor } from '../constants/categories'
 import { AddDishSearchSheet } from '../components/playlists/AddDishSearchSheet'
+import { CreatePlaylistModal } from '../components/playlists/CreatePlaylistModal'
 import { capture } from '../lib/analytics'
 import { shareOrCopy, canonicalShareUrl } from '../utils/share'
+import { ShareToInstagramButton } from '../components/share'
 import { toast } from 'sonner'
 
 export function Playlist() {
@@ -20,12 +22,22 @@ export function Playlist() {
   const { playlist, loading, error } = usePlaylistDetail(id)
   const { follow, unfollow, removeDish } = usePlaylistMutations()
   const [searchSheetOpen, setSearchSheetOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
 
   useDocumentTitle(playlist?.playlist_name || null)
 
 
   const items = playlist?.items || []
   const existingDishIds = useMemo(() => items.map((i) => i.dish_id), [items])
+
+  // Share-card data — must stay above the early returns (Rules of Hooks).
+  const igCardData = useMemo(() => ({
+    title: playlist?.title || 'Playlist',
+    byline: `by ${playlist?.owner_display_name || 'a local'} · ${items.length} dish${items.length === 1 ? '' : 'es'}`,
+    emojis: items.slice(0, 4).map((i) => categoryEmojiFor(i.category)),
+    topItems: items.slice(0, 3).map((i) => i.dish_name),
+    footerUrl: 'wghapp.com',
+  }), [playlist?.title, playlist?.owner_display_name, items])
 
   useEffect(() => {
     if (playlist) {
@@ -147,7 +159,7 @@ export function Playlist() {
           {' · '}{playlist.item_count} {playlist.item_count === 1 ? 'dish' : 'dishes'}
           {playlist.follower_count > 0 && ` · ${playlist.follower_count} followers`}
         </div>
-        <div className="flex justify-center gap-3" style={{ marginTop: 16 }}>
+        <div className="flex justify-center gap-3 flex-wrap" style={{ marginTop: 16 }}>
           {!playlist.is_owner && (
             <button
               onClick={toggleFollow}
@@ -179,6 +191,13 @@ export function Playlist() {
           >
             Share
           </button>
+          <ShareToInstagramButton
+            surface="playlist"
+            id={id}
+            url={canonicalShareUrl('/playlist/' + id)}
+            cardData={igCardData}
+            shareText={playlist.title + " on What's Good Here"}
+          />
           {playlist.is_owner && <PlaylistOwnerMenu playlist={playlist} />}
         </div>
       </div>
@@ -290,6 +309,32 @@ export function Playlist() {
           })}
         </ol>
       )}
+
+      {/* Funnel: turn a viewer (often arriving from a shared image) into a creator */}
+      {!playlist.is_owner && (
+        <div style={{ padding: '24px 20px 8px', textAlign: 'center' }}>
+          <button
+            onClick={function () {
+              if (!user) {
+                var nextParam = encodeURIComponent(location.pathname + location.search + location.hash)
+                navigate('/login?next=' + nextParam)
+                return
+              }
+              capture('create_playlist_cta_clicked', { from: 'playlist_detail', playlist_id: id })
+              setCreateOpen(true)
+            }}
+            style={{ color: 'var(--color-accent-gold)', background: 'none', border: 'none', fontWeight: 700, fontSize: 14 }}
+          >
+            + Create your own playlist
+          </button>
+        </div>
+      )}
+
+      <CreatePlaylistModal
+        isOpen={createOpen}
+        onClose={function () { setCreateOpen(false) }}
+        onCreated={function (pl) { if (pl && pl.id) navigate('/playlist/' + pl.id) }}
+      />
 
       <AddDishSearchSheet
         isOpen={searchSheetOpen}

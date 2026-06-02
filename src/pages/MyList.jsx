@@ -5,6 +5,9 @@ import { useDishSearch } from '../hooks/useDishSearch'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { getCategoryEmoji } from '../constants/categories'
 import { logger } from '../utils/logger'
+import { useAuth } from '../context/AuthContext'
+import { canonicalShareUrl } from '../utils/share'
+import { ShareToInstagramButton } from '../components/share'
 
 function snapshot(tagline, items) {
   return JSON.stringify({
@@ -22,6 +25,7 @@ export function MyList() {
   useDocumentTitle('Your top 10')
   var navigate = useNavigate()
   var location = useLocation()
+  var { user } = useAuth()
   var { listMeta, dishes, loading, error, saveList, saving } = useMyLocalList()
 
   var [tagline, setTagline] = useState('')
@@ -59,6 +63,17 @@ export function MyList() {
   var currentSnapshot = useMemo(function () {
     return snapshot(tagline, items)
   }, [tagline, items])
+
+  // Share-card data — must stay above the early returns (Rules of Hooks).
+  var igListData = useMemo(function () {
+    return {
+      title: (listMeta && listMeta.title ? listMeta.title : '').trim() || 'My Top 10',
+      byline: (tagline || '').trim() || (items.length + ' dish' + (items.length === 1 ? '' : 'es')),
+      emojis: items.slice(0, 4).map(function (i) { return getCategoryEmoji(i.category) || '🍽️' }),
+      topItems: items.slice(0, 3).map(function (i) { return i.dish_name }),
+      footerUrl: 'wghapp.com',
+    }
+  }, [listMeta, tagline, items])
   var isDirty = hydrated && currentSnapshot !== serverSnapshot
 
   // beforeunload — only while dirty. Removed on cleanup or when clean.
@@ -239,6 +254,19 @@ export function MyList() {
           Pick up to 10 dishes visitors should try
         </p>
       </div>
+
+      {/* Share the published list to Instagram (owner only, non-empty) */}
+      {items.length > 0 && user && user.id && (
+        <div className="px-4 pb-1">
+          <ShareToInstagramButton
+            surface="locals_list"
+            id={user.id}
+            url={canonicalShareUrl('/user/' + user.id)}
+            cardData={igListData}
+            shareText={igListData.title + " on What's Good Here"}
+          />
+        </div>
+      )}
 
       {/* Welcome banner (just-accepted curator) */}
       {showWelcome && (

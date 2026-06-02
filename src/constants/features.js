@@ -7,4 +7,7 @@ export const FEATURES = {
   // App Store rejection. Default-on; set VITE_FEATURES_APPLE_SIGNIN=false in
   // a local .env.local (or via a Vercel env var) to disable for debugging.
   APPLE_SIGNIN_ENABLED: import.meta.env.VITE_FEATURES_APPLE_SIGNIN !== 'false',
+  // Share-to-Instagram (image → native share sheet). Default-on; set
+  // VITE_FEATURES_IG_SHARE=false to kill instantly without a deploy.
+  IG_SHARE_ENABLED: import.meta.env.VITE_FEATURES_IG_SHARE !== 'false',
 }
