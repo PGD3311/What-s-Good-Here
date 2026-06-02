@@ -12,18 +12,13 @@ export default defineConfig({
       'whats-good-here-soul/**',
       '**/node_modules/**',
       '.claude/**',
-      // Deno-native tests — these use `https://deno.land/std/...` + `https://esm.sh/...`
-      // URL imports that Node's ESM loader rejects. Run them with:
-      //   deno test --allow-net --allow-env <path>
-      // Other supabase/functions/*.test.ts files are pure vitest (import from 'vitest')
-      // and stay included by default — only list the Deno-specific ones here.
-      'supabase/functions/_shared/apple.test.ts',
-      'supabase/functions/_test/observability.test.ts',
-      'supabase/functions/apple-revocation-retry/index.test.ts',
-      'supabase/functions/apple-token-exchange/index.test.ts',
-      'supabase/functions/apple-token-persist/index.test.ts',
-      'supabase/functions/delete-account/index.test.ts',
-      'supabase/functions/menu-refresh/bentobox.test.ts',
+      // Deno-native edge-function tests run under `deno test`, not Vitest (they
+      // import from https://deno.land / esm.sh, which Node's ESM loader rejects).
+      // Named by convention so this stays a single glob — no per-file maintenance:
+      //   *.deno.test.ts    = hermetic, run in CI (.github/workflows/ci.yml)
+      //   *.deno-it.test.ts = integration, need a live Supabase (run manually)
+      '**/*.deno.test.ts',
+      '**/*.deno-it.test.ts',
     ],
   },
 })

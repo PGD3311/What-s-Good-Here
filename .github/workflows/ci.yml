@@ -26,23 +26,17 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      # Hermetic edge-function tests only — no database, no secrets.
-      # Covers the menu-refresh BentoBox parser (#290) and the Apple-functions
-      # log-hygiene checks. Permissions: --allow-read because observability.test.ts
-      # statically scans source files for secret leaks; --allow-env for harmless
-      # env reads (no secret values required).
-      - name: Run hermetic Deno tests
-        run: >
-          deno test --allow-read --allow-env
-          supabase/functions/menu-refresh/bentobox.test.ts
-          supabase/functions/_test/observability.test.ts
-      # NOT run here: the 5 integration tests require a live staging Supabase +
-      # SUPABASE_SERVICE_ROLE_KEY + the apple_encryption_master_key_v1 Vault secret
-      # (they create auth users, write auth.identities, and POST to deployed
-      # functions). Wiring those into CI is a separate infra/secret decision.
-      # Run them manually against staging with:
-      #   deno test --allow-net --allow-env supabase/functions/_shared/apple.test.ts
-      #   deno test --allow-net --allow-env supabase/functions/apple-token-exchange/index.test.ts
-      #   deno test --allow-net --allow-env supabase/functions/apple-token-persist/index.test.ts
-      #   deno test --allow-net --allow-env supabase/functions/apple-revocation-retry/index.test.ts
-      #   deno test --allow-net --allow-env supabase/functions/delete-account/index.test.ts
+      # Hermetic edge-function tests only — no database, no secrets. Auto-discovered
+      # by the *.deno.test.ts convention (globstar), so new hermetic Deno tests run
+      # here with zero config edits. Covers the menu-refresh BentoBox parser and the
+      # Apple-functions log-hygiene checks. Permissions: --allow-read because
+      # observability statically scans source files for secret leaks; --allow-env for
+      # harmless env reads (no secret values required).
+      - name: Run hermetic Deno tests (*.deno.test.ts)
+        run: deno test --allow-read --allow-env $(find supabase/functions -name '*.deno.test.ts')
+      # NOT run here: the integration tests are named *.deno-it.test.ts and require a
+      # live staging Supabase + SUPABASE_SERVICE_ROLE_KEY + the
+      # apple_encryption_master_key_v1 Vault secret (they create auth users, write
+      # auth.identities, and POST to deployed functions). Wiring those into CI is a
+      # separate infra/secret decision. Run them manually against staging with:
+      #   deno test --allow-net --allow-env supabase/functions/**/*.deno-it.test.ts
