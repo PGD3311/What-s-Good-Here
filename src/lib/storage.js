@@ -164,6 +164,7 @@ export const STORAGE_KEYS = {
   EMAIL_CACHE: 'whats-good-here-email',
   MAP_SELECTED_RESTAURANT: 'wgh_map_selected_restaurant', // sessionStorage — survives in-tab nav, cleared on tab close
   HAS_SEEN_PHOTO_NUDGE: 'wgh_has_seen_photo_nudge',
+  HAS_SEEN_CURATOR_ONBOARDING: 'wgh_has_seen_curator_onboarding',
 }
 
 // Pending vote storage helpers (survives OAuth redirect)

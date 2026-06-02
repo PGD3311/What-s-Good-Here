@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useMyLocalList } from '../hooks/useMyLocalList'
@@ -7,6 +7,9 @@ import { useUserVotes } from '../hooks/useUserVotes'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { getCategoryEmoji } from '../constants/categories'
 import { ReviewFlow } from '../components/ReviewFlow'
+import { CuratorOnboardingSplash, CuratorChecklist } from '../components/profile'
+import { capture } from '../lib/analytics'
+import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../lib/storage'
 import { logger } from '../utils/logger'
 
 function snapshot(tagline, items) {
@@ -43,8 +46,9 @@ export function MyList() {
   var [saveMessage, setSaveMessage] = useState(null)
   var [hydrated, setHydrated] = useState(false)
   var [serverSnapshot, setServerSnapshot] = useState('')
-  var [welcomeDismissed, setWelcomeDismissed] = useState(false)
+  var [showSplash, setShowSplash] = useState(false)
   var [pendingRateDish, setPendingRateDish] = useState(null)
+  var taglineRef = useRef(null)
 
   var { results: searchResults } = useDishSearch(searchQuery, 20)
 
@@ -85,6 +89,15 @@ export function MyList() {
     window.addEventListener('beforeunload', handler)
     return function () { window.removeEventListener('beforeunload', handler) }
   }, [isDirty])
+
+  // One-time curator welcome splash: only right after accepting an invite.
+  useEffect(function () {
+    if (location.state
+        && location.state.justAcceptedCuratorInvite
+        && !getStorageItem(STORAGE_KEYS.HAS_SEEN_CURATOR_ONBOARDING)) {
+      setShowSplash(true)
+    }
+  }, [location.state])
 
   // Loading and error states (must come before the !listMeta gate so a
   // failed fetch doesn't masquerade as "you're not a curator").
@@ -214,6 +227,12 @@ export function MyList() {
 
   async function handleSave() {
     setSaveMessage(null)
+    // Publishing (items > 0) requires a bio so curator profiles aren't bare.
+    if (items.length > 0 && !tagline.trim()) {
+      setSaveMessage('Add a bio first so people know whose list this is.')
+      if (taglineRef.current) taglineRef.current.focus()
+      return
+    }
     try {
       var payload = {
         tagline: tagline || null,
@@ -245,13 +264,10 @@ export function MyList() {
     return !addedIds[dish.dish_id || dish.id]
   })
 
-  var showWelcome = !welcomeDismissed
-    && location.state
-    && location.state.justAcceptedCuratorInvite
-    && items.length === 0
-
-  function dismissWelcome() {
-    setWelcomeDismissed(true)
+  function dismissSplash() {
+    setStorageItem(STORAGE_KEYS.HAS_SEEN_CURATOR_ONBOARDING, true)
+    setShowSplash(false)
+    capture('curator_onboarding_completed')
     navigate(location.pathname, { replace: true, state: null })
   }
 
@@ -272,56 +288,24 @@ export function MyList() {
         </p>
       </div>
 
-      {/* Welcome banner (just-accepted curator) */}
-      {showWelcome && (
-        <div
-          className="mx-4 mb-3 rounded-xl"
-          style={{
-            background: 'var(--color-surface-elevated)',
-            border: '1px solid var(--color-primary)',
-            padding: '12px 14px',
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'flex-start',
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '4px' }}>
-              You&rsquo;re a Local Curator 🎉
-            </p>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-              Pick up to 10 dishes visitors should try, add a tagline, and hit
-              {' '}<strong>Save &amp; Publish</strong>. Your list shows up on the homepage.
-            </p>
-          </div>
-          <button
-            onClick={dismissWelcome}
-            aria-label="Dismiss welcome"
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '18px',
-              color: 'var(--color-text-tertiary)',
-              cursor: 'pointer',
-              padding: '0 4px',
-              lineHeight: 1,
-            }}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      {/* Setup checklist — completeness-gated, self-hides when done */}
+      <CuratorChecklist
+        hasDish={items.length > 0}
+        hasBio={!!tagline.trim()}
+        isPublished={!!(listMeta && listMeta.isActive) && dishes.length > 0}
+      />
 
-      {/* Tagline */}
+      {/* Bio (curator tagline) */}
       <div className="px-4 mb-4">
         <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>
-          Your tagline
+          Your bio
         </label>
         <input
+          ref={taglineRef}
           type="text"
           value={tagline}
           onChange={function (e) { setTagline(e.target.value) }}
-          placeholder="e.g. Manager at Nancy's, lifelong islander"
+          placeholder="Who are you? e.g. Manager at Nancy's, lifelong islander"
           maxLength={80}
           className="w-full rounded-lg"
           style={{
@@ -664,6 +648,8 @@ export function MyList() {
           </div>
         </div>
       )}
+
+      {showSplash && <CuratorOnboardingSplash onDismiss={dismissSplash} />}
     </div>
   )
 }
