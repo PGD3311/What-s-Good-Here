@@ -26,6 +26,10 @@ import { useRestaurantEvents } from '../hooks/useEvents'
 import { SpecialCard } from '../components/SpecialCard'
 import { EventCard } from '../components/EventCard'
 
+// Specials & Events ("Happening Here") are hidden until Launch 2.0 — the scraped
+// data is stale. Flip to true to surface the block.
+const SHOW_SPECIALS_EVENTS = false
+
 export function RestaurantDetail() {
   const { restaurantId } = useParams()
   const navigate = useNavigate()
@@ -746,7 +750,7 @@ export function RestaurantDetail() {
       </div>
 
       {/* Happening Here - Specials & Events (hidden until Launch 2.0 — stale scraped data) */}
-      {false && (specials.length > 0 || events.length > 0) && (
+      {SHOW_SPECIALS_EVENTS && (specials.length > 0 || events.length > 0) && (
         <div className="px-4 py-4">
           <div
             className="mb-3 h-px"
