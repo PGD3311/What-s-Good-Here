@@ -3626,6 +3626,15 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Dish not found');
   END IF;
 
+  -- Rate-first gate (server-enforced): a curator can only put a dish they've
+  -- rated on their Top 10. Mirrors the client gate in Dish.jsx / MyList.jsx.
+  IF NOT EXISTS (
+    SELECT 1 FROM votes
+    WHERE votes.dish_id = p_dish_id AND votes.user_id = v_user_id AND votes.rating_10 IS NOT NULL
+  ) THEN
+    RETURN json_build_object('success', false, 'error', 'Rate this dish first to add it to your Top 10');
+  END IF;
+
   SELECT id INTO v_list_id FROM local_lists WHERE user_id = v_user_id FOR UPDATE;
 
   IF v_list_id IS NULL THEN
@@ -4598,6 +4607,14 @@ BEGIN
     RAISE EXCEPTION 'Playlist not found' USING ERRCODE = 'P0002';
   END IF;
   IF p_note IS NOT NULL THEN PERFORM fn_check_content_blocklist(p_note, 'Note'); END IF;
+  -- Rate-first gate (server-enforced): a dish can only go on a list if the
+  -- caller has rated it. Mirrors the client gate in Dish.jsx / MyList.jsx.
+  IF NOT EXISTS (
+    SELECT 1 FROM votes
+    WHERE votes.dish_id = p_dish_id AND votes.user_id = v_user AND votes.rating_10 IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Rate this dish before adding it to a list' USING ERRCODE = 'P0001';
+  END IF;
   SELECT COALESCE(MAX(position), 0) + 1 INTO v_next_pos
     FROM user_playlist_items WHERE playlist_id = p_playlist_id;
   INSERT INTO user_playlist_items (playlist_id, dish_id, position, note)
