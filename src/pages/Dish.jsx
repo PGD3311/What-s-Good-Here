@@ -18,7 +18,8 @@ import { ReportModal } from '../components/ReportModal'
 import { MIN_VOTES_FOR_RANKING } from '../constants/app'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
-import { authApi } from '../api/authApi'
+import { buildDirectionsUrl, buildToastOrderUrl } from '../utils/restaurantLinks'
+import { votesApi } from '../api/votesApi'
 import { dishPhotosApi } from '../api/dishPhotosApi'
 import { ErrorTypes, getUserMessage } from '../utils/errorHandler'
 
@@ -89,7 +90,7 @@ export function Dish() {
     // allSettled so a photo-fetch failure doesn't also discard the vote fetch —
     // otherwise the CTA label silently regresses to "Rate this dish" for re-raters.
     Promise.allSettled([
-      authApi.getUserVoteForDish(dishId, user.id),
+      votesApi.getUserVoteForDish(dishId, user.id),
       dishPhotosApi.getUserPhotoForDish(dishId),
     ]).then(([voteResult, photoResult]) => {
       if (cancelled) return
@@ -137,7 +138,7 @@ export function Dish() {
     // allSettled so a photo-fetch failure doesn't discard the vote result.
     if (user && dishId) {
       Promise.allSettled([
-        authApi.getUserVoteForDish(dishId, user.id),
+        votesApi.getUserVoteForDish(dishId, user.id),
         dishPhotosApi.getUserPhotoForDish(dishId),
       ]).then(([voteResult, photoResult]) => {
         if (voteResult.status === 'fulfilled') {
@@ -510,7 +511,7 @@ export function Dish() {
         >
           {(dish.toast_slug || sanitizeUrl(dish.order_url)) ? (
             <a
-              href={dish.toast_slug ? 'https://order.toasttab.com/online/' + dish.toast_slug : sanitizeUrl(dish.order_url)}
+              href={buildToastOrderUrl(dish.toast_slug, dish.order_url)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => {
@@ -554,10 +555,11 @@ export function Dish() {
           ) : null}
 
           <a
-            href={dish.restaurant_lat && dish.restaurant_lng
-              ? 'https://www.google.com/maps/dir/?api=1&destination=' + dish.restaurant_lat + ',' + dish.restaurant_lng
-              : 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent((dish.restaurant_address || (dish.restaurant_name + ', ' + (dish.restaurant_town || "Martha's Vineyard") + ', MA')))
-            }
+            href={buildDirectionsUrl({
+              lat: dish.restaurant_lat,
+              lng: dish.restaurant_lng,
+              address: dish.restaurant_address || (dish.restaurant_name + ', ' + (dish.restaurant_town || "Martha's Vineyard") + ', MA'),
+            })}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => openExternalLink(e, e.currentTarget.href)}

@@ -659,4 +659,34 @@ export const votesApi = {
       throw error.type ? error : createClassifiedError(error)
     }
   },
+
+  /**
+   * Get the current user's vote for a dish (rating + review fields), or null.
+   * @param {string} dishId
+   * @param {string} userId
+   * @returns {Promise<Object|null>}
+   */
+  async getUserVoteForDish(dishId, userId) {
+    try {
+      if (!userId) {
+        return null
+      }
+
+      const { data, error } = await supabase
+        .from('votes')
+        .select('rating_10, review_text, review_created_at')
+        .eq('dish_id', dishId)
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (error) {
+        throw createClassifiedError(error)
+      }
+
+      return data
+    } catch (error) {
+      logger.error('Error fetching user vote:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
 }

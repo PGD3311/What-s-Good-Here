@@ -654,4 +654,42 @@ describe('votesApi', () => {
       await expect(votesApi.getReviewsForUser('user-1')).rejects.toThrow()
     })
   })
+
+  describe('getUserVoteForDish', () => {
+    it('should return null if no user ID', async () => {
+      const result = await votesApi.getUserVoteForDish('dish-1', null)
+      expect(result).toBeNull()
+    })
+
+    it('should fetch user vote successfully', async () => {
+      const mockVote = { rating_10: 8, review_text: null, review_created_at: null }
+      const selectFn = vi.fn((fields) => {
+        // Ensure binary vote field is not projected any more.
+        expect(fields).not.toMatch(/would_order_again/)
+        return {
+          eq: vi.fn(function() { return this }),
+          maybeSingle: vi.fn().mockResolvedValueOnce({ data: mockVote, error: null }),
+        }
+      })
+
+      supabase.from.mockReturnValueOnce({ select: selectFn })
+
+      const result = await votesApi.getUserVoteForDish('dish-1', 'user-1')
+
+      expect(result).toEqual(mockVote)
+    })
+
+    it('should return null if vote not found', async () => {
+      const selectFn = vi.fn(() => ({
+        eq: vi.fn(function() { return this }),
+        maybeSingle: vi.fn().mockResolvedValueOnce({ data: null, error: null }),
+      }))
+
+      supabase.from.mockReturnValueOnce({ select: selectFn })
+
+      const result = await votesApi.getUserVoteForDish('dish-1', 'user-1')
+
+      expect(result).toBeNull()
+    })
+  })
 })
