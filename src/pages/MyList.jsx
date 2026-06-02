@@ -457,16 +457,21 @@ export function MyList() {
               onClick={function () { setShowSearch(true) }}
               className="w-full rounded-xl"
               style={{
-                padding: '12px',
-                background: 'none',
-                border: '1.5px dashed var(--color-primary)',
-                color: 'var(--color-primary)',
-                fontSize: '14px',
-                fontWeight: 600,
+                // Empty list → prominent filled CTA so a new curator can't miss
+                // how to add. Once they've started, fall back to the quieter
+                // dashed "add another" affordance.
+                padding: items.length === 0 ? '14px' : '12px',
+                background: items.length === 0 ? 'var(--color-primary)' : 'none',
+                border: items.length === 0 ? 'none' : '1.5px dashed var(--color-primary)',
+                color: items.length === 0 ? '#fff' : 'var(--color-primary)',
+                fontSize: items.length === 0 ? '15px' : '14px',
+                fontWeight: 700,
                 cursor: 'pointer',
               }}
             >
-              + Add a dish ({10 - items.length} remaining)
+              {items.length === 0
+                ? 'Search & add your first dish'
+                : '+ Add a dish (' + (10 - items.length) + ' remaining)'}
             </button>
           ) : (
             <div
