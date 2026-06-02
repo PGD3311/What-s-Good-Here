@@ -3197,6 +3197,10 @@ CREATE TABLE IF NOT EXISTS local_lists (
   description TEXT,
   curator_tagline TEXT,
   is_active BOOLEAN DEFAULT true,
+  -- Editorial pin: lower number sorts first on the Locals curators list.
+  -- NULL = unpinned (sorts below pinned, by follower count). Used to keep the
+  -- co-creators at the top regardless of follower count.
+  pinned_rank INT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT local_lists_one_per_user UNIQUE (user_id)
 );
@@ -3739,7 +3743,8 @@ AS $$
     LIMIT 1
   ) top ON TRUE
   WHERE ll.is_active = true
-  ORDER BY follower_count DESC, p.display_name ASC;
+  -- Pinned co-creators first (lowest rank wins), then by follower count, then name.
+  ORDER BY ll.pinned_rank ASC NULLS LAST, follower_count DESC, p.display_name ASC;
 $$;
 GRANT EXECUTE ON FUNCTION get_local_picks_curators() TO anon, authenticated;
 
