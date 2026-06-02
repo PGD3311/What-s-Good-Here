@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { capture } from '../lib/analytics'
@@ -47,10 +47,15 @@ export function Dish() {
   const [loginModalOpen, setLoginModalOpen] = useState(false)
   const [playlistSheetOpen, setPlaylistSheetOpen] = useState(false)
   const [showReportDish, setShowReportDish] = useState(false)
-  const [showRateFlow, setShowRateFlow] = useState(false)
-  const [pendingAction, setPendingAction] = useState(null) // 'rate' | null
+  // When the user taps "+" / "Add to Top 10" on a dish with no rating yet, we
+  // nudge them to the (always-visible) slider, then auto-complete the queued
+  // add once a number is in. Single value so the two paths are mutually
+  // exclusive — tapping one supersedes the other instead of both replaying.
+  // null | 'playlist' | 'top10'
+  const [pendingListAdd, setPendingListAdd] = useState(null)
   const [priorVote, setPriorVote] = useState(null)
   const [existingPhoto, setExistingPhoto] = useState(null)
+  const rateFlowRef = useRef(null)
   const { profile } = useProfile(user?.id)
   const { dishes: myListDishes, addDish, adding: addingToMyList, loading: myListLoading } = useMyLocalList()
   const isCurator = !!profile?.is_local_curator
@@ -80,6 +85,9 @@ export function Dish() {
   // Fetch prior vote + prior photo in parallel so the CTA label and the
   // ReviewFlow photo thumbnail both reflect current state.
   useEffect(() => {
+    // Drop any queued list-add from a previously-viewed dish so it can't
+    // replay on this one (React Router reuses this component across :dishId).
+    setPendingListAdd(null)
     if (!user || !dishId) {
       setPriorVote(null)
       setExistingPhoto(null)
@@ -107,32 +115,18 @@ export function Dish() {
     return () => { cancelled = true }
   }, [dishId, user])
 
-  // Auth-gate intent preservation: once the user finishes logging in,
-  // resume straight into the rate flow.
-  useEffect(() => {
-    if (user && pendingAction === 'rate') {
-      setPendingAction(null)
-      setShowRateFlow(true)
-    }
-  }, [user, pendingAction])
-
   const handleLoginRequired = () => setLoginModalOpen(true)
 
-  const handleRateClick = () => {
-    if (showRateFlow) {
-      setShowRateFlow(false)
-      return
-    }
-    if (!user) {
-      setPendingAction('rate')
-      setLoginModalOpen(true)
-      return
-    }
-    setShowRateFlow(true)
-  }
-
   const handleVoteSubmitted = () => {
-    setShowRateFlow(false)
+    // If the rating was triggered by a "+ add to list" tap, finish the job:
+    // the dish now has a number, so complete the queued add.
+    if (pendingListAdd === 'playlist') {
+      setPendingListAdd(null)
+      setPlaylistSheetOpen(true)
+    } else if (pendingListAdd === 'top10') {
+      setPendingListAdd(null)
+      handleAddToTop10()
+    }
     // Refresh prior-vote and prior-photo so CTA label and thumbnail stay current.
     // allSettled so a photo-fetch failure doesn't discard the vote result.
     if (user && dishId) {
@@ -285,6 +279,13 @@ export function Dish() {
           <button
             onClick={() => {
               if (!user) { setLoginModalOpen(true); return }
+              // Gate: a dish needs a number before it can go on a list.
+              if (priorVote?.rating_10 == null) {
+                setPendingListAdd('playlist')
+                toast('Rate it first to add it to a list', { duration: 2500 })
+                rateFlowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                return
+              }
               setPlaylistSheetOpen(true)
             }}
             aria-label="Add to playlist"
@@ -356,45 +357,32 @@ export function Dish() {
               the page layout is unchanged for dishes without tags. */}
           <DishDescription dietaryTags={dish.dietary_tags} />
 
-          {/* LAYER 2: THE ACTION — Rate CTA + inline rate flow */}
+          {/* LAYER 2: THE ACTION — rate flow, always visible (no button to tap) */}
           <div className="p-4 space-y-3">
-            <button
-              type="button"
-              onClick={handleRateClick}
-              aria-expanded={showRateFlow}
-              aria-controls="rate-flow-panel"
-              className="w-full py-4 px-6 rounded-xl font-semibold shadow-lg transition-all duration-200 ease-out focus-ring active:scale-98 hover:shadow-xl"
-              style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)' }}
+            <div
+              id="rate-flow-panel"
+              ref={rateFlowRef}
+              className="p-4 rounded-xl"
+              style={{
+                background: 'var(--color-surface-elevated)',
+                border: '1px solid var(--color-divider)',
+              }}
             >
-              {showRateFlow
-                ? 'Close'
-                : priorVote ? 'Update your rating' : 'Rate this dish'}
-            </button>
-            {showRateFlow && (
-              <div
-                id="rate-flow-panel"
-                className="p-4 rounded-xl"
-                style={{
-                  background: 'var(--color-surface-elevated)',
-                  border: '1px solid var(--color-divider)',
-                }}
-              >
-                <ReviewFlow
-                  dishId={dish.dish_id}
-                  dishName={dish.dish_name}
-                  restaurantId={dish.restaurant_id}
-                  restaurantName={dish.restaurant_name}
-                  category={dish.category}
-                  price={dish.price}
-                  totalVotes={dish.total_votes}
-                  isRanked={isRanked}
-                  existingPhoto={existingPhoto}
-                  onVote={handleVoteSubmitted}
-                  onLoginRequired={handleLoginRequired}
-                  onPhotoUploaded={handlePhotoUploaded}
-                />
-              </div>
-            )}
+              <ReviewFlow
+                dishId={dish.dish_id}
+                dishName={dish.dish_name}
+                restaurantId={dish.restaurant_id}
+                restaurantName={dish.restaurant_name}
+                category={dish.category}
+                price={dish.price}
+                totalVotes={dish.total_votes}
+                isRanked={isRanked}
+                existingPhoto={existingPhoto}
+                onVote={handleVoteSubmitted}
+                onLoginRequired={handleLoginRequired}
+                onPhotoUploaded={handlePhotoUploaded}
+              />
+            </div>
             {myListReady && (
               isOnMyList ? (
                 <button
@@ -425,7 +413,16 @@ export function Dish() {
               ) : (
                 <button
                   type="button"
-                  onClick={handleAddToTop10}
+                  onClick={() => {
+                    // Gate: a curator must rate a dish before it can go on their Top 10.
+                    if (priorVote?.rating_10 == null) {
+                      setPendingListAdd('top10')
+                      toast('Rate it first to add it to your Top 10', { duration: 2500 })
+                      rateFlowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      return
+                    }
+                    handleAddToTop10()
+                  }}
                   disabled={addingToMyList}
                   className="w-full py-3 px-4 rounded-xl font-semibold transition-all active:scale-98 disabled:opacity-60"
                   style={{
