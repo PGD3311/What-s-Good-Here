@@ -173,7 +173,7 @@ export const votesApi = {
           })
           submittedDishIds.push(normalizedVotes[i].dishId)
         } catch (error) {
-          var classifiedError = error.type ? error : createClassifiedError(error)
+          const classifiedError = error.type ? error : createClassifiedError(error)
           classifiedError.submittedCount = submittedDishIds.length
           classifiedError.submittedDishIds = submittedDishIds.slice()
           throw classifiedError
@@ -192,7 +192,7 @@ export const votesApi = {
         throw error
       }
 
-      var classifiedError = createClassifiedError(error)
+      const classifiedError = createClassifiedError(error)
       if (error.submittedCount != null) {
         classifiedError.submittedCount = error.submittedCount
         classifiedError.submittedDishIds = error.submittedDishIds
