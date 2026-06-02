@@ -5,7 +5,7 @@ import { useVote } from '../hooks/useVote'
 import { usePurityTracker } from '../hooks/usePurityTracker'
 import JitterBox from '../utils/jitter-box'
 import { jitterApi } from '../api/jitterApi'
-import { authApi } from '../api/authApi'
+import { votesApi } from '../api/votesApi'
 import { dishPhotosApi } from '../api/dishPhotosApi'
 import { FoodRatingSlider } from './FoodRatingSlider'
 import { MAX_REVIEW_LENGTH } from '../constants/app'
@@ -90,7 +90,7 @@ export function ReviewFlow({
         return
       }
       try {
-        const vote = await authApi.getUserVoteForDish(dishId, user.id)
+        const vote = await votesApi.getUserVoteForDish(dishId, user.id)
         if (cancelled) return
         if (vote) {
           setPriorRating(vote.rating_10 ?? null)

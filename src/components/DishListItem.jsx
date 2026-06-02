@@ -6,6 +6,7 @@ import { getCategoryNeonImage, getCategoryEmoji, getDishNameIcon, getMenuSection
 import { RestaurantAvatar } from './RestaurantAvatar'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
+import { buildDirectionsUrl, buildToastOrderUrl } from '../utils/restaurantLinks'
 /**
  * DishListItem — the ONE component for showing a dish in any list.
  *
@@ -249,7 +250,7 @@ export const DishListItem = memo(function DishListItem({
           <div className="flex items-center gap-2" style={{ marginTop: '4px' }}>
             {(toastSlug || sanitizeUrl(orderUrl)) && (
               <a
-                href={toastSlug ? 'https://order.toasttab.com/online/' + toastSlug : sanitizeUrl(orderUrl)}
+                href={buildToastOrderUrl(toastSlug, orderUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
@@ -265,7 +266,7 @@ export const DishListItem = memo(function DishListItem({
             )}
             {restaurantLat && restaurantLng && (
               <a
-                href={'https://www.google.com/maps/dir/?api=1&destination=' + restaurantLat + ',' + restaurantLng}
+                href={buildDirectionsUrl({ lat: restaurantLat, lng: restaurantLng })}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
