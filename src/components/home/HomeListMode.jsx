@@ -73,16 +73,24 @@ export const HomeListMode = memo(function HomeListMode({
             already has an <h1 className="sr-only">What's Good Here</h1> for the
             screen-reader label, so this is aria-hidden decorative text. */}
         <div className="px-5 pt-3 pb-1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span aria-hidden="true" style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontWeight: 700,
-            fontSize: '36px',
-            lineHeight: 1,
-            letterSpacing: '0.5px',
-            color: 'var(--color-primary)',
-          }}>
-            What's <span style={{ color: 'var(--color-accent-gold)' }}>Good</span> Here
-          </span>
+          <div className="flex items-center" style={{ gap: '9px' }}>
+            <span aria-hidden="true" style={{
+              fontFamily: "'Amatic SC', cursive",
+              fontWeight: 700,
+              fontSize: '36px',
+              lineHeight: 1,
+              letterSpacing: '0.5px',
+              color: 'var(--color-primary)',
+            }}>
+              What's <span style={{ color: 'var(--color-accent-gold)' }}>Good</span> Here
+            </span>
+            <img
+              src="/wgh-icon.png"
+              alt=""
+              aria-hidden="true"
+              style={{ width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0 }}
+            />
+          </div>
           {/* Settings + notifications — reuse the shared TopBar controls, tinted
               dark for the stone header (they default to near-white for the
               orange bar). NotificationBell self-hides when logged out. */}
