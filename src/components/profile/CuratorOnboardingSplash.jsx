@@ -1,7 +1,7 @@
 const ONBOARDING_POINTS = [
   {
     title: 'Pick your Top 10',
-    body: 'Add the dishes visitors should order — your personal best-of.',
+    body: 'The dishes visitors should order. Search right here, or tap "Add to Top 10" on any dish page.',
   },
   {
     title: 'Rate before you add',
