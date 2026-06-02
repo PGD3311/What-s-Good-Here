@@ -106,12 +106,55 @@ INSERT INTO dishes (restaurant_id, name, category, price, photo_url) VALUES
 ((SELECT id FROM restaurants WHERE name = 'Linda Jean''s Restaurant'), 'Classic Burger', 'burger', 15.00, 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800'),
 ((SELECT id FROM restaurants WHERE name = 'Linda Jean''s Restaurant'), 'BLT Sandwich', 'sandwich', 12.00, 'https://images.unsplash.com/photo-1553909489-cd47e0907980?w=800');
 
--- Atria (Edgartown)
-INSERT INTO dishes (restaurant_id, name, category, price, photo_url) VALUES
-((SELECT id FROM restaurants WHERE name = 'Atria'), 'Seared Tuna', 'sushi', 38.00, 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800'),
-((SELECT id FROM restaurants WHERE name = 'Atria'), 'Lobster Risotto', 'pasta', 42.00, 'https://images.unsplash.com/photo-1476124369491-f6e5a308e8f8?w=800'),
-((SELECT id FROM restaurants WHERE name = 'Atria'), 'Wagyu Burger', 'burger', 32.00, 'https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?w=800'),
-((SELECT id FROM restaurants WHERE name = 'Atria'), 'Beet Salad', 'salad', 16.00, 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800');
+-- Atria (Edgartown) — full menu, Dining Room + Cellar pills. Canonical source: menus/atria-full-menu.sql
+INSERT INTO dishes (restaurant_id, name, category, menu_section, menu_group, price) VALUES
+-- Dining Room: Starters
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Atria''s Island Greens with Blueberries & Gorgonzola', 'salad', 'Starters', 'Dining Room', 19.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Bonni''s Chilled Hearts of Romaine Caesar', 'salad', 'Starters', 'Dining Room', 21.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Pan Seared Lump Crab Cakes with Corn Butter', 'crab', 'Starters', 'Dining Room', 26.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Heirloom Tomato Carpaccio with Fresh Burrata & Basil Pesto', 'apps', 'Starters', 'Dining Room', 24.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Crispy Duck Confit & Shiitake Spring Rolls', 'duck', 'Starters', 'Dining Room', 23.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Atria''s Crispy Wok Fired Calamari', 'calamari', 'Starters', 'Dining Room', 25.00),
+-- Dining Room: Entrees
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Bobo''s Two Pound Wok Fired Island Lobster', 'lobster', 'Entrees', 'Dining Room', 78.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Winner Winner Chicken Dinner with Crispy Potato Skins', 'chicken', 'Entrees', 'Dining Room', 45.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Atria''s Pork & Beans', 'pork', 'Entrees', 'Dining Room', 48.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Grilled Thick Cut Swordfish with Dill Whipped Potatoes', 'fish', 'Entrees', 'Dining Room', 54.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Atria''s Surf & Turf', 'steak', 'Entrees', 'Dining Room', 62.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'A Very Serious Steak', 'steak', 'Entrees', 'Dining Room', 78.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Pan Roasted Duck Breast with Homemade Ginger Hoisin', 'duck', 'Entrees', 'Dining Room', 62.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Crispy Local Black Sea Bass with Curried Carrot Puree', 'fish', 'Entrees', 'Dining Room', 62.00),
+-- Dining Room: Sides
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Atria''s Truffle Fries', 'fries', 'Sides', 'Dining Room', 17.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Plancha Charred Broccolini', 'veggies', 'Sides', 'Dining Room', 17.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Haricots Verts', 'veggies', 'Sides', 'Dining Room', 17.00),
+-- Cellar: Burgers
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'The Atria Classic Burger', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'The Fast Eddie', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'The Frenchy', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'The McRip Off', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Dante''s Inferno', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Southern Mother Clucker', 'fried chicken', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'The Veggie PETA', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Moroccan Lamb Burger', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'The Bombay Bird', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Smash or Pass', 'burger', 'Burgers', 'Cellar', 32.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'A Bigger Boat', 'fish-sandwich', 'Burgers', 'Cellar', 32.00),
+-- Cellar: Cocktails
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Eve Sterling', 'cocktails', 'Cocktails', 'Cellar', 25.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Pink Pony Club', 'cocktails', 'Cocktails', 'Cellar', 24.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Mile High Club', 'cocktails', 'Cocktails', 'Cellar', 24.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Chef''s Summer Spritz', 'cocktails', 'Cocktails', 'Cellar', 18.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Sin Padres', 'cocktails', 'Cocktails', 'Cellar', 23.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Cat''s Meow', 'cocktails', 'Cocktails', 'Cellar', 24.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Come to Brazil', 'cocktails', 'Cocktails', 'Cellar', 23.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Summer''s Bounty G&T', 'cocktails', 'Cocktails', 'Cellar', 28.00),
+((SELECT id FROM restaurants WHERE name = 'Atria'), 'Teaberry Shot', 'cocktails', 'Cocktails', 'Cellar', 10.00);
+
+UPDATE restaurants
+SET menu_group_order = ARRAY['Dining Room', 'Cellar'],
+    menu_section_order = ARRAY['Starters', 'Entrees', 'Sides', 'Burgers', 'Cocktails']
+WHERE name = 'Atria';
 
 -- Alchemy Bistro & Bar (Edgartown)
 INSERT INTO dishes (restaurant_id, name, category, price, photo_url) VALUES
