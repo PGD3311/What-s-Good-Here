@@ -51,6 +51,12 @@ CREATE TABLE IF NOT EXISTS restaurants (
   -- generation counter. Source of truth for the constant is
   -- CURRENT_EXTRACTOR_FINGERPRINT in supabase/functions/menu-refresh/index.ts.
   extractor_fingerprint TEXT,
+  -- Set true by menu-refresh's confidence gate when an auto-extraction looks
+  -- like garbage (thin + price-less + plain-HTML + no sub-page rescue — the
+  -- signature of hallucinating dishes from a JS-shell page). Flags the
+  -- restaurant for a hand-imported menu instead of writing bad dishes. Cleared
+  -- automatically when a later extraction succeeds. See menu-refresh/index.ts.
+  needs_manual_menu BOOLEAN NOT NULL DEFAULT false,
   menu_section_order TEXT[] DEFAULT '{}',
   menu_group_order TEXT[] DEFAULT '{}',
   toast_slug TEXT,
@@ -996,10 +1002,28 @@ ALTER TABLE public.votes
   ADD CONSTRAINT votes_review_text_content_filter_check
   CHECK (NOT public.is_offensive(review_text)) NOT VALID;
 
+-- dishes.name uses an INSERT/UPDATE-OF-name trigger instead of a CHECK: a CHECK
+-- re-validates the whole row on EVERY update, so the vote trigger's
+-- `UPDATE dishes SET total_votes…` would roll back for any dish whose name trips
+-- is_offensive() — silently blocking votes on it. The trigger fires only on
+-- insert or an actual name change. See migration 2026-06-01-dish-name-filter-insert-only.sql.
 ALTER TABLE public.dishes DROP CONSTRAINT IF EXISTS dishes_name_content_filter_check;
-ALTER TABLE public.dishes
-  ADD CONSTRAINT dishes_name_content_filter_check
-  CHECK (NOT public.is_offensive(name)) NOT VALID;
+
+CREATE OR REPLACE FUNCTION public.check_dish_name_offensive()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF public.is_offensive(NEW.name) THEN
+    RAISE EXCEPTION 'Dish name contains inappropriate content'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = public;
+
+DROP TRIGGER IF EXISTS dishes_name_content_filter_trigger ON public.dishes;
+CREATE TRIGGER dishes_name_content_filter_trigger
+  BEFORE INSERT OR UPDATE OF name ON public.dishes
+  FOR EACH ROW EXECUTE FUNCTION public.check_dish_name_offensive();
 
 ALTER TABLE public.restaurants DROP CONSTRAINT IF EXISTS restaurants_name_content_filter_check;
 ALTER TABLE public.restaurants
@@ -1023,13 +1047,8 @@ BEGIN
     ALTER TABLE public.votes VALIDATE CONSTRAINT votes_review_text_content_filter_check;
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.dishes
-    WHERE public.is_offensive(public.dishes.name) IS TRUE
-  ) THEN
-    ALTER TABLE public.dishes VALIDATE CONSTRAINT dishes_name_content_filter_check;
-  END IF;
+  -- dishes.name is enforced via the dishes_name_content_filter_trigger
+  -- (INSERT/UPDATE OF name) above, not a CHECK — so nothing to VALIDATE here.
 
   IF NOT EXISTS (
     SELECT 1
@@ -2771,6 +2790,7 @@ BEGIN
   NEW.menu_last_checked := OLD.menu_last_checked;
   NEW.menu_content_hash := OLD.menu_content_hash;
   NEW.extractor_fingerprint := OLD.extractor_fingerprint;
+  NEW.needs_manual_menu := OLD.needs_manual_menu;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

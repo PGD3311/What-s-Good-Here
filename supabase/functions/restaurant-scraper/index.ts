@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { safeFetch } from '../_shared/ssrf.ts'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
 
@@ -71,7 +72,11 @@ async function fetchWebContent(url: string): Promise<string> {
   const timeout = setTimeout(() => controller.abort(), 15000)
 
   try {
-    const response = await fetch(url, {
+    // safeFetch validates the host + every redirect hop (SSRF guard). url comes
+    // from restaurant website_url/facebook_url (manager-settable / request body),
+    // so a blocked or malformed URL throws here and is caught by the caller's
+    // per-URL try/catch (logs + continues to the next URL).
+    const response = await safeFetch(url, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'WhatsGoodHere-EventBot/1.0',

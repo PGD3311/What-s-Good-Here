@@ -5,7 +5,7 @@ import { useVote } from '../hooks/useVote'
 import { usePurityTracker } from '../hooks/usePurityTracker'
 import JitterBox from '../utils/jitter-box'
 import { jitterApi } from '../api/jitterApi'
-import { authApi } from '../api/authApi'
+import { votesApi } from '../api/votesApi'
 import { dishPhotosApi } from '../api/dishPhotosApi'
 import { FoodRatingSlider } from './FoodRatingSlider'
 import { MAX_REVIEW_LENGTH } from '../constants/app'
@@ -57,7 +57,6 @@ export function ReviewFlow({
   // Form state.
   // sliderValue = null means "unrated" — submit button stays disabled.
   const [sliderValue, setSliderValue] = useState(null)
-  const [reviewExpanded, setReviewExpanded] = useState(false)
   const [reviewText, setReviewText] = useState('')
   const [reviewError, setReviewError] = useState(null)
 
@@ -90,7 +89,7 @@ export function ReviewFlow({
         return
       }
       try {
-        const vote = await authApi.getUserVoteForDish(dishId, user.id)
+        const vote = await votesApi.getUserVoteForDish(dishId, user.id)
         if (cancelled) return
         if (vote) {
           setPriorRating(vote.rating_10 ?? null)
@@ -98,7 +97,6 @@ export function ReviewFlow({
           if (vote.rating_10 != null) setSliderValue(vote.rating_10)
           if (vote.review_text) {
             setReviewText(vote.review_text)
-            setReviewExpanded(true)
           }
         }
       } catch (error) {
@@ -117,9 +115,9 @@ export function ReviewFlow({
     }
   }, [dishId])
 
-  // Attach JitterBox to textarea when expanded.
+  // Attach JitterBox to the (always-visible) review textarea on mount.
   useEffect(() => {
-    if (reviewExpanded && reviewTextareaRef.current && !jitterBoxRef.current) {
+    if (reviewTextareaRef.current && !jitterBoxRef.current) {
       jitterBoxRef.current = JitterBox.attach(reviewTextareaRef.current)
     }
     return () => {
@@ -128,7 +126,7 @@ export function ReviewFlow({
         jitterBoxRef.current = null
       }
     }
-  }, [reviewExpanded])
+  }, [])
 
   // Cancel pending photo-nudge timer on unmount so it doesn't fire into
   // a torn-down component.
@@ -288,56 +286,46 @@ export function ReviewFlow({
         </p>
       )}
 
-      {/* Review — collapsed by default */}
-      {!reviewExpanded ? (
-        <button
-          type="button"
-          onClick={() => setReviewExpanded(true)}
-          className="w-full py-3 text-sm rounded-xl transition-colors"
-          style={{ color: 'var(--color-text-secondary)', border: '1px dashed var(--color-divider)' }}
-        >
-          + Add a review (optional)
-        </button>
-      ) : (
-        <div className="relative">
-          <label htmlFor="review-text" className="sr-only">Your review</label>
-          <textarea
-            ref={combinedTextareaRef}
-            id="review-text"
-            value={reviewText}
-            onChange={(e) => {
-              setReviewText(e.target.value)
-              if (reviewError) setReviewError(null)
-            }}
-            placeholder="What stood out?"
-            aria-label="Write your review"
-            aria-describedby={reviewError ? 'review-error' : 'review-char-count'}
-            aria-invalid={!!reviewError}
-            maxLength={MAX_REVIEW_LENGTH + 50}
-            rows={3}
-            className="w-full p-4 rounded-xl text-sm resize-none focus:outline-none focus-ring"
-            style={{
-              background: 'var(--color-surface-elevated)',
-              border: reviewError ? '2px solid var(--color-primary)' : '1px solid var(--color-divider)',
-              color: 'var(--color-text-primary)',
-            }}
-          />
-          {reviewText.length > 0 && (
-            <div
-              id="review-char-count"
-              className="absolute bottom-2 right-3 text-xs"
-              style={{ color: reviewText.length > MAX_REVIEW_LENGTH ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}
-            >
-              {reviewText.length}/{MAX_REVIEW_LENGTH}
-            </div>
-          )}
-          {reviewError && (
-            <p id="review-error" role="alert" className="text-sm text-center mt-1" style={{ color: 'var(--color-primary)' }}>
-              {reviewError}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Review — always visible, optional. Rating is the required signal; words are a bonus. */}
+      <div className="relative">
+        <label htmlFor="review-text" className="block text-sm mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+          Add a review <span style={{ color: 'var(--color-text-tertiary)' }}>(optional)</span>
+        </label>
+        <textarea
+          ref={combinedTextareaRef}
+          id="review-text"
+          value={reviewText}
+          onChange={(e) => {
+            setReviewText(e.target.value)
+            if (reviewError) setReviewError(null)
+          }}
+          placeholder="What stood out?"
+          aria-describedby={reviewError ? 'review-error' : 'review-char-count'}
+          aria-invalid={!!reviewError}
+          maxLength={MAX_REVIEW_LENGTH + 50}
+          rows={3}
+          className="w-full p-4 rounded-xl text-sm resize-none focus:outline-none focus-ring"
+          style={{
+            background: 'var(--color-surface-elevated)',
+            border: reviewError ? '2px solid var(--color-primary)' : '1px solid var(--color-divider)',
+            color: 'var(--color-text-primary)',
+          }}
+        />
+        {reviewText.length > 0 && (
+          <div
+            id="review-char-count"
+            className="absolute bottom-2 right-3 text-xs"
+            style={{ color: reviewText.length > MAX_REVIEW_LENGTH ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}
+          >
+            {reviewText.length}/{MAX_REVIEW_LENGTH}
+          </div>
+        )}
+        {reviewError && (
+          <p id="review-error" role="alert" className="text-sm text-center mt-1" style={{ color: 'var(--color-primary)' }}>
+            {reviewError}
+          </p>
+        )}
+      </div>
 
       {/* Photo — collapsed by default; if user had a prior photo, show thumbnail + keep/replace/remove. */}
       {existingPhoto && !photoAdded ? (

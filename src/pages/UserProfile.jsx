@@ -4,6 +4,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { getCompatColor } from '../utils/formatters'
+import { computeRatingStyle, computeStandoutPicks } from '../utils/foodStats'
 import { followsApi } from '../api/followsApi'
 import { useFollowUser } from '../hooks/useFollowUser'
 import { votesApi } from '../api/votesApi'
@@ -39,29 +40,8 @@ function formatLocationName(slug) {
 // with the binary vote (Apr 2026). The shelf filter UI is no longer rendered;
 // kept only for search-history compatibility.
 
-/**
- * Compute rating style from average rating and variance
- */
-function computeRatingStyle(avgRating, ratingVariance) {
-  if (avgRating === null) return null
-
-  let level, label
-  if (avgRating < 6.0) {
-    level = 'tough'
-    label = 'Tough Critic'
-  } else if (avgRating < 7.5) {
-    level = 'fair'
-    label = 'Fair Judge'
-  } else if (avgRating < 8.5) {
-    level = 'generous'
-    label = 'Generous Rater'
-  } else {
-    level = 'easy'
-    label = 'Easy to Please'
-  }
-
-  return { level, label }
-}
+// Rating-style + standout-picks math is shared via utils/foodStats.js so this
+// page and the owner Profile (useUserVotes) can't drift.
 
 /**
  * Public User Profile Page
@@ -254,12 +234,10 @@ export function UserProfile() {
       if (results[0].status === 'fulfilled') {
         try {
           const communityAvgs = results[0].value
-          const MIN_COMMUNITY = 3
-          const picks = {}
-
-          // Best Find = the user's highest-rated dish, no community gate (matches
-          // user expectation: "my favorite," not "consensus favorite").
-          const allRated = ratedVotes
+          // Normalize this page's recent_votes shape into the shared item shape;
+          // the Best Find / Hottest Take math lives in utils/foodStats.js so this
+          // page and the owner Profile (useUserVotes) can't drift.
+          const items = ratedVotes
             .filter(v => v.dish?.id)
             .map(v => ({
               dish_id: v.dish.id,
@@ -268,30 +246,7 @@ export function UserProfile() {
               restaurant_name: v.dish.restaurant_name,
               userRating: v.rating,
             }))
-
-          if (allRated.length > 0) {
-            const best = allRated.slice().sort((a, b) => b.userRating - a.userRating)
-            picks.bestFind = best[0]
-          }
-
-          // Hottest Take still needs community comparison to be meaningful.
-          const comparisons = ratedVotes
-            .filter(v => v.dish?.id && communityAvgs[v.dish.id]?.count >= MIN_COMMUNITY)
-            .map(v => ({
-              dish_id: v.dish.id,
-              dish_name: v.dish.name,
-              restaurant_id: v.dish.restaurant_id,
-              restaurant_name: v.dish.restaurant_name,
-              userRating: v.rating,
-              communityAvg: communityAvgs[v.dish.id].avg,
-              diff: v.rating - communityAvgs[v.dish.id].avg,
-            }))
-
-          if (comparisons.length > 0) {
-            const harsh = comparisons.slice().sort((a, b) => a.diff - b.diff)
-            if (harsh[0].diff <= -1.0) picks.harshestTake = harsh[0]
-          }
-
+          const picks = computeStandoutPicks(items, communityAvgs)
           if (picks.bestFind || picks.harshestTake) setStandoutPicks(picks)
         } catch (err) {
           logger.error('Failed to compute standout picks:', err)

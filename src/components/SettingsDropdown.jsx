@@ -11,7 +11,7 @@ import { logger } from '../utils/logger'
 /**
  * Settings gear icon with dropdown — mirrors NotificationBell pattern
  */
-export function SettingsDropdown() {
+export function SettingsDropdown({ color = 'var(--color-surface)' } = {}) {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, signOut } = useAuth()
@@ -75,7 +75,7 @@ export function SettingsDropdown() {
         ref={gearButtonRef}
         onClick={() => setShowDropdown(!showDropdown)}
         className="relative p-2 rounded-full transition-all duration-150 active:scale-95 active:opacity-80"
-        style={{ color: 'var(--color-surface)' }}
+        style={{ color }}
         aria-label="Settings"
         aria-expanded={showDropdown}
         aria-haspopup="true"

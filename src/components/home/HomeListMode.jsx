@@ -7,6 +7,8 @@ import { DietButton } from '../DietButton'
 import { EmptyState } from '../EmptyState'
 import { DataLoadError } from '../DataLoadError'
 import { LocationBanner } from '../LocationBanner'
+import { SettingsDropdown } from '../SettingsDropdown'
+import { NotificationBell } from '../NotificationBell'
 import { LocalsPicksBanner, Top10Carousel } from './'
 export const HomeListMode = memo(function HomeListMode({
   listScrollRef,
@@ -64,34 +66,30 @@ export const HomeListMode = memo(function HomeListMode({
     >
       {/* Fixed header: brand + search + chips */}
       <div style={{ flexShrink: 0, background: 'var(--color-bg)', zIndex: 10, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        {/* Brand header — the iOS app icon used as the homepage mark.
-            Rounded corners (22% radius matches Apple's icon mask) and a
-            soft shadow make it read as "icon," not bare PNG. Map page
-            already has an <h1 className="sr-only">What's Good Here</h1>
-            so this img carries the screen-reader label as alt text. */}
-        <div className="text-center pt-4 pb-1">
-          <img
-            src="/wgh-icon.png"
-            alt="What's Good Here"
-            style={{
-              display: 'block',
-              margin: '0 auto',
-              width: '120px',
-              height: '120px',
-              borderRadius: '26px',
-              boxShadow: '0 6px 16px rgba(26, 26, 26, 0.12)',
-            }}
-          />
-          <p style={{
-            fontSize: '10px',
-            fontWeight: 600,
-            color: '#999',
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase',
-            margin: '8px 0 0',
+        {/* Brand header — slim left-aligned Amatic SC wordmark. Replaced the
+            large centered app-icon + tagline (which pushed all rankings below
+            the fold and wasted the space on either side) so the list sits
+            higher and the header reads as an app, not a splash screen. Map page
+            already has an <h1 className="sr-only">What's Good Here</h1> for the
+            screen-reader label, so this is aria-hidden decorative text. */}
+        <div className="px-5 pt-3 pb-1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span aria-hidden="true" style={{
+            fontFamily: "'Amatic SC', cursive",
+            fontWeight: 700,
+            fontSize: '36px',
+            lineHeight: 1,
+            letterSpacing: '0.5px',
+            color: 'var(--color-primary)',
           }}>
-            Top-rated dishes near you
-          </p>
+            What's <span style={{ color: 'var(--color-accent-gold)' }}>Good</span> Here
+          </span>
+          {/* Settings + notifications — reuse the shared TopBar controls, tinted
+              dark for the stone header (they default to near-white for the
+              orange bar). NotificationBell self-hides when logged out. */}
+          <div className="flex items-center" style={{ marginRight: '-8px' }}>
+            <SettingsDropdown color="var(--color-text-secondary)" />
+            <NotificationBell color="var(--color-text-secondary)" />
+          </div>
         </div>
         {/* Search bar */}
         <div className="px-5 pt-2 pb-1">

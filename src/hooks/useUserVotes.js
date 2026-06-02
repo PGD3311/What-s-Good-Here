@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { votesApi } from '../api/votesApi'
 import { logger } from '../utils/logger'
+import { computeRatingStyle, computeStandoutPicks } from '../utils/foodStats'
 
 /**
  * Transform raw vote data to dish format
@@ -24,86 +25,24 @@ function transformVote(vote) {
 }
 
 /**
- * Compute rating style from avgRating and ratingVariance
+ * Map raw votes to the normalized rated-item shape computeStandoutPicks expects.
+ * Skips unrated votes; carries the fields the Food Story render reads. The
+ * Best Find / Hottest Take math itself lives in utils/foodStats.js.
  */
-function computeRatingStyle(avgRating, ratingVariance) {
-  if (avgRating === null) return null
-
-  // Level based on average rating
-  let level, emoji
-  if (avgRating < 6.0) {
-    level = 'tough'
-    emoji = '\uD83E\uDDD0' // monocle face
-  } else if (avgRating < 7.5) {
-    level = 'fair'
-    emoji = '\u2696\uFE0F' // balance scale
-  } else if (avgRating < 8.5) {
-    level = 'generous'
-    emoji = '\uD83D\uDE0A' // smiling face
-  } else {
-    level = 'easy'
-    emoji = '\uD83E\uDD70' // smiling face with hearts
-  }
-
-  // Consistency based on variance
-  const consistency = ratingVariance < 1.5 ? 'consistent' : 'varied'
-
-  // Compose label
-  const levelLabels = {
-    tough: 'Tough Critic',
-    fair: 'Fair Judge',
-    generous: 'Generous Rater',
-    easy: 'Easy to Please',
-  }
-  const label = levelLabels[level]
-
-  return { level, consistency, label, emoji }
-}
-
-/**
- * Compute standout picks by comparing user ratings to community averages
- */
-function computeStandoutPicks(data, communityAvgs) {
-  const MIN_COMMUNITY_VOTES = 3
-  const picks = {}
-
-  // ratedVotes: every rated dish — feeds Best Find (just the user's top rating).
-  // comparisons: subset with community baseline — feeds Hottest Take (you-vs-crowd diff).
-  const ratedVotes = []
-  const comparisons = []
-  for (const vote of data) {
+function votesToRatedItems(votes) {
+  const items = []
+  for (const vote of votes) {
     if (vote.rating_10 == null) continue
-    const dishId = vote.dishes.id
-    const item = {
-      dish_id: dishId,
+    items.push({
+      dish_id: vote.dishes.id,
       dish_name: vote.dishes.name,
       category: vote.dishes.category,
       restaurant_id: vote.dishes.restaurants?.id,
       restaurant_name: vote.dishes.restaurants?.name,
       userRating: vote.rating_10,
-    }
-    ratedVotes.push(item)
-
-    const community = communityAvgs[dishId]
-    if (!community || community.count < MIN_COMMUNITY_VOTES) continue
-    comparisons.push({
-      ...item,
-      communityAvg: community.avg,
-      diff: vote.rating_10 - community.avg,
     })
   }
-
-  if (ratedVotes.length > 0) {
-    const best = ratedVotes.slice().sort((a, b) => b.userRating - a.userRating)
-    picks.bestFind = best[0]
-  }
-
-  if (comparisons.length > 0) {
-    const harsh = comparisons.slice().sort((a, b) => a.diff - b.diff)
-    if (harsh[0].diff <= -1.0) picks.harshestTake = harsh[0]
-  }
-
-  return picks
+  return items
 }
 
 /**
@@ -341,7 +280,7 @@ export function useUserVotes(userId) {
       ? computeCategoryComparison(votes, communityAvgs)
       : {}
     const standoutPicks = communityAvgs
-      ? computeStandoutPicks(votes, communityAvgs)
+      ? computeStandoutPicks(votesToRatedItems(votes), communityAvgs)
       : {}
 
     return {

@@ -162,7 +162,7 @@ src/
 ├── context/          # AuthContext, LocationContext
 ├── hooks/            # Custom React hooks (20 hooks)
 ├── lib/              # Infrastructure (supabase, analytics, storage, sounds, rateLimiter, reviewBlocklist)
-├── pages/            # Page components (19 pages, all lazy-loaded)
+├── pages/            # Page components (28 pages, all lazy-loaded)
 ├── utils/            # Pure utilities (errorHandler, ranking, distance, logger, sanitize, etc.)
 └── test/             # Test setup
 
@@ -397,7 +397,8 @@ Defined in `src/index.css`. Light theme only ("Appetite"). Use `var(--color-*)` 
 | `seed-reviews` | AI review generation (dev utility) |
 | `backfill-restaurants` | Data migration tool |
 
-### 4.14 Routes (18 pages, all lazy-loaded via `lazyWithRetry()`)
+### 4.14 Routes (28 page components, all lazy-loaded via `lazyWithRetry()`)
+Source of truth: `src/App.jsx`.
 | Route | Page | Auth |
 |---|---|---|
 | `/` | Map (dual-mode list/map homepage; reads `?category=<id>` and `?q=<query>` to seed filters) | No |
@@ -406,18 +407,29 @@ Defined in `src/index.css`. Light theme only ("Appetite"). Use `var(--color-*)` 
 | `/dish/:dishId` | Dish | No |
 | `/restaurants` | Restaurants | No |
 | `/restaurants/:restaurantId` | RestaurantDetail | No |
+| `/restaurants/:restaurantId/rate` | RateYourMeal | No |
+| `/restaurants/:restaurantId/reviews` | RestaurantReviews | No |
 | `/profile` | Profile (journal feed) | Yes |
 | `/user/:userId` | UserProfile (public) | No |
 | `/login` | Login | No |
+| `/auth/callback` | AuthCallback | No |
 | `/reset-password` | ResetPassword | No |
+| `/auth/cross-device` | CrossDevicePkce | No |
 | `/admin` | Admin | Yes |
 | `/invite/:token` | AcceptInvite | No |
+| `/curator-invite/:token` | AcceptCuratorInvite | No |
+| `/my-list` | MyList | Yes |
 | `/manage` | ManageRestaurant | Yes |
 | `/privacy` | Privacy | No |
 | `/terms` | Terms | No |
+| `/support` | Support | No |
 | `/how-reviews-work` | HowReviewsWork | No |
 | `/for-restaurants` | ForRestaurants | No |
+| `/playlist/:id` | Playlist | No |
 | `/jitter` | JitterLanding | No |
+| `/waitlist` | Waitlist | No |
+| `/locals` | Locals | No |
+| `/locals/:userId` | LocalsCurator | No |
 | `*` | NotFound | No |
 
 ### 4.15 File Organization

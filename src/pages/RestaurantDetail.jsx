@@ -10,6 +10,7 @@ import { getUserMessage } from '../utils/errorHandler'
 import { shareOrCopy, canonicalShareUrl } from '../utils/share'
 import { sanitizeUrl } from '../utils/sanitize'
 import { openExternalLink } from '../utils/openExternalLink'
+import { buildDirectionsUrl, buildToastOrderUrl } from '../utils/restaurantLinks'
 import { restaurantsApi } from '../api/restaurantsApi'
 import { placesApi } from '../api/placesApi'
 import { votesApi } from '../api/votesApi'
@@ -25,6 +26,10 @@ import { useRestaurantSpecials } from '../hooks/useSpecials'
 import { useRestaurantEvents } from '../hooks/useEvents'
 import { SpecialCard } from '../components/SpecialCard'
 import { EventCard } from '../components/EventCard'
+
+// Specials & Events ("Happening Here") are hidden until Launch 2.0 — the scraped
+// data is stale. Flip to true to surface the block.
+const SHOW_SPECIALS_EVENTS = false
 
 export function RestaurantDetail() {
   const { restaurantId } = useParams()
@@ -512,10 +517,7 @@ export function RestaurantDetail() {
             <div className="flex items-center gap-3 flex-wrap">
               {restaurant.address && (
                 <a
-                  href={restaurant.lat && restaurant.lng
-                    ? `https://www.google.com/maps/dir/?api=1&destination=${restaurant.lat},${restaurant.lng}`
-                    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurant.address)}`
-                  }
+                  href={buildDirectionsUrl({ lat: restaurant.lat, lng: restaurant.lng, address: restaurant.address })}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => openExternalLink(e, e.currentTarget.href)}
@@ -746,7 +748,7 @@ export function RestaurantDetail() {
       </div>
 
       {/* Happening Here - Specials & Events (hidden until Launch 2.0 — stale scraped data) */}
-      {false && (specials.length > 0 || events.length > 0) && (
+      {SHOW_SPECIALS_EVENTS && (specials.length > 0 || events.length > 0) && (
         <div className="px-4 py-4">
           <div
             className="mb-3 h-px"
@@ -794,7 +796,7 @@ export function RestaurantDetail() {
         <div className="flex gap-2">
           {(restaurant.toast_slug || sanitizeUrl(restaurant.order_url)) && (
             <a
-              href={restaurant.toast_slug ? 'https://order.toasttab.com/online/' + restaurant.toast_slug : sanitizeUrl(restaurant.order_url)}
+              href={buildToastOrderUrl(restaurant.toast_slug, restaurant.order_url)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => openExternalLink(e, e.currentTarget.href)}

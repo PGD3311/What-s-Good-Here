@@ -431,45 +431,12 @@ export function isKnownMenuIframeHost(hostname: string): boolean {
   return KNOWN_MENU_IFRAME_HOSTS.some(apex => lower === apex || lower.endsWith('.' + apex))
 }
 
-// Block hostnames that fetchRawHtml could otherwise be coaxed into reaching:
-// loopback, RFC1918 private space, link-local (incl. AWS/GCP metadata at
-// 169.254.169.254), and the *.local / *.internal suffixes used by service
-// discovery on private networks. A legitimate restaurant menu iframe never
-// points here.
-//
-// Exported so fetchRawHtml can re-check `response.url` after redirects —
-// a public iframe URL can 302 to an internal one, so per-hop validation
-// is required, not just initial-URL validation.
-export function isBlockedHostname(hostname: string): boolean {
-  // Normalize: strip IPv6 brackets, trailing FQDN dot, lowercase.
-  // Trailing-dot variants ('localhost.', 'service.local.') would otherwise
-  // sneak past the suffix and equality checks — DNS treats them as equivalent.
-  const lower = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
-  if (lower === 'localhost' || lower === '0.0.0.0' || lower === '') return true
-  if (lower.endsWith('.localhost') || lower.endsWith('.local') || lower.endsWith('.internal')) return true
-  // IPv4 numeric
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(lower)) {
-    const parts = lower.split('.').map(Number)
-    if (parts[0] === 0) return true                                            // 0/8
-    if (parts[0] === 127) return true                                          // 127/8 loopback
-    if (parts[0] === 10) return true                                           // 10/8 private
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true      // 172.16/12 private
-    if (parts[0] === 192 && parts[1] === 168) return true                      // 192.168/16 private
-    if (parts[0] === 169 && parts[1] === 254) return true                      // link-local + cloud metadata
-    return false
-  }
-  // Any IPv6 starting with `::` is unreachable on the public internet: those
-  // are the unspecified/loopback/IPv4-compatible/IPv4-mapped compatibility
-  // forms (::1, ::, ::1.2.3.4, ::ffff:1.2.3.4, parser-normalized variants
-  // like ::7f00:1). Real public IPv6 services live in 2000::/3 — none of
-  // them start with `::`. Block the whole class so we don't have to enumerate
-  // every parser-normalization quirk.
-  if (lower.startsWith('::')) return true
-  // IPv6 unique-local + link-local
-  if (/^fc[0-9a-f]{2}:/i.test(lower) || /^fd[0-9a-f]{2}:/i.test(lower)) return true  // fc00::/7 ULA
-  if (/^fe80:/i.test(lower)) return true                                              // fe80::/10 link-local
-  return false
-}
+// isBlockedHostname (the SSRF host guard) now lives in the shared module so
+// restaurant-scraper and menu-refresh share one implementation. Re-exported here
+// so existing importers (fetchRawHtml, findMenuIframes below, the test suite)
+// keep working unchanged.
+import { isBlockedHostname } from '../_shared/ssrf.ts'
+export { isBlockedHostname }
 
 // Strip content the regex shouldn't peek into: HTML comments, script/style
 // bodies, noscript, and inert text containers (<template>, <textarea>) that
