@@ -314,19 +314,23 @@ export function UserProfile() {
 
   // Handle share profile
   // Compute stats from recent votes — single "My Ratings" shelf, sorted by recency.
-  const { totalVotes, ratingStyle, favoriteRestaurant, favoriteRestaurantCount, favoriteRestaurantId } = useMemo(() => {
+  const { totalVotes, uniqueRestaurants, ratingStyle, favoriteRestaurant, favoriteRestaurantCount, favoriteRestaurantId } = useMemo(() => {
     if (!profile?.recent_votes?.length) {
-      return { totalVotes: 0, ratingStyle: null, favoriteRestaurant: null, favoriteRestaurantCount: 0, favoriteRestaurantId: null }
+      return { totalVotes: 0, uniqueRestaurants: 0, ratingStyle: null, favoriteRestaurant: null, favoriteRestaurantCount: 0, favoriteRestaurantId: null }
     }
     const restaurantCounts = {}
     const restaurantIdByName = {}
+    const allRestaurants = new Set()
     const ratings = []
     profile.recent_votes.forEach(vote => {
       const isRated = vote.rating != null
       const restName = vote.dish?.restaurant_name
       const restId = vote.dish?.restaurant_id
-      // Most loyal counts only rated votes — photo-only / saved-only
-      // entries shouldn't read as loyalty.
+      // "Spots" counts every distinct restaurant the user has an entry at,
+      // matching the owner profile's uniqueRestaurants (all votes, not just
+      // rated). "Most loyal" below stays rated-only — photo/saved entries
+      // shouldn't read as loyalty.
+      if (restName) allRestaurants.add(restName)
       if (restName && isRated) {
         restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
         if (restId && !restaurantIdByName[restName]) restaurantIdByName[restName] = restId
@@ -364,6 +368,7 @@ export function UserProfile() {
 
     return {
       totalVotes: profile.recent_votes.length,
+      uniqueRestaurants: allRestaurants.size,
       ratingStyle: style,
       favoriteRestaurant: favRest,
       favoriteRestaurantCount: favCount,
@@ -573,14 +578,31 @@ export function UserProfile() {
               {jitterBadgeType && <TrustBadge type={jitterBadgeType} size="md" />}
             </div>
 
-            {/* Follow Stats */}
-            <div className="flex items-center gap-2 mt-1.5" style={{ fontSize: '13px' }}>
+            {/* Stats — two tiers, matching the owner profile (HeroIdentityCard):
+                content identity (dishes · spots) reads primary; social
+                (followers · following) sits quieter beneath. */}
+            {totalVotes > 0 && (
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap" style={{ fontSize: '13px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>
+                  <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{totalVotes}</span> dishes
+                </span>
+                {uniqueRestaurants > 0 && (
+                  <>
+                    <span style={{ color: 'var(--color-text-tertiary)' }}>&middot;</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>
+                      <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{uniqueRestaurants}</span> spots
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 mt-1 flex-wrap" style={{ fontSize: '12px' }}>
               <button
                 onClick={() => setFollowListModal('followers')}
                 className="hover:underline transition-colors"
-                style={{ color: 'var(--color-text-secondary)' }}
+                style={{ color: 'var(--color-text-tertiary)' }}
               >
-                <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                   {profile.follower_count || 0}
                 </span> followers
               </button>
@@ -588,9 +610,9 @@ export function UserProfile() {
               <button
                 onClick={() => setFollowListModal('following')}
                 className="hover:underline transition-colors"
-                style={{ color: 'var(--color-text-secondary)' }}
+                style={{ color: 'var(--color-text-tertiary)' }}
               >
-                <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                   {profile.following_count || 0}
                 </span> following
               </button>
