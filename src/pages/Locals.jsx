@@ -64,6 +64,15 @@ var CURATOR_NAME = { fontFamily: "'Amatic SC', cursive", fontSize: '24px', fontW
 var CURATOR_TAGLINE = { fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.3 }
 var CHEVRON = { color: 'var(--color-text-tertiary)', fontSize: '18px', fontWeight: 300, flexShrink: 0 }
 
+// The "or pick a local" row carries two destinations: tapping the avatar opens
+// the curator's profile, tapping the rest opens their top-10 list. Two sibling
+// buttons inside a plain flex card (no nested buttons). The wrapper drops its
+// own padding/gap and stretches its children so the two buttons tile the entire
+// card surface — no dead space around the edges or in the gutter.
+var CURATOR_ROW = Object.assign({}, ROW_CARD, { padding: 0, gap: 0, alignItems: 'stretch' })
+var AVATAR_BTN = { background: 'none', border: 'none', padding: '10px 5px 10px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center' }
+var ROW_OPEN_BTN = { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', padding: '10px 12px 10px 5px', cursor: 'pointer', textAlign: 'left' }
+
 // Curator avatar — small circular photo (or initial-chip fallback) for the
 // profile-style "or pick a local" rows. Inlined here rather than imported
 // from LocalsPicksBanner because the banner uses a tight 36px stack and we
@@ -237,21 +246,30 @@ function ReadTab() {
 
       {curators.map(function (c) {
         return (
-          <button
-            key={c.user_id}
-            type="button"
-            style={ROW_CARD}
-            onClick={function () { navigate('/locals/' + c.user_id) }}
-            className="active:scale-[0.99] transition-transform"
-            aria-label={'Open ' + (c.display_name || 'curator') + '’s list'}
-          >
-            <CuratorAvatar curator={c} />
-            <div style={ROW_BODY}>
-              <div style={CURATOR_NAME}>{c.display_name || 'Anonymous'}</div>
-              {c.curator_tagline && <div style={CURATOR_TAGLINE}>{c.curator_tagline}</div>}
-            </div>
-            <span style={CHEVRON}>&rsaquo;</span>
-          </button>
+          <div key={c.user_id} style={CURATOR_ROW}>
+            <button
+              type="button"
+              style={AVATAR_BTN}
+              onClick={function () { navigate('/user/' + c.user_id) }}
+              className="active:scale-95 transition-transform"
+              aria-label={'View ' + (c.display_name || 'curator') + '’s profile'}
+            >
+              <CuratorAvatar curator={c} />
+            </button>
+            <button
+              type="button"
+              style={ROW_OPEN_BTN}
+              onClick={function () { navigate('/locals/' + c.user_id) }}
+              className="active:scale-[0.99] transition-transform"
+              aria-label={'Open ' + (c.display_name || 'curator') + '’s list'}
+            >
+              <div style={ROW_BODY}>
+                <div style={CURATOR_NAME}>{c.display_name || 'Anonymous'}</div>
+                {c.curator_tagline && <div style={CURATOR_TAGLINE}>{c.curator_tagline}</div>}
+              </div>
+              <span style={CHEVRON}>&rsaquo;</span>
+            </button>
+          </div>
         )
       })}
     </>
