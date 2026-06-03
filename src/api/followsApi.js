@@ -530,7 +530,11 @@ export const followsApi = {
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(50),
+        // 500 to match the owner profile's stat accuracy (useUserVotes →
+        // getDetailedVotesForUser also caps at 500). The header dish/spot
+        // counts are derived from this list, so the cap defines how high
+        // those counts can read — 50 would understate any prolific user.
+        .limit(500),
       // 5. Get badges
       supabase.rpc('get_user_badges', { p_user_id: userId, p_public_only: false }),
     ])
