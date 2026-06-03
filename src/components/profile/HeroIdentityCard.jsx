@@ -222,38 +222,41 @@ export function HeroIdentityCard({
             </button>
           )}
 
-          {/* Stats row — dishes · restaurants · followers */}
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap" style={{ fontSize: '13px' }}>
-            {stats.totalVotes > 0 && (
-              <>
-                <span style={{ color: 'var(--color-text-secondary)' }}>
-                  <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{stats.totalVotes}</span> dishes
-                </span>
-                {stats.uniqueRestaurants > 0 && (
-                  <>
-                    <span style={{ color: 'var(--color-text-tertiary)' }}>&middot;</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>
-                      <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{stats.uniqueRestaurants}</span> spots
-                    </span>
-                  </>
-                )}
-              </>
-            )}
+          {/* Stats — two tiers: content identity (dishes · spots) reads as the
+              primary line; social (followers · following) sits quieter beneath
+              so the header isn't one flat wall of numbers. */}
+          {stats.totalVotes > 0 && (
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap" style={{ fontSize: '13px' }}>
+              <span style={{ color: 'var(--color-text-secondary)' }}>
+                <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{stats.totalVotes}</span> dishes
+              </span>
+              {stats.uniqueRestaurants > 0 && (
+                <>
+                  <span style={{ color: 'var(--color-text-tertiary)' }}>&middot;</span>
+                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                    <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{stats.uniqueRestaurants}</span> spots
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-1 flex-wrap" style={{ fontSize: '12px' }}>
             <button
               onClick={() => setFollowListModal('followers')}
               className="hover:underline transition-colors"
-              style={{ color: 'var(--color-text-secondary)' }}
+              style={{ color: 'var(--color-text-tertiary)' }}
             >
-              <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>
+              <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                 {followCounts.followers}
               </span> followers
             </button>
+            <span style={{ color: 'var(--color-text-tertiary)' }}>&middot;</span>
             <button
               onClick={() => setFollowListModal('following')}
               className="hover:underline transition-colors"
-              style={{ color: 'var(--color-text-secondary)' }}
+              style={{ color: 'var(--color-text-tertiary)' }}
             >
-              <span className="font-bold" style={{ color: 'var(--color-text-primary)' }}>
+              <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
                 {followCounts.following}
               </span> following
             </button>
