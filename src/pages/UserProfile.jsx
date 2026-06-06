@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
@@ -13,28 +13,14 @@ import { DataLoadError } from '../components/DataLoadError'
 import { LocalListCard, ProfileGrid } from '../components/profile'
 import { useUserDishPhotos } from '../hooks/useUserDishPhotos'
 import { useUserPlaylists } from '../hooks/useUserPlaylists'
-import { PlaylistStripCard } from '../components/playlists/PlaylistStripCard'
 import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
 import { useLocalListDetail } from '../hooks/useLocalListDetail'
-import { TrustBadge, ProfileJitterCard } from '../components/jitter'
+import { TrustBadge } from '../components/jitter'
 import { jitterApi } from '../api/jitterApi'
 import { profileApi } from '../api/profileApi'
 import { ReportModal } from '../components/ReportModal'
 import { BlockUserModal } from '../components/BlockUserModal'
 import { useBlockedUsers } from '../hooks/useBlockedUsers'
-
-// Known location display names for URL slugs
-var LOCATION_NAMES = {
-  'marthas-vineyard': "Martha's Vineyard",
-  'nantucket': 'Nantucket',
-  'cape-cod': 'Cape Cod',
-}
-
-function formatLocationName(slug) {
-  if (LOCATION_NAMES[slug]) return LOCATION_NAMES[slug]
-  // Title-case fallback: "oak-bluffs" → "Oak Bluffs"
-  return slug.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase() })
-}
 
 // Shelves collapsed to a single "My Ratings" feed — Worth-It/Avoid split retired
 // with the binary vote (Apr 2026). The shelf filter UI is no longer rendered;
@@ -51,9 +37,7 @@ export function UserProfile() {
   const { userId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const [searchParams, setSearchParams] = useSearchParams()
   const { user: currentUser } = useAuth()
-  const locationFilter = searchParams.get('location')
 
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -72,7 +56,6 @@ export function UserProfile() {
   const [tasteCompat, setTasteCompat] = useState(null)
   const [ratingBias, setRatingBias] = useState(null)
   const [jitterBadgeType, setJitterBadgeType] = useState(null)
-  const [jitterBadgeData, setJitterBadgeData] = useState(null)
   const [activeTab, setActiveTab] = useState('journal')
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
@@ -185,9 +168,13 @@ export function UserProfile() {
         const badges = results[4].value
         if (badges && badges.length > 0) {
           setJitterBadgeType(jitterApi.getTrustBadgeType(badges[0]))
-          setJitterBadgeData(badges[0])
+        } else {
+          setJitterBadgeType(null)
         }
       } else {
+        // Clear on failure too, so a prior profile's badge never lingers
+        // after client-side navigation to a profile whose fetch errored.
+        setJitterBadgeType(null)
         logger.error('Failed to fetch jitter badge:', results[4].reason)
       }
 
@@ -298,7 +285,7 @@ export function UserProfile() {
   }, [profile?.recent_votes])
 
   // Transform votes into the grid (ProfileGrid) shape, sorted most-recent-first.
-  var journalRatings = (profile?.recent_votes || [])
+  const journalRatings = (profile?.recent_votes || [])
     .slice()
     .sort(function (a, b) {
       return new Date(b.voted_at || 0).getTime() - new Date(a.voted_at || 0).getTime()
@@ -309,7 +296,6 @@ export function UserProfile() {
         dish_id: vote.dish && vote.dish.id,
         dish_name: vote.dish && vote.dish.name,
         restaurant_name: vote.dish && vote.dish.restaurant_name,
-        restaurant_town: vote.dish && vote.dish.restaurant_town,
         category: vote.dish && vote.dish.category,
         photo_url: vote.dish && vote.dish.photo_url,
         rating_10: vote.rating,
@@ -318,15 +304,6 @@ export function UserProfile() {
         review_text: review && review.review_text,
       }
     })
-
-  // Apply location filter if present in URL
-  if (locationFilter) {
-    var locLower = locationFilter.toLowerCase().replace(/-/g, ' ')
-    journalRatings = journalRatings.filter(function (d) {
-      var town = (d.restaurant_town || '').toLowerCase()
-      return town.indexOf(locLower) !== -1 || locLower.indexOf(town) !== -1
-    })
-  }
 
   // Food-story grid: journalRatings already carries the target shape
   // ({ dish_id, dish_name, restaurant_name, rating_10, review_text, voted_at })
@@ -664,49 +641,13 @@ export function UserProfile() {
 
       </div>
 
-      {/* Review Fingerprint — surfaced near the top so visitors see the
-          trust context before diving into specific picks. Only renders for
-          users with jitter data (real humans, not the AI cold-start
-          aggregator). */}
-      {jitterBadgeData && (
-        <div className="px-4 pt-3">
-          <ProfileJitterCard
-            profile={jitterBadgeData}
-            displayName={profile.display_name}
-            isPublic
-          />
-        </div>
-      )}
-
       {/* Local List */}
       {localList.items.length > 0 && (
         <LocalListCard items={localList.items} />
       )}
 
 
-      {/* Location Filter Banner */}
-      {locationFilter && (
-        <div
-          className="mx-4 mt-3 px-4 py-2.5 rounded-xl flex items-center justify-between"
-          style={{
-            background: 'var(--color-surface-elevated)',
-            border: '1px solid var(--color-divider)',
-          }}
-        >
-          <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-            Showing picks in <strong style={{ color: 'var(--color-text-primary)' }}>{formatLocationName(locationFilter)}</strong>
-          </span>
-          <button
-            onClick={function () { setSearchParams({}) }}
-            className="font-semibold"
-            style={{ color: 'var(--color-primary)', fontSize: '13px' }}
-          >
-            Show all
-          </button>
-        </div>
-      )}
-
-      {/* Tabs: Journal / Playlists (no Saved — that's personal) */}
+      {/* Tabs: Grid / Lists (no Saved — that's personal) */}
       <div
         className="flex"
         style={{
@@ -717,22 +658,25 @@ export function UserProfile() {
           zIndex: 10,
         }}
       >
-        {['journal', 'playlists'].map(function (tab) {
+        {[
+          { key: 'journal', label: 'Grid' },
+          { key: 'playlists', label: 'Lists' },
+        ].map(function (tab) {
           return (
             <button
-              key={tab}
-              onClick={function () { setActiveTab(tab) }}
+              key={tab.key}
+              onClick={function () { setActiveTab(tab.key) }}
               className="flex-1 py-3 text-xs font-semibold text-center"
               style={{
-                color: activeTab === tab ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                color: activeTab === tab.key ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
                 background: 'transparent',
                 border: 'none',
                 borderBottomWidth: 2,
                 borderBottomStyle: 'solid',
-                borderBottomColor: activeTab === tab ? 'var(--color-primary)' : 'transparent',
+                borderBottomColor: activeTab === tab.key ? 'var(--color-primary)' : 'transparent',
               }}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab.label}
             </button>
           )
         })}
@@ -740,32 +684,14 @@ export function UserProfile() {
 
       {/* --- Journal tab --- */}
       {activeTab === 'journal' && (
-        <>
-          {/* My Ratings shelf title */}
-          <div className="px-4 pt-5 pb-1">
-            <h2
-              style={{
-                fontFamily: "'Amatic SC', cursive",
-                color: 'var(--color-text-primary)',
-                fontSize: '32px',
-                fontWeight: 700,
-                letterSpacing: '0.02em',
-              }}
-            >
-              {profile.display_name}'s Ratings
-            </h2>
-          </div>
-
-          {/* Food-story grid — viewed user's own photos (or typographic tile) */}
-          <ProfileGrid
-            ratings={gridRatings}
-            photoMap={ownPhotoMap}
-            loading={reviewsLoading}
-            resetKey={userId}
-            emptyTitle="No food story yet"
-            emptySubtitle="This person hasn't rated anything yet"
-          />
-        </>
+        <ProfileGrid
+          ratings={gridRatings}
+          photoMap={ownPhotoMap}
+          loading={reviewsLoading}
+          resetKey={userId}
+          emptyTitle="No food story yet"
+          emptySubtitle="This person hasn't rated anything yet"
+        />
       )}
 
       {/* --- Playlists tab --- */}
