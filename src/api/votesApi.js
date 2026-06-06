@@ -605,7 +605,7 @@ export const votesApi = {
     }
   },
 
-  async getReviewsForUser(userId, { limit = 20, offset = 0 } = {}) {
+  async getReviewsForUser(userId, { limit = 500, offset = 0 } = {}) {
     try {
       if (!userId) {
         return []
@@ -621,6 +621,7 @@ export const votesApi = {
           dish_id
         `)
         .eq('user_id', userId)
+        .neq('source', 'ai_estimated')
         .not('review_text', 'is', null)
         .neq('review_text', '')
         .order('review_created_at', { ascending: false, nullsFirst: false })
