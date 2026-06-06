@@ -298,7 +298,8 @@ export const dishPhotosApi = {
   /**
    * Batched lookup of a specific user's own photos for a set of dishes.
    * Used by the profile grid to show "their" photo (not the shared
-   * dishes.photo_url). Excludes moderation-hidden photos.
+   * dishes.photo_url). Only returns visible photos (featured/community);
+   * moderation-rejected and hidden photos never become a profile tile.
    * @param {string} userId
    * @param {string[]} dishIds
    * @returns {Promise<Object>} { [dishId]: photo_url }
@@ -306,18 +307,21 @@ export const dishPhotosApi = {
   async getUserPhotoMap(userId, dishIds) {
     try {
       if (!userId || !dishIds || dishIds.length === 0) return {}
-      const { data, error } = await supabase
-        .from('dish_photos')
-        .select('dish_id, photo_url, status')
-        .eq('user_id', userId)
-        .neq('status', 'hidden')
-        .in('dish_id', dishIds)
-      if (error) throw createClassifiedError(error)
-      // dish_photos is UNIQUE(dish_id, user_id), so each user has at most one
-      // photo per dish — no tie-break needed.
-      const map = {}
-      for (const row of data || []) {
-        map[row.dish_id] = row.photo_url
+      var CHUNK_SIZE = 150
+      var map = {}
+      for (var i = 0; i < dishIds.length; i += CHUNK_SIZE) {
+        var batch = dishIds.slice(i, i + CHUNK_SIZE)
+        const { data, error } = await supabase
+          .from('dish_photos')
+          .select('dish_id, photo_url, status')
+          .eq('user_id', userId)
+          .in('status', ['featured', 'community'])
+          .in('dish_id', batch)
+        if (error) throw createClassifiedError(error)
+        // dish_photos is UNIQUE(dish_id, user_id) -> at most one row per dish.
+        for (const row of data || []) {
+          map[row.dish_id] = row.photo_url
+        }
       }
       return map
     } catch (error) {
