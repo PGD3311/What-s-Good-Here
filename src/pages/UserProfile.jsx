@@ -105,6 +105,13 @@ export function UserProfile() {
       setLoading(true)
       setReviewsLoading(true)
       setError(null)
+      // Reset per-profile state so a prior profile's data can't leak into this
+      // one when a fetch is skipped (logged-out) or rejected during client-side
+      // navigation between profiles.
+      setIsFollowing(false)
+      setTasteCompat(null)
+      setUserReviews([])
+      setJitterBadgeType(null)
 
       // Build the list of parallel fetches
       const fetches = [
