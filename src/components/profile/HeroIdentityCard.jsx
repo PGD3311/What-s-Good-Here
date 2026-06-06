@@ -1,25 +1,16 @@
 import { useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { profileApi } from '../../api/profileApi'
 import { logger } from '../../utils/logger'
-import { jitterTrustVisible } from '../../utils/jitterTrust'
+import { TrustBadge } from '../TrustBadge'
 
 /**
- * Hero Identity Card for the Profile page
- * Centered layout: avatar, name, stats row
+ * Hero Identity Card for the Profile page (owner).
+ * Left-aligned: avatar + (name row with optional trust badge) + two-tier stats
+ * + optional curator pill. Trust badge reuses the shared TrustBadge (same copy
+ * as the public profile) and only shows for earned tiers.
  */
-function getRhythmLabel(score) {
-  if (score >= 0.8) return 'Steady'
-  if (score >= 0.5) return 'Forming'
-  return 'New'
-}
-
-function getTierInfo(confidence, consistency) {
-  if (confidence === 'high' && consistency >= 0.6) return { label: 'Trusted', bg: 'rgba(34, 197, 94, 0.18)', color: 'var(--color-rating)' }
-  if (confidence === 'medium' && consistency >= 0.4) return { label: 'Verified', bg: 'rgba(34, 197, 94, 0.12)', color: 'var(--color-rating)' }
-  return { label: 'Building', bg: 'rgba(156, 163, 175, 0.1)', color: 'var(--color-text-tertiary)' }
-}
-
 export function HeroIdentityCard({
   user,
   profile,
@@ -33,10 +24,10 @@ export function HeroIdentityCard({
   setNameStatus,
   handleSaveName,
   setFollowListModal,
-  jitterProfile,
+  isCurator,
+  trustBadgeType,
   onAvatarUpdated,
 }) {
-  const [jitterExpanded, setJitterExpanded] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const fileInputRef = useRef(null)
 
@@ -60,22 +51,15 @@ export function HeroIdentityCard({
       setAvatarUploading(false)
     }
   }
-  const jitterData = jitterProfile?.profile_data || {}
-  const hasJitterDetail = !!(jitterProfile && Object.keys(jitterData).length > 0)
-  // On iOS the soft keyboard can't feed the typing-rhythm signal, so the
-  // "Building" tier never advances — hide that dead-end state (chip + expanded
-  // panel) there. Verified/Trusted still show. See jitterTrust.js.
-  const jitterTier = jitterProfile
-    ? getTierInfo(jitterProfile.confidence_level, jitterProfile.consistency_score)
-    : null
-  const hideJitter = !!jitterTier && jitterTier.label === 'Building' && !jitterTrustVisible()
+
+  // Only earned tiers surface a badge; 'building'/null/ai_estimated do not.
+  const showTrust = trustBadgeType === 'human_verified' || trustBadgeType === 'trusted_reviewer'
+  const trustLabel = trustBadgeType === 'trusted_reviewer' ? 'Trusted Reviewer' : 'Verified Human'
 
   return (
     <div
       className="relative px-4 pt-8 pb-5 overflow-hidden"
-      style={{
-        background: 'var(--color-bg)',
-      }}
+      style={{ background: 'var(--color-bg)' }}
     >
       {/* Bottom divider */}
       <div
@@ -86,8 +70,8 @@ export function HeroIdentityCard({
         }}
       />
 
-      {/* Avatar + Name row */}
-      <div className="flex items-center gap-4">
+      {/* Avatar + identity column */}
+      <div className="flex items-start gap-4">
         <button
           type="button"
           onClick={handleAvatarPick}
@@ -129,9 +113,6 @@ export function HeroIdentityCard({
             </span>
           )}
         </button>
-        {/* iOS Safari sometimes fails to open the picker when the trigger
-            input is display:none. Visually-hidden (off-screen, but still in
-            the layout / focusable) reliably opens the native picker. */}
         <input
           ref={fileInputRef}
           type="file"
@@ -151,7 +132,7 @@ export function HeroIdentityCard({
         />
 
         <div className="flex-1 min-w-0">
-          {/* Display Name */}
+          {/* Name row (+ trust badge at far right when not editing) */}
           {editingName ? (
             <div className="flex flex-col gap-1">
               <div className="relative">
@@ -170,9 +151,9 @@ export function HeroIdentityCard({
                 />
                 {nameStatus && nameStatus !== 'same' && (
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm">
-                    {nameStatus === 'checking' && '\u23F3'}
-                    {nameStatus === 'available' && '\u2713'}
-                    {nameStatus === 'taken' && '\u2717'}
+                    {nameStatus === 'checking' && '⏳'}
+                    {nameStatus === 'available' && '✓'}
+                    {nameStatus === 'taken' && '✗'}
                   </span>
                 )}
               </div>
@@ -205,26 +186,36 @@ export function HeroIdentityCard({
               )}
             </div>
           ) : (
-            <button
-              onClick={() => setEditingName(true)}
-              className="font-bold transition-colors inline-flex items-center gap-1.5"
-              style={{
-                color: 'var(--color-text-primary)',
-                fontSize: '22px',
-                letterSpacing: '-0.02em',
-                lineHeight: '1.2',
-              }}
-            >
-              {profile?.display_name || 'Set your name'}
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-              </svg>
-            </button>
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => setEditingName(true)}
+                className="font-bold transition-colors inline-flex items-center gap-1.5 min-w-0"
+                style={{
+                  color: 'var(--color-text-primary)',
+                  fontSize: '22px',
+                  letterSpacing: '-0.02em',
+                  lineHeight: '1.2',
+                }}
+              >
+                <span className="truncate">{profile?.display_name || 'Set your name'}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                </svg>
+              </button>
+              {showTrust && (
+                <div className="flex-shrink-0 inline-flex items-center gap-1.5">
+                  <span aria-hidden="true">
+                    <TrustBadge type={trustBadgeType} />
+                  </span>
+                  <span className="font-semibold whitespace-nowrap" style={{ color: 'var(--color-rating)', fontSize: '12px' }}>
+                    {trustLabel}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Stats — two tiers: content identity (dishes · spots) reads as the
-              primary line; social (followers · following) sits quieter beneath
-              so the header isn't one flat wall of numbers. */}
+          {/* Stats — two tiers: content (dishes · spots) primary, social quieter. */}
           {stats.totalVotes > 0 && (
             <div className="flex items-center gap-2 mt-1.5 flex-wrap" style={{ fontSize: '13px' }}>
               <span style={{ color: 'var(--color-text-secondary)' }}>
@@ -261,98 +252,33 @@ export function HeroIdentityCard({
               </span> following
             </button>
           </div>
-        </div>
 
-        {/* Compact Jitter Fingerprint — tap to expand */}
-        {jitterProfile && !hideJitter && (() => {
-          const tier = jitterTier
-          return (
-            <button
-              onClick={hasJitterDetail ? () => setJitterExpanded(!jitterExpanded) : undefined}
-              className={'flex-shrink-0 rounded-xl px-3 py-2.5 text-center transition-all active:scale-95' + (hasJitterDetail ? '' : '')}
-              style={{
-                background: jitterExpanded ? tier.bg : 'var(--color-card)',
-                border: '1px solid ' + (jitterExpanded ? tier.color : 'var(--color-divider)'),
-                minWidth: '90px',
-                cursor: hasJitterDetail ? 'pointer' : 'default',
-              }}
-            >
-              <span
-                className="px-2 py-0.5 rounded-full font-medium inline-block"
-                style={{ background: tier.bg, color: tier.color, fontSize: '11px' }}
+          {/* Curator pill — folded in from the old standalone card. */}
+          {isCurator && (
+            <div className="mt-2.5">
+              <Link
+                to="/my-list"
+                className="inline-flex items-center gap-1.5 rounded-full font-semibold active:scale-[0.98] transition-transform"
+                style={{
+                  border: '1.5px solid var(--color-accent-gold)',
+                  color: 'var(--color-accent-gold)',
+                  background: 'var(--color-surface-elevated)',
+                  fontSize: '12px',
+                  padding: '6px 12px',
+                  textDecoration: 'none',
+                }}
               >
-                {tier.label}
-              </span>
-              <div className="mt-1.5">
-                <div className="font-bold" style={{ color: 'var(--color-text-primary)', fontSize: '18px', lineHeight: 1 }}>
-                  {stats?.reviewCount ?? 0}
-                </div>
-                <div style={{ color: 'var(--color-text-tertiary)', fontSize: '10px', marginTop: '2px' }}>reviews</div>
-              </div>
-              <div className="mt-1">
-                <div className="font-semibold" style={{ color: 'var(--color-accent-gold)', fontSize: '12px', lineHeight: 1 }}>
-                  {jitterProfile.consistency_score != null
-                    ? getRhythmLabel(Number(jitterProfile.consistency_score))
-                    : '\u2014'}
-                </div>
-                <div style={{ color: 'var(--color-text-tertiary)', fontSize: '10px', marginTop: '2px' }}>rhythm</div>
-              </div>
-              {hasJitterDetail && (
-                <div className="mt-1.5" style={{ color: 'var(--color-accent-gold)', fontSize: '10px' }}>
-                  {jitterExpanded ? '\u25B2 less' : '\u25BC detail'}
-                </div>
-              )}
-            </button>
-          )
-        })()}
-      </div>
-
-      {/* Expanded Jitter Detail Panel */}
-      {jitterExpanded && hasJitterDetail && !hideJitter && (
-        <div
-          className="mx-4 mt-3 rounded-xl overflow-hidden"
-          style={{
-            background: 'var(--color-card)',
-            border: '1px solid var(--color-divider)',
-          }}
-        >
-          <div className="px-4 py-4 space-y-3">
-            <p className="text-sm" style={{ color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-              {getOwnerBlurb(jitterProfile)}
-            </p>
-            {jitterProfile.created_at && (
-              <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-                Reviewing since {new Date(jitterProfile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </p>
-            )}
-            <a
-              href="/jitter"
-              className="inline-block text-sm font-semibold"
-              style={{ color: 'var(--color-primary)' }}
-            >
-              Learn how this works &rarr;
-            </a>
-          </div>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897L16.862 4.487z" />
+                </svg>
+                Edit Top 10
+              </Link>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
-}
-
-// Plain-English status copy for the profile owner. Branches on rhythm-sample
-// count + consistency_score, not raw review count \u2014 short reviews don't
-// collect enough keystrokes to build a rhythm signal, so a user can write
-// many reviews and still be "Building" until their typing pattern emerges.
-function getOwnerBlurb(jitterProfile) {
-  var rhythmSamples = jitterProfile?.review_count || 0
-  var consistency = Number(jitterProfile?.consistency_score) || 0
-  if (rhythmSamples >= 15 && consistency >= 0.6) {
-    return 'You\u2019re a Trusted Reviewer. Your votes carry extra weight in our rankings because your typing rhythm is steady and consistent.'
-  }
-  if (rhythmSamples >= 5 && consistency >= 0.4) {
-    return 'You\u2019re a Verified Human. Your reviews are confirmed to be typed by a real person. Keep writing to reach Trusted Reviewer status.'
-  }
-  return 'You\u2019re just getting started. Write longer reviews so your typing rhythm can be captured \u2014 once we have enough rhythm samples, you\u2019ll earn a Verified Human badge.'
 }
 
 export default HeroIdentityCard
