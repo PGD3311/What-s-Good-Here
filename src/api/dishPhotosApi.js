@@ -296,6 +296,41 @@ export const dishPhotosApi = {
   },
 
   /**
+   * Batched lookup of a specific user's own photos for a set of dishes.
+   * Used by the profile grid to show "their" photo (not the shared
+   * dishes.photo_url). Only returns visible photos (featured/community);
+   * moderation-rejected and hidden photos never become a profile tile.
+   * @param {string} userId
+   * @param {string[]} dishIds
+   * @returns {Promise<Object>} { [dishId]: photo_url }
+   */
+  async getUserPhotoMap(userId, dishIds) {
+    try {
+      if (!userId || !dishIds || dishIds.length === 0) return {}
+      var CHUNK_SIZE = 150
+      var map = {}
+      for (var i = 0; i < dishIds.length; i += CHUNK_SIZE) {
+        var batch = dishIds.slice(i, i + CHUNK_SIZE)
+        const { data, error } = await supabase
+          .from('dish_photos')
+          .select('dish_id, photo_url, status')
+          .eq('user_id', userId)
+          .in('status', ['featured', 'community'])
+          .in('dish_id', batch)
+        if (error) throw createClassifiedError(error)
+        // dish_photos is UNIQUE(dish_id, user_id) -> at most one row per dish.
+        for (const row of data || []) {
+          map[row.dish_id] = row.photo_url
+        }
+      }
+      return map
+    } catch (error) {
+      logger.error('Error fetching user photo map:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
    * Delete a photo
    * @param {string} photoId - Photo ID
    * @returns {Promise<Object>} Success status

@@ -4,14 +4,14 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuth } from '../context/AuthContext'
 import { logger } from '../utils/logger'
 import { getCompatColor } from '../utils/formatters'
-import { computeRatingStyle, computeStandoutPicks } from '../utils/foodStats'
 import { followsApi } from '../api/followsApi'
 import { useFollowUser } from '../hooks/useFollowUser'
 import { votesApi } from '../api/votesApi'
 import { FollowListModal } from '../components/FollowListModal'
 import { ProfileSkeleton } from '../components/Skeleton'
 import { DataLoadError } from '../components/DataLoadError'
-import { JournalFeed, LocalListCard } from '../components/profile'
+import { LocalListCard, ProfileGrid } from '../components/profile'
+import { useUserDishPhotos } from '../hooks/useUserDishPhotos'
 import { useUserPlaylists } from '../hooks/useUserPlaylists'
 import { PlaylistStripCard } from '../components/playlists/PlaylistStripCard'
 import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
@@ -71,7 +71,6 @@ export function UserProfile() {
   // selectedReview state removed — ReviewDetailModal doesn't exist yet
   const [tasteCompat, setTasteCompat] = useState(null)
   const [ratingBias, setRatingBias] = useState(null)
-  const [standoutPicks, setStandoutPicks] = useState({})
   const [jitterBadgeType, setJitterBadgeType] = useState(null)
   const [jitterBadgeData, setJitterBadgeData] = useState(null)
   const [activeTab, setActiveTab] = useState('journal')
@@ -207,63 +206,30 @@ export function UserProfile() {
     return () => { cancelled = true }
   }, [userId, currentUser, isOwnProfile])
 
-  // Dependent fetches: compute standout picks + fetch my ratings (need profile.recent_votes)
+  // Dependent fetch: my ratings for grid comparison (needs profile.recent_votes).
+  // Only fetched when logged in and viewing someone else's profile.
   useEffect(() => {
     if (!profile?.recent_votes?.length) return
+    if (!currentUser || isOwnProfile) return
     let cancelled = false
 
-    async function fetchDependentData() {
-      const ratedVotes = profile.recent_votes.filter(v => v.rating != null)
-      const dishIds = ratedVotes.map(v => v.dish?.id).filter(Boolean)
+    async function fetchMyRatings() {
+      const dishIds = profile.recent_votes
+        .filter(v => v.rating != null)
+        .map(v => v.dish?.id)
+        .filter(Boolean)
       if (dishIds.length === 0) return
 
-      // Build dependent fetches in parallel
-      const fetches = [
-        // 0: community averages for standout picks
-        votesApi.getCommunityAvgsForDishes(dishIds),
-        // 1: my ratings for comparison (only if logged in and not own profile)
-        currentUser && !isOwnProfile
-          ? votesApi.getMyRatingsForDishes(dishIds)
-          : Promise.resolve(null),
-      ]
-
-      const results = await Promise.allSettled(fetches)
-      if (cancelled) return
-
-      // 0: Compute standout picks
-      if (results[0].status === 'fulfilled') {
-        try {
-          const communityAvgs = results[0].value
-          // Normalize this page's recent_votes shape into the shared item shape;
-          // the Best Find / Hottest Take math lives in utils/foodStats.js so this
-          // page and the owner Profile (useUserVotes) can't drift.
-          const items = ratedVotes
-            .filter(v => v.dish?.id)
-            .map(v => ({
-              dish_id: v.dish.id,
-              dish_name: v.dish.name,
-              restaurant_id: v.dish.restaurant_id,
-              restaurant_name: v.dish.restaurant_name,
-              userRating: v.rating,
-            }))
-          const picks = computeStandoutPicks(items, communityAvgs)
-          if (picks.bestFind || picks.harshestTake) setStandoutPicks(picks)
-        } catch (err) {
-          logger.error('Failed to compute standout picks:', err)
-        }
-      } else {
-        logger.error('Failed to fetch community averages:', results[0].reason)
-      }
-
-      // 1: My ratings
-      if (results[1].status === 'fulfilled' && results[1].value !== null) {
-        setMyRatings(results[1].value)
-      } else if (results[1].status === 'rejected') {
-        logger.error('Failed to fetch my ratings:', results[1].reason)
+      try {
+        const ratings = await votesApi.getMyRatingsForDishes(dishIds)
+        if (cancelled) return
+        if (ratings) setMyRatings(ratings)
+      } catch (err) {
+        logger.error('Failed to fetch my ratings:', err)
       }
     }
 
-    fetchDependentData()
+    fetchMyRatings()
     return () => { cancelled = true }
   }, [profile?.recent_votes, currentUser, isOwnProfile])
 
@@ -313,70 +279,25 @@ export function UserProfile() {
   }
 
   // Handle share profile
-  // Compute stats from recent votes — single "My Ratings" shelf, sorted by recency.
-  const { totalVotes, uniqueRestaurants, ratingStyle, favoriteRestaurant, favoriteRestaurantCount, favoriteRestaurantId } = useMemo(() => {
+  // Header rhythm stats: dishes rated + distinct spots. ("Spots" counts every
+  // distinct restaurant the user has an entry at, rated or not.)
+  const { totalVotes, uniqueRestaurants } = useMemo(() => {
     if (!profile?.recent_votes?.length) {
-      return { totalVotes: 0, uniqueRestaurants: 0, ratingStyle: null, favoriteRestaurant: null, favoriteRestaurantCount: 0, favoriteRestaurantId: null }
+      return { totalVotes: 0, uniqueRestaurants: 0 }
     }
-    const restaurantCounts = {}
-    const restaurantIdByName = {}
     const allRestaurants = new Set()
-    const ratings = []
     profile.recent_votes.forEach(vote => {
-      const isRated = vote.rating != null
       const restName = vote.dish?.restaurant_name
-      const restId = vote.dish?.restaurant_id
-      // "Spots" counts every distinct restaurant the user has an entry at,
-      // matching the owner profile's uniqueRestaurants (all votes, not just
-      // rated). "Most loyal" below stays rated-only — photo/saved entries
-      // shouldn't read as loyalty.
       if (restName) allRestaurants.add(restName)
-      if (restName && isRated) {
-        restaurantCounts[restName] = (restaurantCounts[restName] || 0) + 1
-        if (restId && !restaurantIdByName[restName]) restaurantIdByName[restName] = restId
-      }
-      if (isRated) {
-        ratings.push(vote.rating)
-      }
     })
-
-    // Compute rating style from average
-    let style = null
-    if (ratings.length > 0) {
-      const avgRating = ratings.reduce((sum, r) => sum + r, 0) / ratings.length
-      const variance = ratings.length > 1
-        ? Math.sqrt(ratings.reduce((sum, r) => sum + Math.pow(r - avgRating, 2), 0) / ratings.length)
-        : 0
-      style = computeRatingStyle(avgRating, variance)
-      if (style) style.avgRating = avgRating
-    }
-
-    // Most loyal: restaurant with the most rated dishes. Only surface when
-    // there's actually a "favorite" — more than one visit signals loyalty.
-    let favRest = null
-    let favCount = 0
-    Object.entries(restaurantCounts).forEach(([name, count]) => {
-      if (count > favCount) {
-        favRest = name
-        favCount = count
-      }
-    })
-    if (favCount < 2) {
-      favRest = null
-      favCount = 0
-    }
 
     return {
       totalVotes: profile.recent_votes.length,
       uniqueRestaurants: allRestaurants.size,
-      ratingStyle: style,
-      favoriteRestaurant: favRest,
-      favoriteRestaurantCount: favCount,
-      favoriteRestaurantId: favRest ? (restaurantIdByName[favRest] || null) : null,
     }
   }, [profile?.recent_votes])
 
-  // Transform votes into JournalFeed shape — one shelf, sorted most-recent-first.
+  // Transform votes into the grid (ProfileGrid) shape, sorted most-recent-first.
   var journalRatings = (profile?.recent_votes || [])
     .slice()
     .sort(function (a, b) {
@@ -406,6 +327,20 @@ export function UserProfile() {
       return town.indexOf(locLower) !== -1 || locLower.indexOf(town) !== -1
     })
   }
+
+  // Food-story grid: journalRatings already carries the target shape
+  // ({ dish_id, dish_name, restaurant_name, rating_10, review_text, voted_at })
+  // with review text merged from userReviews. Derive a stable list of dish ids
+  // (keyed off the join of ids so the memo only recomputes when the set
+  // changes) and fetch the viewed user's own photos for the grid tiles.
+  const gridRatings = journalRatings
+  const gridDishKey = journalRatings.map(function (d) { return d.dish_id }).join(',')
+  const gridDishIds = useMemo(
+    function () { return gridRatings.map(function (d) { return d.dish_id }) },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gridDishKey]
+  )
+  const ownPhotoMap = useUserDishPhotos(userId, gridDishIds)
 
   if (loading) {
     return <ProfileSkeleton />
@@ -658,10 +593,6 @@ export function UserProfile() {
           </div>
         )}
 
-        {/* Rating Style + Most loyal + Best find + Hot take live in the
-            Food Story chalkboard further down — kept here as a single source
-            of truth, matching the Profile page layout. */}
-
         {/* Action Buttons */}
         <div className="flex gap-3 mt-4">
           {isOwnProfile ? (
@@ -747,90 +678,6 @@ export function UserProfile() {
         </div>
       )}
 
-      {/* Food Story chalkboard — matches the own-profile layout */}
-      {totalVotes > 0 && (ratingStyle || favoriteRestaurant || standoutPicks.bestFind || standoutPicks.harshestTake) && (
-        <div style={{ padding: '12px 16px 0' }}>
-          <div
-            style={{
-              background: '#2C3033',
-              borderRadius: '12px',
-              padding: '18px',
-              backgroundImage: 'radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.04) 0%, transparent 60%)',
-            }}
-          >
-            <h3 style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '22px',
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.88)',
-              marginBottom: '10px',
-            }}>
-              {profile.display_name || 'Their'}&rsquo;s Food Story
-            </h3>
-            {ratingStyle && (
-              <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Rating style</span>
-                <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  {ratingStyle.label}
-                </span>
-              </div>
-            )}
-            {favoriteRestaurant && (
-              <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Most loyal</span>
-                {favoriteRestaurantId ? (
-                  <Link
-                    to={`/restaurants/${favoriteRestaurantId}`}
-                    style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
-                  >
-                    {favoriteRestaurant} &middot; {favoriteRestaurantCount} {favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
-                  </Link>
-                ) : (
-                  <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                    {favoriteRestaurant} &middot; {favoriteRestaurantCount} {favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
-                  </span>
-                )}
-              </div>
-            )}
-            {standoutPicks.bestFind && (
-              <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Best find</span>
-                {standoutPicks.bestFind.dish_id ? (
-                  <Link
-                    to={`/dish/${standoutPicks.bestFind.dish_id}`}
-                    style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}
-                  >
-                    {standoutPicks.bestFind.dish_name} &middot; {standoutPicks.bestFind.userRating}
-                  </Link>
-                ) : (
-                  <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
-                    {standoutPicks.bestFind.dish_name} &middot; {standoutPicks.bestFind.userRating}
-                  </span>
-                )}
-              </div>
-            )}
-            {standoutPicks.harshestTake && (
-              <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0' }}>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Hot take</span>
-                {standoutPicks.harshestTake.dish_id ? (
-                  <Link
-                    to={`/dish/${standoutPicks.harshestTake.dish_id}`}
-                    style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
-                  >
-                    {standoutPicks.harshestTake.dish_name} &middot; Them: {standoutPicks.harshestTake.userRating} &middot; Crowd: {(standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
-                  </Link>
-                ) : (
-                  <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                    {standoutPicks.harshestTake.dish_name} &middot; Them: {standoutPicks.harshestTake.userRating} &middot; Crowd: {(standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-
       {/* Local List */}
       {localList.items.length > 0 && (
         <LocalListCard items={localList.items} />
@@ -909,10 +756,14 @@ export function UserProfile() {
             </h2>
           </div>
 
-          {/* Journal Feed — single chronological shelf */}
-          <JournalFeed
-            ratings={journalRatings}
+          {/* Food-story grid — viewed user's own photos (or typographic tile) */}
+          <ProfileGrid
+            ratings={gridRatings}
+            photoMap={ownPhotoMap}
             loading={reviewsLoading}
+            resetKey={userId}
+            emptyTitle="No food story yet"
+            emptySubtitle="This person hasn't rated anything yet"
           />
         </>
       )}

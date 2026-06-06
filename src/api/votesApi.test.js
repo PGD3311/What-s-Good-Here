@@ -610,10 +610,12 @@ describe('votesApi', () => {
         .mockReturnValueOnce({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              not: vi.fn().mockReturnValue({
-                neq: vi.fn().mockReturnValue({
-                  order: vi.fn().mockReturnValue({
-                    range: vi.fn().mockResolvedValue({ data: publicVotesRows, error: null }),
+              neq: vi.fn().mockReturnValue({
+                not: vi.fn().mockReturnValue({
+                  neq: vi.fn().mockReturnValue({
+                    order: vi.fn().mockReturnValue({
+                      range: vi.fn().mockResolvedValue({ data: publicVotesRows, error: null }),
+                    }),
                   }),
                 }),
               }),
@@ -638,10 +640,12 @@ describe('votesApi', () => {
       supabase.from.mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            not: vi.fn().mockReturnValue({
-              neq: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
-                  range: vi.fn().mockResolvedValue({ data: null, error: { message: 'Error' } }),
+            neq: vi.fn().mockReturnValue({
+              not: vi.fn().mockReturnValue({
+                neq: vi.fn().mockReturnValue({
+                  order: vi.fn().mockReturnValue({
+                    range: vi.fn().mockResolvedValue({ data: null, error: { message: 'Error' } }),
+                  }),
                 }),
               }),
             }),

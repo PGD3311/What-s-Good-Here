@@ -605,7 +605,7 @@ export const votesApi = {
     }
   },
 
-  async getReviewsForUser(userId, { limit = 20, offset = 0 } = {}) {
+  async getReviewsForUser(userId, { limit = 500, offset = 0 } = {}) {
     try {
       if (!userId) {
         return []
@@ -621,6 +621,7 @@ export const votesApi = {
           dish_id
         `)
         .eq('user_id', userId)
+        .neq('source', 'ai_estimated')
         .not('review_text', 'is', null)
         .neq('review_text', '')
         .order('review_created_at', { ascending: false, nullsFirst: false })
@@ -631,10 +632,13 @@ export const votesApi = {
       if (!data?.length) return []
 
       const dishIds = [...new Set(data.map(review => review.dish_id).filter(Boolean))]
-      const { data: dishes, error: dishesError } = dishIds.length
-        ? await supabase
-            .from('dishes')
-            .select(`
+      let dishes = []
+      var CHUNK_SIZE = 150
+      for (var i = 0; i < dishIds.length; i += CHUNK_SIZE) {
+        var batch = dishIds.slice(i, i + CHUNK_SIZE)
+        const { data: chunkDishes, error: dishesError } = await supabase
+          .from('dishes')
+          .select(`
               id,
               name,
               photo_url,
@@ -642,11 +646,12 @@ export const votesApi = {
               price,
               restaurants (name, town)
             `)
-            .in('id', dishIds)
-        : { data: [], error: null }
-
-      if (dishesError) {
-        logger.warn('Error fetching dishes for user reviews:', dishesError)
+          .in('id', batch)
+        if (dishesError) {
+          logger.warn('Error fetching dishes for user reviews:', dishesError)
+        } else if (chunkDishes) {
+          dishes = dishes.concat(chunkDishes)
+        }
       }
 
       const dishMap = Object.fromEntries((dishes || []).map(dish => [dish.id, dish]))

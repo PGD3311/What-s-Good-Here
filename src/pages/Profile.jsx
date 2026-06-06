@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -23,9 +23,10 @@ import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
 import { CreatePlaylistModal } from '../components/playlists/CreatePlaylistModal'
 import {
   HeroIdentityCard,
-  JournalFeed,
   RecentVisitsList,
+  ProfileGrid,
 } from '../components/profile'
+import { useUserDishPhotos } from '../hooks/useUserDishPhotos'
 import { jitterApi } from '../api/jitterApi'
 
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
@@ -40,6 +41,11 @@ export function Profile() {
 
   const { profile, error: profileError, loading: profileLoading, refetch: refetchProfile, updateProfile } = useProfile(user?.id)
   const { ratedDishes, stats, loading: votesLoading, refetch: refetchVotes } = useUserVotes(user?.id)
+  const ratedDishIdsForGrid = useMemo(
+    () => (ratedDishes || []).filter(d => d.rating_10 != null).map(d => d.dish_id),
+    [ratedDishes]
+  )
+  const ownPhotoMap = useUserDishPhotos(user?.id, ratedDishIdsForGrid)
   const { dishes: unratedDishes, count: unratedCount, refetch: refetchUnrated } = useUnratedDishes(user?.id)
 
   const [jitterProfile, setJitterProfile] = useState(null)
@@ -331,93 +337,6 @@ export function Profile() {
             )}
           </div>
 
-          {/* Food Story chalkboard — your food identity at a glance */}
-          {stats.totalVotes > 0 && (
-            <div style={{ padding: '12px 16px 0' }}>
-              <div
-                style={{
-                  background: '#2C3033',
-                  borderRadius: '12px',
-                  padding: '18px',
-                  backgroundImage: 'radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.04) 0%, transparent 60%)',
-                }}
-              >
-                <h3 style={{
-                  fontFamily: "'Amatic SC', cursive",
-                  fontSize: '22px',
-                  fontWeight: 700,
-                  color: 'rgba(255,255,255,0.88)',
-                  marginBottom: '10px',
-                }}>
-                  Your Food Story
-                </h3>
-                {/* Rating style */}
-                {stats.ratingStyle && (
-                  <div className="flex justify-between items-baseline" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Rating style</span>
-                    <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                      {stats.ratingStyle.label}
-                    </span>
-                  </div>
-                )}
-                {/* Most loyal — links to the restaurant when we have the id */}
-                {stats.favoriteRestaurant && (
-                  <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Most loyal</span>
-                    {stats.favoriteRestaurantId ? (
-                      <Link
-                        to={`/restaurants/${stats.favoriteRestaurantId}`}
-                        style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
-                      >
-                        {stats.favoriteRestaurant} &middot; {stats.favoriteRestaurantCount} {stats.favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
-                      </Link>
-                    ) : (
-                      <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                        {stats.favoriteRestaurant} &middot; {stats.favoriteRestaurantCount} {stats.favoriteRestaurantCount === 1 ? 'dish' : 'dishes'}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {/* Best find — links to the dish */}
-                {stats.standoutPicks && stats.standoutPicks.bestFind && (
-                  <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Best find</span>
-                    {stats.standoutPicks.bestFind.dish_id ? (
-                      <Link
-                        to={`/dish/${stats.standoutPicks.bestFind.dish_id}`}
-                        style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}
-                      >
-                        {stats.standoutPicks.bestFind.dish_name} &middot; {stats.standoutPicks.bestFind.userRating}
-                      </Link>
-                    ) : (
-                      <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
-                        {stats.standoutPicks.bestFind.dish_name} &middot; {stats.standoutPicks.bestFind.userRating}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {/* Hot take — links to the dish */}
-                {stats.standoutPicks && stats.standoutPicks.harshestTake && (
-                  <div className="flex justify-between items-baseline gap-3" style={{ padding: '5px 0' }}>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Hot take</span>
-                    {stats.standoutPicks.harshestTake.dish_id ? (
-                      <Link
-                        to={`/dish/${stats.standoutPicks.harshestTake.dish_id}`}
-                        style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}
-                      >
-                        {stats.standoutPicks.harshestTake.dish_name} &middot; You: {stats.standoutPicks.harshestTake.userRating} &middot; Crowd: {(stats.standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
-                      </Link>
-                    ) : (
-                      <span style={{ fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'rgba(255,255,255,0.88)' }}>
-                        {stats.standoutPicks.harshestTake.dish_name} &middot; You: {stats.standoutPicks.harshestTake.userRating} &middot; Crowd: {(stats.standoutPicks.harshestTake.communityAvg ?? 0).toFixed(1)}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Unrated Photos Banner - shown when user has photos to rate */}
           {unratedCount > 0 && (
             <div className="px-4 py-4" style={{ background: 'var(--color-surface)' }}>
@@ -524,10 +443,9 @@ export function Profile() {
             ))}
           </div>
 
-          {/* --- Journal tab --- */}
+          {/* --- Journal tab (food-story grid) --- */}
           {activeTab === 'journal' && (
             <>
-              {/* Your Journal title */}
               <div className="px-4 pt-5 pb-1">
                 <h2
                   style={{
@@ -538,14 +456,16 @@ export function Profile() {
                     letterSpacing: '0.02em',
                   }}
                 >
-                  Your Journal
+                  Your Food Story
                 </h2>
               </div>
-
-              {/* Journal Feed — single chronological shelf */}
-              <JournalFeed
+              <ProfileGrid
                 ratings={ratedDishes}
+                photoMap={ownPhotoMap}
                 loading={votesLoading}
+                resetKey={user?.id}
+                emptyTitle="Your food story starts here"
+                emptySubtitle="Rate your first dish to fill the grid"
               />
             </>
           )}
