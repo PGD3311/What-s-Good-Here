@@ -68,7 +68,7 @@ export function Profile() {
   const [activeTab, setActiveTab] = useState('journal')
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false)
 
-  // People search state — always-on inline search bar above Your Food Story.
+  // People search state — always-on inline search bar above the tabs/grid.
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleResults, setPeopleResults] = useState([])
   const [peopleLoading, setPeopleLoading] = useState(false)
@@ -234,7 +234,7 @@ export function Profile() {
             onAvatarUpdated={refetchProfile}
           />
 
-          {/* Inline people search — always visible above Your Food Story */}
+          {/* Inline people search — always visible above the tabs/grid */}
           <div style={{ padding: '12px 16px 0' }}>
             <div className="relative">
               <svg
@@ -372,7 +372,7 @@ export function Profile() {
             </div>
           )}
 
-          {/* Tabs: Journal / Playlists / Saved */}
+          {/* Tabs: Grid / Lists / Saved */}
           <div
             className="flex"
             style={{
@@ -383,73 +383,40 @@ export function Profile() {
               zIndex: 10,
             }}
           >
-            {['journal', 'visits', 'playlists', 'saved'].map((tab) => (
+            {[
+              { key: 'journal', label: 'Grid' },
+              { key: 'playlists', label: 'Lists' },
+              { key: 'saved', label: 'Saved' },
+            ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
                 className="flex-1 py-3 text-xs font-semibold text-center"
                 style={{
-                  color: activeTab === tab ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                  borderBottom: activeTab === tab ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  color: activeTab === tab.key ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                  borderBottom: activeTab === tab.key ? '2px solid var(--color-primary)' : '2px solid transparent',
                   background: 'transparent',
                   border: 'none',
                   borderBottomWidth: 2,
                   borderBottomStyle: 'solid',
-                  borderBottomColor: activeTab === tab ? 'var(--color-primary)' : 'transparent',
+                  borderBottomColor: activeTab === tab.key ? 'var(--color-primary)' : 'transparent',
                 }}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.label}
               </button>
             ))}
           </div>
 
           {/* --- Journal tab (food-story grid) --- */}
           {activeTab === 'journal' && (
-            <>
-              <div className="px-4 pt-5 pb-1">
-                <h2
-                  style={{
-                    fontFamily: "'Amatic SC', cursive",
-                    color: 'var(--color-text-primary)',
-                    fontSize: '32px',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Your Food Story
-                </h2>
-              </div>
-              <ProfileGrid
-                ratings={ratedDishes}
-                photoMap={ownPhotoMap}
-                loading={votesLoading}
-                resetKey={user?.id}
-                emptyTitle="Your food story starts here"
-                emptySubtitle="Rate your first dish to fill the grid"
-              />
-            </>
-          )}
-
-          {/* --- Visits tab --- (v1 retrieval surface for check-ins; v2+
-              brings in the "rate the burger from Atria yesterday" cold-open
-              banner that nudges from this same data) */}
-          {activeTab === 'visits' && (
-            <>
-              <div className="px-4 pt-5 pb-1">
-                <h2
-                  style={{
-                    fontFamily: "'Amatic SC', cursive",
-                    color: 'var(--color-text-primary)',
-                    fontSize: '32px',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Your Visits
-                </h2>
-              </div>
-              <RecentVisitsList userId={user?.id} />
-            </>
+            <ProfileGrid
+              ratings={ratedDishes}
+              photoMap={ownPhotoMap}
+              loading={votesLoading}
+              resetKey={user?.id}
+              emptyTitle="Your food story starts here"
+              emptySubtitle="Rate your first dish to fill the grid"
+            />
           )}
 
           {/* --- Playlists tab --- */}
