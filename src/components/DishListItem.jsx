@@ -80,6 +80,11 @@ export const DishListItem = memo(function DishListItem({
     return renderVotedCard()
   }
 
+  // --- GRID VARIANT (profile food-story grid) ---
+  if (variant === 'grid') {
+    return renderGridTile()
+  }
+
   // --- RANKED VARIANT (home, browse, restaurant detail) ---
   // Scoreboard layout: rank · dish name / restaurant · rating / votes
   var isPodium = rank != null && rank <= 3
@@ -494,6 +499,94 @@ export const DishListItem = memo(function DishListItem({
           </div>
         )}
       </div>
+    )
+  }
+
+  // --- GRID TILE RENDERER (no emoji; photo / rating / quote-card) ---
+  function renderGridTile() {
+    var rating = dish.rating_10
+    var review = dish.review_text
+    var ratingColor = getRatingColor(rating)
+    var ratingLabel = rating == null ? '' : (rating % 1 === 0 ? rating : Number(rating).toFixed(1))
+    var ariaLabel = dishName +
+      (restaurantName ? ', ' + restaurantName : '') +
+      (rating == null ? '' : ', rated ' + ratingLabel) +
+      (review ? ', review: ' + review : '')
+
+    return (
+      <button
+        type="button"
+        data-testid="grid-tile"
+        data-dish-id={dishId}
+        aria-label={ariaLabel}
+        onClick={function (e) { e.stopPropagation(); handleClick(e) }}
+        className="relative block w-full text-left overflow-hidden active:scale-[0.98]"
+        style={{
+          aspectRatio: '1 / 1',
+          borderRadius: '4px',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          background: photoUrl
+            ? 'var(--color-surface)'
+            : (review
+              ? 'linear-gradient(150deg, var(--color-category-strip), var(--color-surface))'
+              : 'var(--color-card)'),
+        }}
+      >
+        {photoUrl ? (
+          <>
+            <img src={photoUrl} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
+            {rating != null && (
+              <span
+                data-testid="grid-rating-badge"
+                style={{
+                  position: 'absolute', top: '6px', right: '6px',
+                  minWidth: '22px', height: '22px', padding: '0 5px',
+                  borderRadius: '7px', background: 'rgba(255,255,255,0.92)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                  color: ratingColor, fontWeight: 800, fontSize: '12px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {ratingLabel}
+              </span>
+            )}
+            <div
+              style={{
+                position: 'absolute', left: 0, right: 0, bottom: 0,
+                padding: '14px 7px 6px',
+                background: 'linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0))',
+                color: '#fff',
+              }}
+            >
+              <div className="truncate" style={{ fontSize: '11px', fontWeight: 700, lineHeight: 1.15 }}>{dishName}</div>
+              <div className="truncate" style={{ fontSize: '9.5px', opacity: 0.85 }}>{restaurantName}</div>
+            </div>
+          </>
+        ) : (
+          <div className="w-full h-full flex flex-col" style={{ padding: '10px 9px' }}>
+            <span style={{ fontSize: '32px', fontWeight: 800, lineHeight: 0.9, color: ratingColor }}>{ratingLabel}</span>
+            {review && (
+              <p
+                className="italic"
+                style={{
+                  fontSize: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.3,
+                  marginTop: '5px', display: '-webkit-box', WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}
+              >
+                &ldquo;{review}&rdquo;
+              </p>
+            )}
+            <div style={{ marginTop: 'auto' }}>
+              <div className="truncate" style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.15 }}>{dishName}</div>
+              <div className="truncate" style={{ fontSize: '9.5px', color: 'var(--color-text-tertiary)' }}>{restaurantName}</div>
+            </div>
+          </div>
+        )}
+      </button>
     )
   }
 })
