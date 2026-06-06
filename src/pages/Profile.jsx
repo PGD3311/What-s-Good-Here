@@ -23,7 +23,6 @@ import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
 import { CreatePlaylistModal } from '../components/playlists/CreatePlaylistModal'
 import {
   HeroIdentityCard,
-  RecentVisitsList,
   ProfileGrid,
 } from '../components/profile'
 import { useUserDishPhotos } from '../hooks/useUserDishPhotos'

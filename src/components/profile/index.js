@@ -2,7 +2,6 @@
 export { HeroIdentityCard } from './HeroIdentityCard'
 export { FoodMap } from './FoodMap'
 export { ShelfFilter } from './ShelfFilter'
-export { RecentVisitsList } from './RecentVisitsList'
 export { LocalListCard } from './LocalListCard'
 export { DeleteAccountModal } from './DeleteAccountSection'
 export { CuratorOnboardingSplash } from './CuratorOnboardingSplash'
