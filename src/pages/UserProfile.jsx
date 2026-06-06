@@ -11,7 +11,8 @@ import { votesApi } from '../api/votesApi'
 import { FollowListModal } from '../components/FollowListModal'
 import { ProfileSkeleton } from '../components/Skeleton'
 import { DataLoadError } from '../components/DataLoadError'
-import { JournalFeed, LocalListCard } from '../components/profile'
+import { LocalListCard, ProfileGrid } from '../components/profile'
+import { useUserDishPhotos } from '../hooks/useUserDishPhotos'
 import { useUserPlaylists } from '../hooks/useUserPlaylists'
 import { PlaylistStripCard } from '../components/playlists/PlaylistStripCard'
 import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
@@ -376,7 +377,7 @@ export function UserProfile() {
     }
   }, [profile?.recent_votes])
 
-  // Transform votes into JournalFeed shape — one shelf, sorted most-recent-first.
+  // Transform votes into the grid (ProfileGrid) shape, sorted most-recent-first.
   var journalRatings = (profile?.recent_votes || [])
     .slice()
     .sort(function (a, b) {
@@ -406,6 +407,20 @@ export function UserProfile() {
       return town.indexOf(locLower) !== -1 || locLower.indexOf(town) !== -1
     })
   }
+
+  // Food-story grid: journalRatings already carries the target shape
+  // ({ dish_id, dish_name, restaurant_name, rating_10, review_text, voted_at })
+  // with review text merged from userReviews. Derive a stable list of dish ids
+  // (keyed off the join of ids so the memo only recomputes when the set
+  // changes) and fetch the viewed user's own photos for the grid tiles.
+  const gridRatings = journalRatings
+  const gridDishKey = journalRatings.map(function (d) { return d.dish_id }).join(',')
+  const gridDishIds = useMemo(
+    function () { return gridRatings.map(function (d) { return d.dish_id }) },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gridDishKey]
+  )
+  const ownPhotoMap = useUserDishPhotos(userId, gridDishIds)
 
   if (loading) {
     return <ProfileSkeleton />
@@ -909,10 +924,14 @@ export function UserProfile() {
             </h2>
           </div>
 
-          {/* Journal Feed — single chronological shelf */}
-          <JournalFeed
-            ratings={journalRatings}
+          {/* Food-story grid — viewed user's own photos (or typographic tile) */}
+          <ProfileGrid
+            ratings={gridRatings}
+            photoMap={ownPhotoMap}
             loading={reviewsLoading}
+            resetKey={userId}
+            emptyTitle="No food story yet"
+            emptySubtitle="This person hasn't rated anything yet"
           />
         </>
       )}
