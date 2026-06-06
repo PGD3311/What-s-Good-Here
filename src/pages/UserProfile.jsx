@@ -17,7 +17,6 @@ import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
 import { useLocalListDetail } from '../hooks/useLocalListDetail'
 import { TrustBadge } from '../components/jitter'
 import { jitterApi } from '../api/jitterApi'
-import { profileApi } from '../api/profileApi'
 import { ReportModal } from '../components/ReportModal'
 import { BlockUserModal } from '../components/BlockUserModal'
 import { useBlockedUsers } from '../hooks/useBlockedUsers'
@@ -49,12 +48,10 @@ export function UserProfile() {
   const [followLoading, setFollowLoading] = useState(false)
   const { follow: followMutation, unfollow: unfollowMutation } = useFollowUser()
   const [followListModal, setFollowListModal] = useState(null) // 'followers' | 'following' | null
-  const [myRatings, setMyRatings] = useState({}) // { dishId: rating }
   const [userReviews, setUserReviews] = useState([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   // selectedReview state removed — ReviewDetailModal doesn't exist yet
   const [tasteCompat, setTasteCompat] = useState(null)
-  const [ratingBias, setRatingBias] = useState(null)
   const [jitterBadgeType, setJitterBadgeType] = useState(null)
   const [activeTab, setActiveTab] = useState('journal')
   const [showActionsMenu, setShowActionsMenu] = useState(false)
@@ -125,11 +122,9 @@ export function UserProfile() {
         currentUser && !isOwnProfile
           ? followsApi.getTasteCompatibility(userId)
           : Promise.resolve(null),
-        // 3: rating bias
-        profileApi.getRatingBias(userId),
-        // 4: jitter badge
+        // 3: jitter badge
         jitterApi.getJitterBadges([userId]),
-        // 5: reviews
+        // 4: reviews
         votesApi.getReviewsForUser(userId),
       ]
 
@@ -163,16 +158,9 @@ export function UserProfile() {
         logger.error('Failed to fetch taste compatibility:', results[2].reason)
       }
 
-      // 3: Rating bias
+      // 3: Jitter badge
       if (results[3].status === 'fulfilled') {
-        setRatingBias(results[3].value)
-      } else {
-        logger.error('Failed to fetch rating bias:', results[3].reason)
-      }
-
-      // 4: Jitter badge
-      if (results[4].status === 'fulfilled') {
-        const badges = results[4].value
+        const badges = results[3].value
         if (badges && badges.length > 0) {
           setJitterBadgeType(jitterApi.getTrustBadgeType(badges[0]))
         } else {
@@ -182,14 +170,14 @@ export function UserProfile() {
         // Clear on failure too, so a prior profile's badge never lingers
         // after client-side navigation to a profile whose fetch errored.
         setJitterBadgeType(null)
-        logger.error('Failed to fetch jitter badge:', results[4].reason)
+        logger.error('Failed to fetch jitter badge:', results[3].reason)
       }
 
-      // 5: Reviews
-      if (results[5].status === 'fulfilled') {
-        setUserReviews(results[5].value || [])
+      // 4: Reviews
+      if (results[4].status === 'fulfilled') {
+        setUserReviews(results[4].value || [])
       } else {
-        logger.error('Failed to fetch reviews:', results[5].reason)
+        logger.error('Failed to fetch reviews:', results[4].reason)
       }
 
       setLoading(false)
@@ -199,33 +187,6 @@ export function UserProfile() {
     fetchAll()
     return () => { cancelled = true }
   }, [userId, currentUser, isOwnProfile])
-
-  // Dependent fetch: my ratings for grid comparison (needs profile.recent_votes).
-  // Only fetched when logged in and viewing someone else's profile.
-  useEffect(() => {
-    if (!profile?.recent_votes?.length) return
-    if (!currentUser || isOwnProfile) return
-    let cancelled = false
-
-    async function fetchMyRatings() {
-      const dishIds = profile.recent_votes
-        .filter(v => v.rating != null)
-        .map(v => v.dish?.id)
-        .filter(Boolean)
-      if (dishIds.length === 0) return
-
-      try {
-        const ratings = await votesApi.getMyRatingsForDishes(dishIds)
-        if (cancelled) return
-        if (ratings) setMyRatings(ratings)
-      } catch (err) {
-        logger.error('Failed to fetch my ratings:', err)
-      }
-    }
-
-    fetchMyRatings()
-    return () => { cancelled = true }
-  }, [profile?.recent_votes, currentUser, isOwnProfile])
 
   // Handle follow/unfollow
   const handleFollowToggle = async () => {
