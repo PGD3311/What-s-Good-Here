@@ -23,7 +23,6 @@ import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
 import { CreatePlaylistModal } from '../components/playlists/CreatePlaylistModal'
 import {
   HeroIdentityCard,
-  RecentVisitsList,
   ProfileGrid,
 } from '../components/profile'
 import { useUserDishPhotos } from '../hooks/useUserDishPhotos'
@@ -68,7 +67,7 @@ export function Profile() {
   const [activeTab, setActiveTab] = useState('journal')
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false)
 
-  // People search state — always-on inline search bar above Your Food Story.
+  // People search state — always-on inline search bar above the tabs/grid.
   const [peopleQuery, setPeopleQuery] = useState('')
   const [peopleResults, setPeopleResults] = useState([])
   const [peopleLoading, setPeopleLoading] = useState(false)
@@ -229,11 +228,12 @@ export function Profile() {
             setNameStatus={setNameStatus}
             handleSaveName={handleSaveName}
             setFollowListModal={setFollowListModal}
-            jitterProfile={jitterProfile}
+            isCurator={profile?.is_local_curator}
+            trustBadgeType={jitterApi.getTrustBadgeType(jitterProfile)}
             onAvatarUpdated={refetchProfile}
           />
 
-          {/* Inline people search — always visible above Your Food Story */}
+          {/* Inline people search — always visible above the tabs/grid */}
           <div style={{ padding: '12px 16px 0' }}>
             <div className="relative">
               <svg
@@ -371,48 +371,7 @@ export function Profile() {
             </div>
           )}
 
-          {/* Local Curator entry — visible only when profile.is_local_curator
-              is true. Routes to /my-list, where the curator manages and
-              saves their Top 10 + bio. Prior to this entry point, curators
-              had no obvious path back from the Profile page — the only
-              way in was the post-invite redirect or the buried "Add to my
-              list" buttons on dish detail pages. */}
-          {profile?.is_local_curator && (
-            <div className="px-4 py-3" style={{ background: 'var(--color-surface)' }}>
-              <Link
-                to="/my-list"
-                className="w-full rounded-2xl p-4 flex items-center gap-4 transition-all hover:scale-[0.99] active:scale-[0.98]"
-                style={{
-                  background: 'var(--color-surface-elevated)',
-                  border: '1px solid var(--color-accent-gold)',
-                  textDecoration: 'none',
-                }}
-              >
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'var(--color-accent-gold)', color: 'var(--color-text-on-primary)' }}
-                  aria-hidden="true"
-                >
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897L16.862 4.487zM19.5 15.75v3.75a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V8.25A2.25 2.25 0 016.75 6H10.5" />
-                  </svg>
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-bold" style={{ fontSize: '17px', letterSpacing: '-0.01em', color: 'var(--color-text-primary)' }}>
-                    Edit my Top 10
-                  </h3>
-                  <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                    Update your list and bio
-                  </p>
-                </div>
-                <svg className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-text-tertiary)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-            </div>
-          )}
-
-          {/* Tabs: Journal / Playlists / Saved */}
+          {/* Tabs: Grid / Lists / Saved */}
           <div
             className="flex"
             style={{
@@ -423,73 +382,40 @@ export function Profile() {
               zIndex: 10,
             }}
           >
-            {['journal', 'visits', 'playlists', 'saved'].map((tab) => (
+            {[
+              { key: 'journal', label: 'Grid' },
+              { key: 'playlists', label: 'Lists' },
+              { key: 'saved', label: 'Saved' },
+            ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
                 className="flex-1 py-3 text-xs font-semibold text-center"
                 style={{
-                  color: activeTab === tab ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                  borderBottom: activeTab === tab ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  color: activeTab === tab.key ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                  borderBottom: activeTab === tab.key ? '2px solid var(--color-primary)' : '2px solid transparent',
                   background: 'transparent',
                   border: 'none',
                   borderBottomWidth: 2,
                   borderBottomStyle: 'solid',
-                  borderBottomColor: activeTab === tab ? 'var(--color-primary)' : 'transparent',
+                  borderBottomColor: activeTab === tab.key ? 'var(--color-primary)' : 'transparent',
                 }}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.label}
               </button>
             ))}
           </div>
 
           {/* --- Journal tab (food-story grid) --- */}
           {activeTab === 'journal' && (
-            <>
-              <div className="px-4 pt-5 pb-1">
-                <h2
-                  style={{
-                    fontFamily: "'Amatic SC', cursive",
-                    color: 'var(--color-text-primary)',
-                    fontSize: '32px',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Your Food Story
-                </h2>
-              </div>
-              <ProfileGrid
-                ratings={ratedDishes}
-                photoMap={ownPhotoMap}
-                loading={votesLoading}
-                resetKey={user?.id}
-                emptyTitle="Your food story starts here"
-                emptySubtitle="Rate your first dish to fill the grid"
-              />
-            </>
-          )}
-
-          {/* --- Visits tab --- (v1 retrieval surface for check-ins; v2+
-              brings in the "rate the burger from Atria yesterday" cold-open
-              banner that nudges from this same data) */}
-          {activeTab === 'visits' && (
-            <>
-              <div className="px-4 pt-5 pb-1">
-                <h2
-                  style={{
-                    fontFamily: "'Amatic SC', cursive",
-                    color: 'var(--color-text-primary)',
-                    fontSize: '32px',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Your Visits
-                </h2>
-              </div>
-              <RecentVisitsList userId={user?.id} />
-            </>
+            <ProfileGrid
+              ratings={ratedDishes}
+              photoMap={ownPhotoMap}
+              loading={votesLoading}
+              resetKey={user?.id}
+              emptyTitle="Your food story starts here"
+              emptySubtitle="Rate your first dish to fill the grid"
+            />
           )}
 
           {/* --- Playlists tab --- */}
