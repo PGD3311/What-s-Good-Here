@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -23,9 +23,10 @@ import { PlaylistGridCard } from '../components/playlists/PlaylistGridCard'
 import { CreatePlaylistModal } from '../components/playlists/CreatePlaylistModal'
 import {
   HeroIdentityCard,
-  JournalFeed,
   RecentVisitsList,
+  ProfileGrid,
 } from '../components/profile'
+import { useUserDishPhotos } from '../hooks/useUserDishPhotos'
 import { jitterApi } from '../api/jitterApi'
 
 // SECURITY: Email is NOT persisted to storage to prevent XSS exposure of PII
@@ -40,6 +41,11 @@ export function Profile() {
 
   const { profile, error: profileError, loading: profileLoading, refetch: refetchProfile, updateProfile } = useProfile(user?.id)
   const { ratedDishes, stats, loading: votesLoading, refetch: refetchVotes } = useUserVotes(user?.id)
+  const ratedDishIdsForGrid = useMemo(
+    () => (ratedDishes || []).filter(d => d.rating_10 != null).map(d => d.dish_id),
+    [ratedDishes]
+  )
+  const ownPhotoMap = useUserDishPhotos(user?.id, ratedDishIdsForGrid)
   const { dishes: unratedDishes, count: unratedCount, refetch: refetchUnrated } = useUnratedDishes(user?.id)
 
   const [jitterProfile, setJitterProfile] = useState(null)
@@ -524,10 +530,9 @@ export function Profile() {
             ))}
           </div>
 
-          {/* --- Journal tab --- */}
+          {/* --- Journal tab (food-story grid) --- */}
           {activeTab === 'journal' && (
             <>
-              {/* Your Journal title */}
               <div className="px-4 pt-5 pb-1">
                 <h2
                   style={{
@@ -538,14 +543,16 @@ export function Profile() {
                     letterSpacing: '0.02em',
                   }}
                 >
-                  Your Journal
+                  Your Food Story
                 </h2>
               </div>
-
-              {/* Journal Feed — single chronological shelf */}
-              <JournalFeed
+              <ProfileGrid
                 ratings={ratedDishes}
+                photoMap={ownPhotoMap}
                 loading={votesLoading}
+                resetKey={user?.id}
+                emptyTitle="Your food story starts here"
+                emptySubtitle="Rate your first dish to fill the grid"
               />
             </>
           )}
