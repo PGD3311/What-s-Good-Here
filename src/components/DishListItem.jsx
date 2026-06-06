@@ -508,6 +508,10 @@ export const DishListItem = memo(function DishListItem({
     var review = dish.review_text
     var ratingColor = getRatingColor(rating)
     var ratingLabel = rating == null ? '' : (rating % 1 === 0 ? rating : Number(rating).toFixed(1))
+    var votedAt = dish.voted_at
+    var dateLabel = votedAt
+      ? new Date(votedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : ''
     var ariaLabel = dishName +
       (restaurantName ? ', ' + restaurantName : '') +
       (rating == null ? '' : ', rated ' + ratingLabel) +
@@ -542,7 +546,7 @@ export const DishListItem = memo(function DishListItem({
               <span
                 data-testid="grid-rating-badge"
                 style={{
-                  position: 'absolute', top: '6px', right: '6px',
+                  position: 'absolute', top: '6px', left: '6px',
                   minWidth: '22px', height: '22px', padding: '0 5px',
                   borderRadius: '7px', background: 'rgba(255,255,255,0.92)',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
@@ -551,6 +555,17 @@ export const DishListItem = memo(function DishListItem({
                 }}
               >
                 {ratingLabel}
+              </span>
+            )}
+            {dateLabel && (
+              <span
+                style={{
+                  position: 'absolute', top: '7px', right: '8px',
+                  fontSize: '10px', fontWeight: 700, color: '#fff',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                }}
+              >
+                {dateLabel}
               </span>
             )}
             <div
@@ -567,6 +582,16 @@ export const DishListItem = memo(function DishListItem({
           </>
         ) : (
           <div className="w-full h-full flex flex-col" style={{ padding: '10px 9px' }}>
+            {dateLabel && (
+              <span
+                style={{
+                  position: 'absolute', top: '8px', right: '9px',
+                  fontSize: '10px', fontWeight: 600, color: 'var(--color-text-tertiary)',
+                }}
+              >
+                {dateLabel}
+              </span>
+            )}
             <span style={{ fontSize: '32px', fontWeight: 800, lineHeight: 0.9, color: ratingColor }}>{ratingLabel}</span>
             {review && (
               <p

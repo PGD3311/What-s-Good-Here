@@ -61,4 +61,9 @@ describe('DishListItem grid variant', () => {
     )
     expect(screen.queryByTestId('grid-rating-badge')).toBeNull()
   })
+
+  it('shows the rating date in the corner', () => {
+    renderTile({ dish_id: 'd7', dish_name: 'Dated', restaurant_name: 'R', rating_10: 8, photo_url: null, voted_at: '2026-06-01T12:00:00Z' })
+    expect(screen.getByText('Jun 1')).toBeInTheDocument()
+  })
 })
