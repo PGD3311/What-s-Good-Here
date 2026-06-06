@@ -54,11 +54,10 @@ export function HeroIdentityCard({
 
   // Only earned tiers surface a badge; 'building'/null/ai_estimated do not.
   const showTrust = trustBadgeType === 'human_verified' || trustBadgeType === 'trusted_reviewer'
-  const trustLabel = trustBadgeType === 'trusted_reviewer' ? 'Trusted Reviewer' : 'Verified Human'
 
   return (
     <div
-      className="relative px-4 pt-8 pb-5 overflow-hidden"
+      className="relative px-4 pt-8 pb-5"
       style={{ background: 'var(--color-bg)' }}
     >
       {/* Bottom divider */}
@@ -203,14 +202,9 @@ export function HeroIdentityCard({
                 </svg>
               </button>
               {showTrust && (
-                <div className="flex-shrink-0 inline-flex items-center gap-1.5">
-                  <span aria-hidden="true">
-                    <TrustBadge type={trustBadgeType} />
-                  </span>
-                  <span className="font-semibold whitespace-nowrap" style={{ color: 'var(--color-rating)', fontSize: '12px' }}>
-                    {trustLabel}
-                  </span>
-                </div>
+                <span className="flex-shrink-0">
+                  <TrustBadge type={trustBadgeType} size="md" />
+                </span>
               )}
             </div>
           )}

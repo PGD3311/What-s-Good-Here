@@ -42,21 +42,21 @@ describe('HeroIdentityCard (Part 2)', () => {
 
   it('shows the Verified Human trust badge when trustBadgeType is human_verified', () => {
     renderCard({ trustBadgeType: 'human_verified' })
-    expect(screen.getByText('Verified Human')).toBeInTheDocument()
+    expect(screen.getByTitle('Verified Human')).toBeInTheDocument()
   })
 
   it('shows the Trusted Reviewer badge when trustBadgeType is trusted_reviewer', () => {
     renderCard({ trustBadgeType: 'trusted_reviewer' })
-    expect(screen.getByText('Trusted Reviewer')).toBeInTheDocument()
+    expect(screen.getByTitle('Trusted Reviewer')).toBeInTheDocument()
   })
 
   it('shows NO trust badge for building or null', () => {
     const { rerender } = renderCard({ trustBadgeType: 'building' })
-    expect(screen.queryByText('Verified Human')).toBeNull()
-    expect(screen.queryByText('Trusted Reviewer')).toBeNull()
-    expect(screen.queryByText('Building trust')).toBeNull()
+    expect(screen.queryByTitle('Verified Human')).toBeNull()
+    expect(screen.queryByTitle('Trusted Reviewer')).toBeNull()
     rerender(<MemoryRouter><HeroIdentityCard {...BASE} trustBadgeType={null} /></MemoryRouter>)
-    expect(screen.queryByText(/Verified Human|Trusted Reviewer|Building/)).toBeNull()
+    expect(screen.queryByTitle('Verified Human')).toBeNull()
+    expect(screen.queryByTitle('Trusted Reviewer')).toBeNull()
   })
 
   it('does not render the old Jitter reviews/rhythm box', () => {
@@ -75,6 +75,6 @@ describe('HeroIdentityCard (Part 2)', () => {
 
   it('does not render the trust badge while editing the name', () => {
     renderCard({ trustBadgeType: 'trusted_reviewer', editingName: true })
-    expect(screen.queryByText('Trusted Reviewer')).toBeNull()
+    expect(screen.queryByTitle('Trusted Reviewer')).toBeNull()
   })
 })
