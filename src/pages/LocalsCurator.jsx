@@ -54,7 +54,7 @@ var AVATAR_WRAP = {
   border: '2px solid var(--color-paper-cream-light)',
 }
 
-var ITEM = { marginBottom: '11px', padding: '0 2px' }
+var ITEM = { marginBottom: '4px', padding: '7px 6px', borderRadius: '10px', cursor: 'pointer' }
 // minWidth:0 on ITEM_HEAD lets the name + dotted-leader flex children shrink
 // below their intrinsic width (default flex min-width is 'auto'); without it,
 // long dish names push past the right edge and the rating clips off-screen.
@@ -143,7 +143,7 @@ export function LocalsCurator() {
         </div>
 
         <div style={EYEBROW}>a local's picks</div>
-        <div style={AVATAR_WRAP} aria-hidden="true">
+        <div style={Object.assign({ cursor: 'pointer' }, AVATAR_WRAP)} aria-hidden="true" onClick={function () { navigate('/user/' + userId) }}>
           {first.avatar_url ? (
             <img
               src={first.avatar_url}
@@ -155,18 +155,27 @@ export function LocalsCurator() {
             (first.display_name || '?').charAt(0).toUpperCase()
           )}
         </div>
-        <h1 style={TITLE}>{first.display_name || 'Anonymous'}</h1>
+        <h1 style={TITLE}>
+          <button
+            type="button"
+            onClick={function () { navigate('/user/' + userId) }}
+            aria-label={'View ' + (first.display_name || 'this local') + "'s profile"}
+            style={{ background: 'none', border: 'none', padding: 0, margin: 0, font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+          >
+            {first.display_name || 'Anonymous'}
+          </button>
+        </h1>
         <div style={BYLINE}>{first.description || (first.title || '')}</div>
 
         {items.map(function (item, idx) {
           return (
-            <div key={item.dish_id} style={ITEM}>
+            <div key={item.dish_id} className="active:scale-[0.98] transition-transform" style={ITEM} onClick={function () { navigate('/dish/' + item.dish_id) }}>
               <div style={ITEM_HEAD}>
                 <span style={RANK}>{idx + 1}.</span>
                 <span style={ITEM_NAME}>
                   <button
                     type="button"
-                    onClick={function () { navigate('/dish/' + item.dish_id) }}
+                    onClick={function (e) { e.stopPropagation(); navigate('/dish/' + item.dish_id) }}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -195,7 +204,7 @@ export function LocalsCurator() {
               <div style={META}>
                 <button
                   type="button"
-                  onClick={function () { navigate('/restaurants/' + item.restaurant_id) }}
+                  onClick={function (e) { e.stopPropagation(); navigate('/restaurants/' + item.restaurant_id) }}
                   style={Object.assign({ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }, REST)}
                 >
                   {item.restaurant_name}
