@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
+import { discoverDrinkCandidates, discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
 
 describe('scoreCandidate', () => {
   it('positive: menu in URL', () => {
@@ -62,6 +62,29 @@ describe('scoreDrinkCandidate', () => {
   })
   it('negative: gift card rejected', () => {
     expect(scoreDrinkCandidate('https://x.com/gift-cards.pdf').score).toBeLessThan(0)
+  })
+})
+
+describe('discoverDrinkCandidates', () => {
+  const base = 'https://r.com/menu'
+  it('surfaces a cocktail PDF that the food scorer would reject', () => {
+    const html = `<a href="/files/Cocktail-Menu.pdf">Cocktails</a>`
+    const out = discoverDrinkCandidates(html, base)
+    expect(out.length).toBe(1)
+    expect(out[0].url).toContain('Cocktail-Menu.pdf')
+  })
+  it('does NOT surface a plain food dinner PDF', () => {
+    const html = `<a href="/files/Dinner-Menu.pdf">Dinner</a>`
+    expect(discoverDrinkCandidates(html, base).length).toBe(0)
+  })
+  it('rejects a neutral opaque PDF (positive gate, not >=0)', () => {
+    const html = `<a href="/files/upload-83fa.pdf">x</a>`
+    expect(discoverDrinkCandidates(html, base).length).toBe(0)
+  })
+  it('sorts by score descending', () => {
+    const html = `<a href="/wine.pdf">w</a><a href="/cocktail-drinks.pdf">c</a>`
+    const out = discoverDrinkCandidates(html, base)
+    expect(out[0].url).toContain('cocktail-drinks.pdf')
   })
 })
 

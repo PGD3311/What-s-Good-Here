@@ -385,6 +385,27 @@ export function findSubMenuPages(html: string, baseUrl: string, max = 4): string
 }
 
 /**
+ * Discover drinks-menu candidates (separate cocktail/coffee assets) on a page,
+ * scored with the inverted drink model and a SYMMETRIC positive gate
+ * (pdf > 0, image > 0). The food path passes PDFs at >= 0 because a restaurant
+ * PDF is usually a menu — that prior does NOT hold for drinks, so a neutral
+ * opaque PDF must not become the "best drinks asset" and burn the extra call.
+ * No neutral-image fallback. Sorted by score desc.
+ */
+export function discoverDrinkCandidates(html: string, baseUrl: string): MenuCandidate[] {
+  const raw = extractRawMatches(html, baseUrl)
+  const out: MenuCandidate[] = []
+  for (const r of raw) {
+    const type = classifyType(r.url)
+    if (!type) continue
+    const { score, evidence } = scoreDrinkCandidate(r.url, r.context)
+    if (score > 0) out.push({ url: r.url, type, score, source: r.source, evidence })
+  }
+  out.sort((a, b) => b.score - a.score)
+  return out
+}
+
+/**
  * Discover and score every menu candidate on the page, sorted by descending score.
  *
  * Threshold is asymmetric by type:
