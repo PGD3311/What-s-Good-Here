@@ -502,6 +502,14 @@ describe('findDrinkSubPages', () => {
     const html = `<a href="https://other.com/cocktails">Cocktails</a>`
     expect(findDrinkSubPages(html, base)).toEqual([])
   })
+  it('ignores a Raw Bar page (seafood, not drinks) even on a /raw-bar path', () => {
+    const html = `<a href="/raw-bar">Raw Bar</a>`
+    expect(findDrinkSubPages(html, base)).toEqual([])
+  })
+  it('ignores an Oyster Bar page', () => {
+    const html = `<a href="/oyster-bar">Oyster Bar</a>`
+    expect(findDrinkSubPages(html, base)).toEqual([])
+  })
   it('caps at max', () => {
     const html = `<a href="/cocktails">c</a><a href="/drinks">d</a><a href="/bar">b</a>`
     expect(findDrinkSubPages(html, base, 1).length).toBe(1)

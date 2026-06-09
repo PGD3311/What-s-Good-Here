@@ -338,6 +338,10 @@ const DRINK_SUB_PAGE_ANCHOR_PATTERNS = [
 const DRINK_SUB_PAGE_NEGATIVE_TEXT = [
   /\bfood\b/i, /\bdinner\b/i, /\blunch\b/i, /\bbrunch\b/i, /\bbreakfast\b/i,
   /\bgift[\s-]?cards?\b/i, /\bcatering\b/i, /\bprivate\b/i, /\bevents?\b/i,
+  // "Raw Bar" / "Oyster Bar" are seafood (food) pages, not drink menus — the
+  // bare `bar` path/anchor patterns above would otherwise surface them. Common
+  // on Martha's Vineyard. Must precede the bar match (negative check runs first).
+  /\braw[\s-]?bar\b/i, /\boyster[\s-]?bar\b/i,
 ]
 
 /**
