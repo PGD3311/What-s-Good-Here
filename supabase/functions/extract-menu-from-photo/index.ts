@@ -525,6 +525,14 @@ serve(async (req) => {
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
+  // Validate restaurant_id is a UUID (format: 8-4-4-4-12 hex digits)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(restaurantId)) {
+    return new Response(JSON.stringify({ error: 'invalid restaurant_id' }), {
+      status: 400,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   const restaurantName = typeof body.restaurant_name === 'string' ? body.restaurant_name.trim() : 'this restaurant'
 
   // Cap at 4 images (ignore beyond)
@@ -591,7 +599,7 @@ serve(async (req) => {
       })
     }
 
-    const [s0, s1, s2, s3, bucket, ownerSegment] = segments
+    const [s0, s1, s2, s3, bucket, ownerSegment, photoRestaurantIdSegment] = segments
     if (s0 !== 'storage' || s1 !== 'v1' || s2 !== 'object' || s3 !== 'public') {
       return new Response(JSON.stringify({ error: 'photo_url must point to a public storage object' }), {
         status: 400,
@@ -615,6 +623,16 @@ serve(async (req) => {
     // and trigger a Sonnet call (token spend) against someone else's upload.
     if (!ownerSegment || ownerSegment !== authUser.id) {
       return new Response(JSON.stringify({ error: 'Photo does not belong to caller' }), {
+        status: 403,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Restaurant ID binding check — ensure the photo's restaurant_id segment
+    // matches the input restaurant_id. This prevents attributing a photo
+    // uploaded for one restaurant to a different restaurant.
+    if (!photoRestaurantIdSegment || photoRestaurantIdSegment !== restaurantId) {
+      return new Response(JSON.stringify({ error: 'Photo was not uploaded for this restaurant' }), {
         status: 403,
         headers: { ...cors, 'Content-Type': 'application/json' },
       })
