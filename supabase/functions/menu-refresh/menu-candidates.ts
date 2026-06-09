@@ -320,6 +320,26 @@ const SUB_MENU_NEGATIVE_TEXT = [
   /\bprivate\b/i,
 ]
 
+const DRINK_SUB_PAGE_PATH_PATTERNS = [
+  /\/(?:[\w-]*-)?cocktails?(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?drinks?(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?bar(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?beverages?(?:-menu)?\/?$/i,
+]
+
+const DRINK_SUB_PAGE_ANCHOR_PATTERNS = [
+  /\bcocktails?\b/i,
+  /\bdrinks?\b/i,
+  /\bbar\b/i,
+  /\bbeverages?\b/i,
+  /\bhappy[\s-]?hour(?:[\s-]?menu)?\b/i,
+]
+
+const DRINK_SUB_PAGE_NEGATIVE_TEXT = [
+  /\bfood\b/i, /\bdinner\b/i, /\blunch\b/i, /\bbrunch\b/i, /\bbreakfast\b/i,
+  /\bgift[\s-]?cards?\b/i, /\bcatering\b/i, /\bprivate\b/i, /\bevents?\b/i,
+]
+
 /**
  * Find sub-menu page URLs on a parent menu page. Used as Pattern 1 fallback
  * when the menu page itself yielded no dishes — many restaurants split their
@@ -376,6 +396,38 @@ export function findSubMenuPages(html: string, baseUrl: string, max = 4): string
       target = absolute.origin + absolute.pathname + absolute.search
     }
 
+    if (found.has(target)) continue
+    found.add(target)
+    out.push(target)
+    if (out.length >= max) break
+  }
+  return out
+}
+
+/**
+ * Find drinks/cocktail/bar sub-pages on a parent menu page. Mirror of
+ * findSubMenuPages but inverted: food anchors are disqualified, drink anchors
+ * qualify. Same-origin only; assets skipped; capped at `max` (default 1 —
+ * the drinks-recovery pass tries at most one source).
+ */
+export function findDrinkSubPages(html: string, baseUrl: string, max = 1): string[] {
+  const base = new URL(baseUrl)
+  const baseKey = base.origin + base.pathname + base.search
+  const found = new Set<string>([baseKey])
+  const out: string[] = []
+  const anchorRegex = /<a\b[^>]*\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  let m
+  while ((m = anchorRegex.exec(html)) !== null) {
+    let absolute: URL
+    try { absolute = new URL(m[1], base) } catch { continue }
+    if (absolute.origin !== base.origin) continue
+    if (PDF_EXT.test(absolute.href) || IMAGE_EXT.test(absolute.href)) continue
+    const innerText = stripTags(m[2]).replace(/&amp;/gi, '&').replace(/&#38;/g, '&').slice(0, 100)
+    if (DRINK_SUB_PAGE_NEGATIVE_TEXT.some(p => p.test(innerText))) continue
+    const pathMatches = DRINK_SUB_PAGE_PATH_PATTERNS.some(p => p.test(absolute.pathname))
+    const textMatches = DRINK_SUB_PAGE_ANCHOR_PATTERNS.some(p => p.test(innerText))
+    if (!pathMatches && !textMatches) continue
+    const target = absolute.origin + absolute.pathname + absolute.search
     if (found.has(target)) continue
     found.add(target)
     out.push(target)

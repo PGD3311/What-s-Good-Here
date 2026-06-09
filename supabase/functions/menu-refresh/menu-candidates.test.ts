@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverDrinkCandidates, discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
+import { discoverDrinkCandidates, discoverMenuCandidates, findDrinkSubPages, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
 
 describe('scoreCandidate', () => {
   it('positive: menu in URL', () => {
@@ -481,6 +481,66 @@ describe('findSubMenuPages', () => {
     const html = '<a href="/our-menu/">Our Menu</a>'
     const out = findSubMenuPages(html, 'https://x.com/')
     expect(out).toEqual(['https://x.com/our-menu/'])
+  })
+})
+
+describe('findDrinkSubPages', () => {
+  const base = 'https://r.com/menu'
+  it('finds a /cocktails sub-page', () => {
+    const html = `<a href="/cocktails">Cocktails</a>`
+    expect(findDrinkSubPages(html, base)).toEqual(['https://r.com/cocktails'])
+  })
+  it('finds /bar-menu via anchor text', () => {
+    const html = `<a href="/bar-menu">Bar Menu</a>`
+    expect(findDrinkSubPages(html, base)).toEqual(['https://r.com/bar-menu'])
+  })
+  it('ignores food sub-pages', () => {
+    const html = `<a href="/dinner">Dinner</a>`
+    expect(findDrinkSubPages(html, base)).toEqual([])
+  })
+  it('ignores cross-origin links', () => {
+    const html = `<a href="https://other.com/cocktails">Cocktails</a>`
+    expect(findDrinkSubPages(html, base)).toEqual([])
+  })
+  it('caps at max', () => {
+    const html = `<a href="/cocktails">c</a><a href="/drinks">d</a><a href="/bar">b</a>`
+    expect(findDrinkSubPages(html, base, 1).length).toBe(1)
+  })
+  it('finds /drinks with various URL patterns', () => {
+    const html = `<a href="/drinks">Drinks</a><a href="/our-drinks">Our Drinks</a><a href="/drinks-menu">Drinks Menu</a>`
+    const out = findDrinkSubPages(html, base, 5)
+    expect(out.length).toBe(3)
+    expect(out).toContain('https://r.com/drinks')
+    expect(out).toContain('https://r.com/our-drinks')
+    expect(out).toContain('https://r.com/drinks-menu')
+  })
+  it('finds /bar via anchor text when path does not match', () => {
+    const html = `<a href="/Default.aspx?p=bar">Bar</a>`
+    expect(findDrinkSubPages(html, base)).toContain('https://r.com/Default.aspx?p=bar')
+  })
+  it('skips food negatives like "Lunch Menu" even on /bar paths', () => {
+    const html = `<a href="/bar">Lunch Menu</a>`
+    expect(findDrinkSubPages(html, base)).toEqual([])
+  })
+  it('dedupes URLs found by both path and text match', () => {
+    const html = `<a href="/cocktails">Cocktails</a><a href="/cocktails">Bar Cocktails</a>`
+    expect(findDrinkSubPages(html, base).length).toBe(1)
+  })
+  it('skips PDFs and images (asset links, not sub-pages)', () => {
+    const html = `<a href="/cocktails-menu.pdf">Cocktails</a><a href="/bar.png">Bar</a>`
+    expect(findDrinkSubPages(html, base)).toEqual([])
+  })
+  it('ignores self-links (already on a drinks page)', () => {
+    const html = `<a href="/cocktails">Cocktails</a><a href="/bar">Bar</a>`
+    expect(findDrinkSubPages(html, 'https://r.com/cocktails')).toEqual(['https://r.com/bar'])
+  })
+  it('finds /beverages sub-pages', () => {
+    const html = `<a href="/beverages">Beverages</a>`
+    expect(findDrinkSubPages(html, base)).toEqual(['https://r.com/beverages'])
+  })
+  it('matches anchor text "Happy Hour Menu"', () => {
+    const html = `<a href="/Default.aspx?type=happy">Happy Hour Menu</a>`
+    expect(findDrinkSubPages(html, base)).toEqual(['https://r.com/Default.aspx?type=happy'])
   })
 })
 
