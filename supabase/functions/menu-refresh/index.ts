@@ -1318,6 +1318,9 @@ async function runDrinkRecovery(
   extracted: MenuExtractionResult,
   opts: { html: string; menuUrl: string; restaurantName: string; triedUrls: Set<string> },
 ): Promise<{ dishes: ExtractedDish[]; sections: string[]; telemetry: Record<string, unknown> }> {
+  const keepDrinks = (r: MenuExtractionResult | null): ExtractedDish[] =>
+    (r?.dishes ?? []).filter(d => d.category === 'cocktails' || d.category === 'coffee')
+
   const drinkCountBefore = extracted.dishes.filter(
     d => d.category === 'cocktails' || d.category === 'coffee',
   ).length
@@ -1345,7 +1348,9 @@ async function runDrinkRecovery(
     }
   }
 
-  if (!result || result.dishes.length === 0) {
+  let kept = keepDrinks(result)
+
+  if (kept.length === 0) {
     const subPages = findDrinkSubPages(opts.html, opts.menuUrl, 1)
     if (subPages.length > 0) {
       const subUrl = subPages[0]
@@ -1361,23 +1366,22 @@ async function runDrinkRecovery(
             source = 'sub-page'; usedUrl = subUrl
           }
         }
+        kept = keepDrinks(result)
       } catch (err) {
         console.error(`${opts.restaurantName}: drink sub-page failed:`, err instanceof Error ? err.message : String(err))
       }
     }
   }
 
-  if (!result || result.dishes.length === 0) return { dishes: [], sections: [], telemetry }
+  if (kept.length === 0) return { dishes: [], sections: [], telemetry }
 
-  const drinkDishes = result.dishes
-    .filter(d => d.category === 'cocktails' || d.category === 'coffee')
-    .map(d => ({ ...d, menu_group: null as string | null }))
+  const drinkDishes = kept.map(d => ({ ...d, menu_group: null as string | null }))
 
   telemetry.triggered = true
   telemetry.source = source
   telemetry.url = usedUrl
   telemetry.dishes_found = drinkDishes.length
-  return { dishes: drinkDishes, sections: result.menu_section_order, telemetry }
+  return { dishes: drinkDishes, sections: result!.menu_section_order, telemetry }
 }
 
 serve(async (req) => {
@@ -1601,10 +1605,11 @@ serve(async (req) => {
 
             if (pdfExtracted.dishes.length > 0) {
               // Drinks recovery for direct-PDF menus: the food PDF won't carry the cocktail list.
+              let pdfDrinkPass: Record<string, unknown> = { triggered: false }
               {
                 let html = ''
                 try {
-                  const site = restaurant.website_url || restaurant.menu_url
+                  const site = websiteUrl || menuUrl
                   if (site) {
                     const f = await fetchRawHtml(site)
                     if (f.type === 'html') html = f.html
@@ -1612,13 +1617,17 @@ serve(async (req) => {
                 } catch { /* best effort */ }
                 if (html) {
                   const rec = await runDrinkRecovery(pdfExtracted, {
-                    html, menuUrl: restaurant.website_url || menuUrl, restaurantName: restaurant.name, triedUrls: new Set(),
+                    html, menuUrl: websiteUrl || menuUrl, restaurantName: restaurant.name, triedUrls: new Set(),
                   })
+                  pdfDrinkPass = rec.telemetry
                   if (rec.dishes.length > 0) {
                     const existingKeys = new Set(pdfExtracted.dishes.map(d => `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`))
                     for (const d of rec.dishes) {
                       const k = `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`
                       if (!existingKeys.has(k)) { pdfExtracted.dishes.push(d); existingKeys.add(k) }
+                    }
+                    for (const sec of rec.sections) {
+                      if (!pdfExtracted.menu_section_order.includes(sec)) pdfExtracted.menu_section_order.push(sec)
                     }
                   }
                 }
@@ -1649,6 +1658,7 @@ serve(async (req) => {
                   batch_dedup_skipped: stats.batchDedupSkipped,
                   cross_category_skipped: stats.crossCategorySkipped,
                   price_gate_rejected: stats.priceGateRejected,
+                  drink_pass: pdfDrinkPass,
                 },
                 lock_expires_at: null,
                 updated_at: new Date().toISOString(),
