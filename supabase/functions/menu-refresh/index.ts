@@ -3,7 +3,7 @@ import { encode as encodeBase64 } from 'https://deno.land/std@0.177.0/encoding/b
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
-import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, discoverDrinkCandidates, findMenuIframes, findSubMenuPages, findDrinkSubPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
 import { safeFetch } from '../_shared/ssrf.ts'
 import { detectBentoBox, buildBentoBoxMenuText, parseSchemaOrgMenuItems } from './bentobox.ts'
 
@@ -721,6 +721,15 @@ const SPARSE_TEXT_THRESHOLD = 2000
 // worst case of a false positive is "waits for a human" rather than "garbage".
 const PRICE_COVERAGE_FLOOR = 0.2
 
+// Drinks recovery (Gap 6): if a food extraction found FEWER than this many
+// cocktail/coffee dishes AND a dedicated drinks asset/sub-page exists, run one
+// extra LLM pass on the best drinks source. Low (not zero) because the food
+// prompt already extracts inline drinks — one brunch bloody mary must not
+// suppress recovery of a separate 20-item cocktail list.
+const DRINK_RECOVERY_THRESHOLD = 5
+
+const DRINK_RECOVERY_HINT = 'This is the restaurant\'s DRINKS menu. Extract ONLY alcoholic cocktails (category "cocktails") and coffee drinks (category "coffee"), following the cocktail and coffee rules in your instructions. Do not extract wine, beer, or non-alcoholic beverages.'
+
 // Merge two candidate lists by URL (last-write-wins on score), then re-sort.
 // Used when Browserless renders surface JS-injected assets that weren't in the raw HTML.
 function mergeCandidates(a: MenuCandidate[], b: MenuCandidate[]): MenuCandidate[] {
@@ -764,7 +773,7 @@ function toHttpsUrls(urls: string[]): string[] {
 /**
  * Extract dishes from menu text using Claude
  */
-async function extractMenuWithClaude(content: string, restaurantName: string): Promise<MenuExtractionResult> {
+async function extractMenuWithClaude(content: string, restaurantName: string, extractionHint?: string): Promise<MenuExtractionResult> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -782,7 +791,7 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
       messages: [
         {
           role: 'user',
-          content: `Extract the full menu from "${restaurantName}":\n\n${content}`,
+          content: `Extract the full menu from "${restaurantName}":\n\n${content}${extractionHint ? '\n\n' + extractionHint : ''}`,
         },
       ],
       system: MENU_EXTRACTION_PROMPT,
@@ -884,7 +893,8 @@ async function downloadImageAsBase64(
  */
 async function extractMenuFromImagesWithClaude(
   imageUrls: string[],
-  restaurantName: string
+  restaurantName: string,
+  extractionHint?: string
 ): Promise<MenuExtractionResult> {
   const httpsUrls = toHttpsUrls(imageUrls)
   if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
@@ -916,7 +926,7 @@ async function extractMenuFromImagesWithClaude(
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${successful.length === 1 ? 'attached image' : `${successful.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${successful.length === 1 ? 'attached image' : `${successful.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.${extractionHint ? '\n\n' + extractionHint : ''}`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -969,7 +979,8 @@ async function extractMenuFromImagesWithClaude(
  */
 async function extractMenuFromPdfsWithClaude(
   pdfUrls: string[],
-  restaurantName: string
+  restaurantName: string,
+  extractionHint?: string
 ): Promise<MenuExtractionResult> {
   const httpsUrls = toHttpsUrls(pdfUrls)
   if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
@@ -986,7 +997,7 @@ async function extractMenuFromPdfsWithClaude(
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached PDF' : `${httpsUrls.length} attached PDFs`}. Combine all dishes into a single output. If different PDFs represent different meal services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached PDF' : `${httpsUrls.length} attached PDFs`}. Combine all dishes into a single output. If different PDFs represent different meal services (breakfast, lunch, dinner), preserve those as menu sections.${extractionHint ? '\n\n' + extractionHint : ''}`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
