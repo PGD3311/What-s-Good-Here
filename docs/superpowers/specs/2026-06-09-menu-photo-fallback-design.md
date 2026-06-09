@@ -38,28 +38,30 @@ User taps "📷 Add the menu"  (RestaurantMenu / MenuImportStatus CTA)
 ## Components
 
 ### 1. Migration `2026-06-09-menu-photos.sql`
-- **Storage bucket `menu-photos`** — **PUBLIC** (matches `dish-photos`; photo-moderate's URL contract requires `/object/public/<bucket>/<owner>/` and `dishPhotosApi` uses `getPublicUrl()`). RLS on `storage.objects`: authenticated users may INSERT/UPDATE objects whose **first path segment == `auth.uid()`** (owner-first), mirroring the `dish-photos` insert policy verbatim. Public read.
+- **Storage bucket `menu-photos`** — **PUBLIC** (matches `dish-photos`; photo-moderate's URL contract requires `/object/public/<bucket>/<owner>/` and `dishPhotosApi` uses `getPublicUrl()`). RLS on `storage.objects`: authenticated users may INSERT/UPDATE/**DELETE** objects whose **first path segment == `auth.uid()`** (owner-first), mirroring the `dish-photos` policies verbatim (`20260414_dish_photos_bucket_rls.sql`). The DELETE policy matters — the client deletes a rejected upload after moderation fails (same as `dishPhotosApi`). Public read.
 - **Rate-limit actions**: reuse `check_and_record_rate_limit(action, limit)` (same RPC parse-menu/photo-moderate use) — `'extract_menu_from_photo'` (10/min) and `'commit_menu_dishes'` (a few/hour, e.g. 6 — bounds how many full menus one user can commit). No schema change for these.
 - **Dish provenance (additive, safe):** add `dishes.created_via TEXT` nullable, **no CHECK** (per `reference_check_constraint_blocks_updates` — a row-wide CHECK on mutable `dishes` would block vote-trigger updates; nullable passive column is confirmed safe). Value `'menu_photo'`. Analytics only.
 - Include a `-- ROLLBACK:` block (drop bucket + policies + column).
 
 ### 2. Edge function `extract-menu-from-photo`
 Mirror `photo-moderate`'s auth/rate-limit pattern (it's the closest precedent):
-- **Auth:** JWT required; verify the caller. **Ownership:** the submitted `photo_url`(s) must live under the caller's `{restaurant_id}/{uid}/` prefix in `menu-photos` (same ownership check shape as `photo-moderate`'s URL-vs-uid check). Reject otherwise.
+- **Auth:** JWT required; verify the caller. **Ownership:** the submitted `photo_url`(s) must be `menu-photos` public URLs whose **first path segment after the bucket == `auth.uid()`** (the owner-first path `{uid}/{restaurant_id}/…`), exactly mirroring `photo-moderate`'s URL-vs-uid check. Reject otherwise.
 - **Rate limit:** `check_and_record_rate_limit('extract_menu_from_photo', 10)` before the Sonnet call.
 - **Input:** `{ photo_urls: string[], restaurant_id: uuid, restaurant_name: string }` (cap at e.g. 4 images).
 - **Extraction:** download images server-side as base64 (reuse the menu-refresh image path's robots.txt-bypass rationale) and call Sonnet vision with the `MENU_EXTRACTION_PROMPT`. **Prompt sharing (Codex):** a `_shared/` module does NOT eliminate dashboard drift — Supabase deploys each function as its own bundle, so a shared prompt still requires co-deploying both functions. **Decision: duplicate the prompt** into this function with a loud provenance comment (`// MIRROR of menu-refresh MENU_EXTRACTION_PROMPT — keep in sync`), same pragmatic pattern as the inlined SSRF guard. Co-deploy note in the deploy section.
-- **Output:** `{ dishes: ExtractedDish[], menu_section_order: string[] }` — **NO DB writes.** Extraction is side-effect-free; the client reviews; the separate `commit-menu-dishes` function (§2b) writes.
+- **Output:** `{ dishes: ExtractedDish[], menu_section_order: string[], commit_token: string }` — **NO DB writes.** The `commit_token` is an **HMAC** (signed with a server secret, e.g. `MENU_COMMIT_SECRET`) over `{ restaurant_id, set-of-normalized-extracted-dish-names, exp: now+15min, uid }`. It binds a later commit to *this* moderated extraction for *this* restaurant by *this* user (Codex High). Extraction is side-effect-free; the client reviews; the separate `commit-menu-dishes` function (§2b) writes.
 - **Safety:** zero blast radius (no writes). Image safety via the `photo-moderate` step before extraction.
 - **CORS/secrets:** `ANTHROPIC_API_KEY`. verify_jwt at the gateway (like photo-moderate), NOT CRON_SECRET.
 
 ### 2b. Edge function `commit-menu-dishes` (the confirmed-add write path)
 The piece Codex flagged as essential — replaces a raw client insert.
 - **Auth:** JWT required; verify caller.
-- **Rate limit:** `check_and_record_rate_limit('commit_menu_dishes', 6)` (per hour) — bounds full-menu commits per user.
-- **Input:** `{ restaurant_id: uuid, dishes: ReviewedDish[] }` where each reviewed dish carries name/category/price/menu_section/description/dietary_tags (the fields the review UI exposes). Cap dish count (e.g. ≤120).
-- **Write (service role):** upsert with **name-dedupe against existing dishes** for that restaurant — reuse the exact-name + normalized-key matching from menu-refresh's `upsertDishes` (duplicate the `normalizeDishKey` + match logic; keep provenance comment). Insert new dishes (with `created_via='menu_photo'`, `created_by=<caller uid>`), update changed fields on existing matches, **preserve votes/photos** (never delete). Run each name through `validateUserContent` server-side; drop anything that fails.
-- **Why service role (not the 20/hr client RPC):** avoids the partial-fail on a 30-item menu and the open-INSERT-RLS spam path; abuse is bounded by the function's own per-hour limit + the requirement that the dishes came from a moderated extraction.
+- **Anti-abuse binding (Codex High):** require a valid `commit_token` from §2. Verify the HMAC, that it's unexpired, that `restaurant_id` and `uid` match the caller/target, and that **every committed dish's normalized name is in the token's signed name-set.** This means a user can only commit dish *names* that vision actually read from a moderated photo of *that* restaurant — no injecting arbitrary/junk dishes into a competitor's page. Price/category/section/description edits are allowed (low-abuse fields); names are the gated dimension.
+- **Rate limit:** `check_and_record_rate_limit('commit_menu_dishes', 6)` (per hour) — second layer on top of the token binding.
+- **Input:** `{ restaurant_id, commit_token, dishes: ReviewedDish[] }`. Cap dish count (≤120).
+- **Write (service role):** upsert with **name-dedupe against existing dishes** for that restaurant — duplicate menu-refresh's `normalizeDishKey` + exact/normalized match logic with a `// MIRROR of menu-refresh — keep in sync` provenance comment (same drift-tolerant pattern as the prompt). Insert new (`created_via='menu_photo'`, `created_by=<caller uid>`), update changed fields on matches, **preserve votes/photos** (never delete).
+- **Text safety:** `dishes.name` is already enforced server-side by the DB `is_offensive()` insert/update-of-name trigger (`schema.sql`), so name injection is covered at the DB layer — no need to import the frontend blocklist into Deno. `description` is **the vision-extracted value only** (the review UI does NOT let users free-type descriptions), so there's no user-injected free-text surface; the function passes through the extracted description unchanged and truncates to the 150-char cap.
+- **Why service role (not the 20/hr client RPC):** avoids the partial-fail on a 30-item menu and the open-INSERT-RLS spam path; abuse is bounded by the commit_token binding + per-hour limit + DB name trigger.
 - **Output:** `{ inserted, updated, skipped }`.
 
 ### 3. API client `src/api/menuPhotosApi.js`
@@ -99,7 +101,7 @@ The piece Codex flagged as essential — replaces a raw client insert.
 - Auth: JWT + photo-ownership prefix check; rate-limited; image safety via `photo-moderate` (fail-closed).
 - Additive upsert means "always available" can't wipe a good menu.
 - All user text (edited dish names) passes `validateUserContent`. No row-wide CHECK constraints on `dishes` (vote-blocking risk).
-- Storage: private bucket, per-user prefix RLS.
+- Storage: PUBLIC bucket (matches dish-photos + photo-moderate's public-URL contract), owner-first-prefix RLS (insert/update/delete gated on first segment == auth.uid()).
 
 ## Testing
 
