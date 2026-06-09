@@ -231,6 +231,7 @@ const DISH_NAME_ICON_RULES = [
   { keyword: 'frozen lemonade', icon: '/categories/icons/frozen_drinks.png' },
   { keyword: 'piña colada', icon: '/categories/icons/frozen_drinks.png' },
   { keyword: 'pina colada', icon: '/categories/icons/frozen_drinks.png' },
+  { keyword: 'dirty banana', icon: '/categories/icons/frozen_drinks.png' },
   { keyword: 'mai tai', icon: '/categories/icons/cocktails.png' },
   { keyword: 'moscow mule', icon: '/categories/icons/cocktails.png' },
   { keyword: 'bloody mary', icon: '/categories/icons/cocktails.png' },
