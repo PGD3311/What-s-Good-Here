@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
 
 describe('scoreCandidate', () => {
   it('positive: menu in URL', () => {
@@ -41,6 +41,27 @@ describe('scoreCandidate', () => {
 
   it('alt-text "drinks menu" stays negative', () => {
     expect(scoreCandidate('https://x.com/x.png', 'drinks menu').score).toBeLessThan(0)
+  })
+})
+
+describe('scoreDrinkCandidate', () => {
+  it('positive: cocktails in URL', () => {
+    expect(scoreDrinkCandidate('https://x.com/cocktails.pdf').score).toBeGreaterThan(0)
+  })
+  it('positive: drinks menu image', () => {
+    expect(scoreDrinkCandidate('https://x.com/Drinks-Menu.png').score).toBeGreaterThan(0)
+  })
+  it('positive: coffee menu', () => {
+    expect(scoreDrinkCandidate('https://x.com/coffee-menu.pdf').score).toBeGreaterThan(0)
+  })
+  it('negative: a FOOD menu scores negative under the drink model', () => {
+    expect(scoreDrinkCandidate('https://x.com/dinner-menu.pdf').score).toBeLessThan(0)
+  })
+  it('negative: logo rejected', () => {
+    expect(scoreDrinkCandidate('https://x.com/logo.png').score).toBeLessThan(0)
+  })
+  it('negative: gift card rejected', () => {
+    expect(scoreDrinkCandidate('https://x.com/gift-cards.pdf').score).toBeLessThan(0)
   })
 })
 

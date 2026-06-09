@@ -83,6 +83,60 @@ const NEGATIVE_KEYWORDS: KeywordWeight[] = [
   { pattern: /\bpress\b/i, weight: -4 },
 ]
 
+// Drinks scorer — inverted from the food model. Used by the drinks-recovery
+// pass to surface a SEPARATE cocktail/coffee menu (food assets score these
+// terms strongly negative, so they never reach the LLM otherwise). Food terms
+// are negative here so a food menu can't win the drink track. Noise negatives
+// are intentionally duplicated (not shared) so this never perturbs the food
+// scorer above.
+const DRINK_POSITIVE_KEYWORDS: KeywordWeight[] = [
+  { pattern: /\bcocktails?\b/i, weight: 5 },
+  { pattern: /\bdrinks?\b/i, weight: 5 },
+  { pattern: /\bbeverages?\b/i, weight: 4 },
+  { pattern: /\bcoffee\b/i, weight: 4 },
+  { pattern: /\bespresso\b/i, weight: 3 },
+  { pattern: /\bbar[\s-]?menu\b/i, weight: 4 },
+  { pattern: /\bbar\b/i, weight: 2 },
+  { pattern: /\bcaf[eé]\b/i, weight: 2 },
+  { pattern: /\bwines?\b/i, weight: 2 },
+  { pattern: /\bhappy[\s-]?hour\b/i, weight: 2 },
+]
+
+const DRINK_NEGATIVE_KEYWORDS: KeywordWeight[] = [
+  // Food suppressors — a food menu must not win the drink track.
+  { pattern: /\bfood\b/i, weight: -4 },
+  { pattern: /\bdinner\b/i, weight: -4 },
+  { pattern: /\blunch\b/i, weight: -4 },
+  { pattern: /\bbreakfast\b/i, weight: -4 },
+  { pattern: /\bbrunch\b/i, weight: -4 },
+  { pattern: /\bentrees?\b/i, weight: -2 },
+  // Noise (duplicated from the food NEGATIVE_KEYWORDS on purpose).
+  { pattern: /\ballergens?\b/i, weight: -8 },
+  { pattern: /\bnutrition(al)?\b/i, weight: -6 },
+  { pattern: /\bgift[\s-]?cards?\b/i, weight: -8 },
+  { pattern: /\bgiftcards?\b/i, weight: -8 },
+  { pattern: /\bcatering\b/i, weight: -4 },
+  { pattern: /\bprivate[\s-]?events?\b/i, weight: -6 },
+  { pattern: /\bterms\b/i, weight: -10 },
+  { pattern: /\bprivacy\b/i, weight: -10 },
+  { pattern: /\bpolicy\b/i, weight: -8 },
+  { pattern: /\bapplication\b/i, weight: -8 },
+  { pattern: /\bemployment\b/i, weight: -10 },
+  { pattern: /\bjob\b/i, weight: -8 },
+  { pattern: /\bcontract\b/i, weight: -8 },
+  { pattern: /\bwaiver\b/i, weight: -10 },
+  { pattern: /\brules\b/i, weight: -6 },
+  { pattern: /\blogo\b/i, weight: -10 },
+  { pattern: /\bfavicon\b/i, weight: -10 },
+  { pattern: /\bicon\b/i, weight: -8 },
+  { pattern: /\bheader\b/i, weight: -8 },
+  { pattern: /\bbanner\b/i, weight: -8 },
+  { pattern: /\bhero\b/i, weight: -8 },
+  { pattern: /\bavatar\b/i, weight: -8 },
+  { pattern: /\bthumbnail\b/i, weight: -6 },
+  { pattern: /\bgallery\b/i, weight: -6 },
+]
+
 const PDF_EXT = /\.pdf(\?|#|$)/i
 const IMAGE_EXT = /\.(png|jpe?g|webp)(\?|#|$)/i
 
@@ -107,18 +161,23 @@ function normalize(s: string): string {
   return safeDecode(s).replace(/_/g, ' ')
 }
 
-export function scoreCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
+function scoreWith(
+  positive: KeywordWeight[],
+  negative: KeywordWeight[],
+  url: string,
+  context: string,
+): { score: number; evidence: string; hasNegative: boolean } {
   const decoded = `${normalize(url)} ${normalize(context)}`
   let score = 0
   let hasNegative = false
   const hits: string[] = []
-  for (const { pattern, weight } of POSITIVE_KEYWORDS) {
+  for (const { pattern, weight } of positive) {
     if (pattern.test(decoded)) {
       score += weight
       hits.push(`+${weight}:${pattern.source}`)
     }
   }
-  for (const { pattern, weight } of NEGATIVE_KEYWORDS) {
+  for (const { pattern, weight } of negative) {
     if (pattern.test(decoded)) {
       score += weight
       hasNegative = true
@@ -126,6 +185,14 @@ export function scoreCandidate(url: string, context: string = ''): { score: numb
     }
   }
   return { score, evidence: hits.join(' '), hasNegative }
+}
+
+export function scoreCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
+  return scoreWith(POSITIVE_KEYWORDS, NEGATIVE_KEYWORDS, url, context)
+}
+
+export function scoreDrinkCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
+  return scoreWith(DRINK_POSITIVE_KEYWORDS, DRINK_NEGATIVE_KEYWORDS, url, context)
 }
 
 interface RawMatch {
