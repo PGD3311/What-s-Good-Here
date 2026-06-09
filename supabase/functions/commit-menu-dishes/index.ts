@@ -62,7 +62,7 @@ function normalizeDishKey(rawName: string, category: string | null | undefined):
   })
   const cleaned = protectedParens
     .replace(/[*]/g, ' ')
-    .replace(/[''`"]/g, '')
+    .replace(/['’`"]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -191,9 +191,12 @@ serve(async (req) => {
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  // Filter to valid integers only; silently drop non-integers.
-  const includes: number[] = (rawIncludes as unknown[])
-    .filter((v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0)
+  // Filter to valid integers only; silently drop non-integers. Dedupe so a
+  // repeated index can't double-write the same dish.
+  const includes: number[] = [...new Set(
+    (rawIncludes as unknown[])
+      .filter((v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0),
+  )]
 
   if (includes.length === 0) {
     return new Response(JSON.stringify({ error: 'includes must contain at least one valid non-negative integer index' }), {
@@ -219,14 +222,21 @@ serve(async (req) => {
   // Source: supabase/functions/extract-menu-from-photo/index.ts lines 647–657
   // Action 'commit_menu_dishes', limit 6/hour (spec §2b + §1 rate-limit table)
   // ---------------------------------------------------------------------------
-  const { data: rateCheck } = await authClient.rpc('check_and_record_rate_limit', {
+  const { data: rateCheck, error: rateErr } = await authClient.rpc('check_and_record_rate_limit', {
     p_action: 'commit_menu_dishes',
     p_max_attempts: 6,
     p_window_seconds: 3600,
   })
-  if (rateCheck && !rateCheck.allowed) {
+  // Fail CLOSED: if the RPC errored or returned no result, block the request.
+  // Only proceed when the RPC explicitly grants access (allowed === true).
+  if (rateErr || !rateCheck || rateCheck.allowed !== true) {
+    const isRateLimit = rateCheck && rateCheck.allowed === false
     return new Response(
-      JSON.stringify({ error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }),
+      JSON.stringify(
+        isRateLimit
+          ? { error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }
+          : { error: 'Rate limit unavailable' },
+      ),
       { status: 429, headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   }
@@ -247,20 +257,23 @@ serve(async (req) => {
   const serviceClient = createClient(supabaseUrl, supabaseServiceKey)
 
   // ---------------------------------------------------------------------------
-  // Load + verify the extraction row — ALL 4 GUARDS MUST PASS
+  // Load + verify the extraction row — GUARDS 1, 2, 4 via a preliminary SELECT
   //
   // (1) Row exists                      → 404 if not
   // (2) row.user_id === authUser.id     → 403 if mismatch
-  // (3) row.consumed_at IS NULL         → 409 if already consumed (replay guard)
   // (4) now - row.created_at <= 1 day   → 410 if expired
   //
-  // We read ALL fields in one query (service role bypasses RLS) and check them
-  // in application code so we emit a precise status per failure rather than
-  // collapsing them all to 403.
+  // Guard (3) — replay guard — is enforced ATOMICALLY below via a conditional
+  // UPDATE ... IS NULL instead of a JS check, which would be a TOCTOU race.
+  //
+  // We need the preliminary SELECT only for guards 1/2/4 because they require
+  // distinct status codes; without it, a missing/forbidden/expired row and an
+  // already-consumed row would all silently appear as "no row returned" from
+  // the atomic UPDATE.
   // ---------------------------------------------------------------------------
   const { data: extraction, error: fetchErr } = await serviceClient
     .from('menu_photo_extractions')
-    .select('id, user_id, restaurant_id, dishes, menu_section_order, consumed_at, created_at')
+    .select('id, user_id, created_at')
     .eq('id', extractionId)
     .maybeSingle()
 
@@ -288,14 +301,6 @@ serve(async (req) => {
     })
   }
 
-  // Guard (3): replay guard — extraction must not already be consumed
-  if (extraction.consumed_at !== null) {
-    return new Response(JSON.stringify({ error: 'Extraction already committed' }), {
-      status: 409,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
   // Guard (4): extraction must not be expired (> 1 day old)
   const createdAt = new Date(extraction.created_at).getTime()
   if (Date.now() - createdAt > EXTRACTION_TTL_MS) {
@@ -306,10 +311,44 @@ serve(async (req) => {
   }
 
   // ---------------------------------------------------------------------------
+  // Guard (3) — ATOMIC replay claim (replaces JS consumed_at check + late UPDATE)
+  //
+  // A single conditional UPDATE that sets consumed_at only when it IS NULL.
+  // Returns the full trusted dish data in the same round-trip. If another
+  // concurrent request claimed the row first, this UPDATE returns zero rows
+  // (claimed === null) → 409 without any TOCTOU window.
+  //
+  // This is the ONLY place consumed_at is set; the late UPDATE block is gone.
+  // ---------------------------------------------------------------------------
+  const { data: claimed, error: claimErr } = await serviceClient
+    .from('menu_photo_extractions')
+    .update({ consumed_at: new Date().toISOString() })
+    .eq('id', extractionId)
+    .is('consumed_at', null)
+    .select('dishes, menu_section_order, restaurant_id, user_id')
+    .maybeSingle()
+
+  if (claimErr) {
+    console.error('commit-menu-dishes: failed to claim extraction', claimErr.message)
+    return new Response(JSON.stringify({ error: 'Failed to claim extraction' }), {
+      status: 500,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (!claimed) {
+    // Race lost or already consumed
+    return new Response(JSON.stringify({ error: 'Extraction already committed' }), {
+      status: 409,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // ---------------------------------------------------------------------------
   // Build the dish set from the STORED extraction row (server-trusted fields)
   //
   // IMPORTANT: dish name, category, menu_section, menu_group, description, and
-  // dietary_tags come EXCLUSIVELY from extraction.dishes (the server-stored row).
+  // dietary_tags come EXCLUSIVELY from claimed.dishes (the server-stored row).
   // The client supplied only integer indices (includes) and optional numeric
   // price corrections (priceOverrides). No other client field is read here.
   //
@@ -322,7 +361,7 @@ serve(async (req) => {
   //   dietary_tags:  storedDish.dietary_tags
   //   price:         storedDish.price, overridden ONLY by a validated numeric in [0,1000]
   // ---------------------------------------------------------------------------
-  const storedDishes: StoredDish[] = Array.isArray(extraction.dishes) ? extraction.dishes : []
+  const storedDishes: StoredDish[] = Array.isArray(claimed.dishes) ? claimed.dishes : []
 
   const dishesToCommit: StoredDish[] = []
   for (const idx of includes) {
@@ -370,7 +409,7 @@ serve(async (req) => {
   const { data: existingRows, error: existingErr } = await serviceClient
     .from('dishes')
     .select('id, name, category, menu_group, menu_section, price, description, dietary_tags, created_at')
-    .eq('restaurant_id', extraction.restaurant_id)
+    .eq('restaurant_id', claimed.restaurant_id)
     .order('created_at', { ascending: true })
 
   if (existingErr) {
@@ -413,7 +452,19 @@ serve(async (req) => {
   //   - If found: UPDATE only changed fields (never delete, preserve votes/photos)
   //   - If not found: INSERT with created_via='menu_photo' + created_by=caller
   //   - Per-dish errors increment skipped and continue (don't abort the batch)
+  //
+  // FIX C: fuzzy (normalized-key) matches are gated by price agreement.
+  // If both prices are non-null and differ by > 0.01, treat as a new dish
+  // (INSERT) rather than an update to avoid merging differently-priced items.
+  // Exact-name matches bypass this gate (name identity is sufficient).
   // ---------------------------------------------------------------------------
+
+  /** Returns true when both prices agree or at least one is null. */
+  function pricesAgree(a: number | null | undefined, b: number | null | undefined): boolean {
+    if (a == null || b == null) return true
+    return Math.abs(a - b) <= 0.01
+  }
+
   let inserted = 0
   let updated = 0
   let skipped = 0
@@ -422,7 +473,12 @@ serve(async (req) => {
     const exactKey = dish.name.toLowerCase()
     const normKey = normalizeDishKey(dish.name, dish.category)
 
-    const existingDish = exactNameMap.get(exactKey) ?? (normKey ? normalizedKeyMap.get(normKey) : undefined)
+    const exactMatch = exactNameMap.get(exactKey)
+    const fuzzyMatch = normKey ? normalizedKeyMap.get(normKey) : undefined
+
+    // Apply price-agreement gate to fuzzy matches only.
+    const fuzzyAllowed = fuzzyMatch && pricesAgree(dish.price, fuzzyMatch.price)
+    const existingDish = exactMatch ?? (fuzzyAllowed ? fuzzyMatch : undefined)
 
     if (existingDish) {
       // UPDATE only the fields that changed — never delete, preserve votes/photos.
@@ -477,7 +533,7 @@ serve(async (req) => {
       const { data: insertedRow, error: insertErr } = await serviceClient
         .from('dishes')
         .insert({
-          restaurant_id: extraction.restaurant_id,
+          restaurant_id: claimed.restaurant_id,
           name: dish.name,
           category: dish.category,
           menu_section: dish.menu_section ?? null,
@@ -520,21 +576,20 @@ serve(async (req) => {
   }
 
   // ---------------------------------------------------------------------------
-  // Mark extraction consumed — replay guard.
-  // After this UPDATE, any subsequent commit attempt for the same extraction_id
-  // will hit guard (3) above and return 409.
+  // FIX B: Un-consume on TOTAL write failure so the user can retry.
+  // If every dish failed (0 inserted + 0 updated, only skipped), reset
+  // consumed_at to NULL so this extraction can be retried. Partial success
+  // (some inserted/updated) stays consumed and returns 200 normally.
   // ---------------------------------------------------------------------------
-  const { error: consumeErr } = await serviceClient
-    .from('menu_photo_extractions')
-    .update({ consumed_at: new Date().toISOString() })
-    .eq('id', extractionId)
-
-  if (consumeErr) {
-    // Non-fatal: the dishes were already written. Log and continue; the caller
-    // receives the success payload. The extraction row will expire in 1 day
-    // anyway, so the worst case is the user can retry the commit (idempotent
-    // via the name-dedupe — they won't get duplicate dishes).
-    console.error('commit-menu-dishes: failed to mark extraction consumed', consumeErr.message)
+  if (inserted === 0 && updated === 0 && skipped > 0) {
+    await serviceClient
+      .from('menu_photo_extractions')
+      .update({ consumed_at: null })
+      .eq('id', extractionId)
+    return new Response(
+      JSON.stringify({ error: 'commit failed' }),
+      { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } },
+    )
   }
 
   return new Response(

@@ -644,14 +644,21 @@ serve(async (req) => {
   // Source: supabase/functions/photo-moderate/index.ts lines 243–251
   // Action 'extract_menu_from_photo', limit 10/min (spec §2 + §1 rate-limit table)
   // ---------------------------------------------------------------------------
-  const { data: rateCheck } = await authClient.rpc('check_and_record_rate_limit', {
+  const { data: rateCheck, error: rateErr } = await authClient.rpc('check_and_record_rate_limit', {
     p_action: 'extract_menu_from_photo',
     p_max_attempts: 10,
     p_window_seconds: 60,
   })
-  if (rateCheck && !rateCheck.allowed) {
+  // Fail CLOSED: if the RPC errored or returned no result, block the request.
+  // Only proceed when the RPC explicitly grants access (allowed === true).
+  if (rateErr || !rateCheck || rateCheck.allowed !== true) {
+    const isRateLimit = rateCheck && rateCheck.allowed === false
     return new Response(
-      JSON.stringify({ error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }),
+      JSON.stringify(
+        isRateLimit
+          ? { error: 'Rate limit exceeded', retry_after: rateCheck.retry_after_seconds }
+          : { error: 'Rate limit unavailable' },
+      ),
       { status: 429, headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   }
