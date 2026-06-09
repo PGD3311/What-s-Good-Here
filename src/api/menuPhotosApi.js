@@ -2,19 +2,25 @@ import { supabase } from '../lib/supabase'
 import { checkPhotoUploadRateLimit } from '../lib/rateLimiter'
 import { logger } from '../utils/logger'
 import { createClassifiedError } from '../utils/errorHandler'
+import { stripExifAndReencode } from '../utils/imageAnalysis'
+
+// Upload constraints — mirrors dishPhotosApi exactly so both flows enforce
+// the same rules.  HEIC is accepted here because stripExifAndReencode
+// re-encodes to JPEG before upload, satisfying the edge function's
+// png/jpeg/webp/gif requirement downstream.
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
 /**
  * Menu Photos API — upload menu photos and trigger server-side extraction.
  *
- * Upload path: `{uid}/{restaurantId}/{timestamp}-{index}.{ext}`
+ * Upload path: `{uid}/{restaurantId}/{timestamp}-{index}.jpg`
  * Owner-first prefix matches the edge function's ownership check and the
  * owner-first RLS policy on the `menu-photos` bucket.
  *
- * NOTE: EXIF stripping / compression helpers in dishPhotosApi (stripExifAndReencode)
- * are not exported from that module, so this module does a plain
- * supabase.storage.from('menu-photos').upload() without pre-processing.
- * The tradeoff is noted here; a future pass can extract the helper to
- * src/utils/imageAnalysis.js and import it from both modules.
+ * Every file is validated (MIME type + size) then re-encoded via
+ * stripExifAndReencode to strip GPS/EXIF metadata before reaching public
+ * storage.  All uploads are stored as JPEG regardless of input format.
  */
 
 export const menuPhotosApi = {
@@ -37,17 +43,43 @@ export const menuPhotosApi = {
         throw new Error(rateLimit.message)
       }
 
+      // Validate every file before uploading any — mirrors dishPhotosApi.
+      // Validate first so no files are uploaded if one is invalid.
+      for (const file of files) {
+        if (!file || !(file instanceof File)) {
+          throw new Error('Invalid file provided')
+        }
+        if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+          throw new Error('Invalid file type. Please upload a JPEG, PNG, WebP, or HEIC image.')
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          throw new Error('File too large. Maximum size is 10MB.')
+        }
+      }
+
       const timestamp = Date.now()
       const publicUrls = []
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const ext = file.name.split('.').pop() || 'jpg'
-        const path = `${user.id}/${restaurantId}/${timestamp}-${i}.${ext}`
+
+        // Re-encode to JPEG to strip EXIF metadata (GPS, timestamps, device
+        // info) before storing in the public menu-photos bucket.
+        let uploadFile
+        try {
+          uploadFile = await stripExifAndReencode(file)
+        } catch (err) {
+          logger.warn('EXIF strip / re-encode failed', { type: file.type, err })
+          throw new Error("Couldn't process this image. Please try a different photo.")
+        }
+
+        // stripExifAndReencode always outputs JPEG, so the stored path always
+        // uses .jpg regardless of the original file extension.
+        const path = `${user.id}/${restaurantId}/${timestamp}-${i}.jpg`
 
         const { error: uploadError } = await supabase.storage
           .from('menu-photos')
-          .upload(path, file, { upsert: false })
+          .upload(path, uploadFile, { upsert: false, contentType: 'image/jpeg' })
 
         if (uploadError) {
           throw createClassifiedError(uploadError)

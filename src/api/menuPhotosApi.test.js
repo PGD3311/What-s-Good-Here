@@ -27,10 +27,18 @@ vi.mock('../utils/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 
+vi.mock('../utils/imageAnalysis', () => ({
+  // By default returns a JPEG File — same contract as the real implementation.
+  stripExifAndReencode: vi.fn(async (file) =>
+    new File([file], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })
+  ),
+}))
+
 // --- Imports (after mocks) ---
 
 import { supabase } from '../lib/supabase'
 import { checkPhotoUploadRateLimit } from '../lib/rateLimiter'
+import { stripExifAndReencode } from '../utils/imageAnalysis'
 import { menuPhotosApi } from './menuPhotosApi'
 
 // ---------------------------------------------------------------------------
@@ -81,17 +89,17 @@ describe('menuPhotosApi', () => {
       expect(getPublicUrl).toHaveBeenCalledTimes(2)
     })
 
-    it('builds owner-first path: uid / restaurantId / timestamp-index.ext', async () => {
+    it('builds owner-first path: uid / restaurantId / timestamp-index.jpg', async () => {
       supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-owner' } } })
       checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
       const { upload } = mockStorageBucket()
 
-      await menuPhotosApi.uploadMenuPhotos('rest-xyz', [makeFile('photo.png')])
+      await menuPhotosApi.uploadMenuPhotos('rest-xyz', [makeFile('photo.jpg')])
 
       // First argument to upload() is the storage path.
       const [[path]] = upload.mock.calls
-      // Must start with uid / restaurantId /
-      expect(path).toMatch(/^uid-owner\/rest-xyz\/\d+-0\.png$/)
+      // Must start with uid / restaurantId / and always use .jpg (re-encoded JPEG)
+      expect(path).toMatch(/^uid-owner\/rest-xyz\/\d+-0\.jpg$/)
     })
 
     it('uses upsert: false', async () => {
@@ -134,6 +142,103 @@ describe('menuPhotosApi', () => {
       await expect(
         menuPhotosApi.uploadMenuPhotos('rest-1', [makeFile()])
       ).rejects.toBeDefined()
+    })
+
+    // ---- FIX 1: EXIF stripping ----
+
+    it('calls stripExifAndReencode once per file', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-exif' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      mockStorageBucket()
+
+      const files = [makeFile('a.jpg'), makeFile('b.png')]
+      await menuPhotosApi.uploadMenuPhotos('rest-exif', files)
+
+      expect(stripExifAndReencode).toHaveBeenCalledTimes(2)
+      expect(stripExifAndReencode).toHaveBeenNthCalledWith(1, files[0])
+      expect(stripExifAndReencode).toHaveBeenNthCalledWith(2, files[1])
+    })
+
+    it('uploads the re-encoded JPEG (not the original file) to storage', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-reencode' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      const { upload } = mockStorageBucket()
+
+      // The default mock returns a File with type image/jpeg — verify
+      // what is actually passed to upload() has that type.
+      await menuPhotosApi.uploadMenuPhotos('rest-reencode', [makeFile('orig.png')])
+
+      const [, uploadedFile] = upload.mock.calls[0]
+      expect(uploadedFile.type).toBe('image/jpeg')
+    })
+
+    it('stores files in the menu-photos bucket', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-bucket' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      mockStorageBucket()
+
+      await menuPhotosApi.uploadMenuPhotos('rest-bucket', [makeFile()])
+
+      expect(supabase.storage.from).toHaveBeenCalledWith('menu-photos')
+    })
+
+    it('always uses .jpg extension in the storage path after re-encode', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-ext' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      const { upload } = mockStorageBucket()
+
+      // Original file has a .png extension — path must still use .jpg
+      await menuPhotosApi.uploadMenuPhotos('rest-ext', [makeFile('photo.png')])
+
+      const [[path]] = upload.mock.calls
+      expect(path).toMatch(/\.jpg$/)
+    })
+
+    // ---- FIX 2: MIME + size validation ----
+
+    it('rejects a disallowed MIME type before any upload', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-mime' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      const { upload } = mockStorageBucket()
+
+      const pdf = new File(['%PDF'], 'menu.pdf', { type: 'application/pdf' })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-mime', [pdf])
+      ).rejects.toThrow(/invalid file type/i)
+
+      expect(upload).not.toHaveBeenCalled()
+    })
+
+    it('rejects an oversized file before any upload', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-size' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      const { upload } = mockStorageBucket()
+
+      // Construct a File that reports > 10 MB without allocating that memory
+      const bigFile = new File(['x'], 'big.jpg', { type: 'image/jpeg' })
+      Object.defineProperty(bigFile, 'size', { value: 11 * 1024 * 1024 })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-size', [bigFile])
+      ).rejects.toThrow(/too large/i)
+
+      expect(upload).not.toHaveBeenCalled()
+    })
+
+    it('rejects all files if any one is invalid — no partial uploads', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-partial' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      const { upload } = mockStorageBucket()
+
+      const good = makeFile('good.jpg')
+      const bad = new File(['%PDF'], 'bad.pdf', { type: 'application/pdf' })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-partial', [good, bad])
+      ).rejects.toThrow(/invalid file type/i)
+
+      expect(upload).not.toHaveBeenCalled()
     })
   })
 
