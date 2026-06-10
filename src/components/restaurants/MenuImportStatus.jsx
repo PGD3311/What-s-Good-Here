@@ -8,7 +8,30 @@ const headingStyle = {
   marginBottom: '8px',
 }
 
-export function MenuImportStatus({ restaurantId, dishCount }) {
+const snapBtnStyle = {
+  marginTop: '16px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '7px',
+  padding: '12px 22px',
+  borderRadius: '12px',
+  border: 'none',
+  background: 'var(--color-primary)',
+  color: 'white',
+  fontFamily: 'Outfit, sans-serif',
+  fontWeight: 700,
+  fontSize: '15px',
+  cursor: 'pointer',
+}
+
+/**
+ * MenuImportStatus — shown in the empty/failed menu state.
+ * Props:
+ *   restaurantId    {string}
+ *   dishCount       {number}
+ *   onAddByPhoto    {() => void}  Opens the MenuPhotoUploadModal
+ */
+export function MenuImportStatus({ restaurantId, dishCount, onAddByPhoto }) {
   const { status, isImporting, hasFailed, loading } = useMenuImportStatus(restaurantId)
 
   if (loading || dishCount > 0) return null
@@ -46,6 +69,17 @@ export function MenuImportStatus({ restaurantId, dishCount }) {
             We're working on getting this menu — check back soon.
           </p>
         </>
+      )}
+      {!isImporting && onAddByPhoto && (
+        <button
+          type="button"
+          style={snapBtnStyle}
+          onClick={onAddByPhoto}
+          aria-label="Add menu by photo"
+        >
+          <span aria-hidden="true">📷</span>
+          Add the menu
+        </button>
       )}
     </div>
   )
