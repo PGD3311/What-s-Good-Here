@@ -219,8 +219,8 @@ serve(async (req) => {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  if (bucket !== 'dish-photos' && bucket !== 'avatars') {
-    return new Response(JSON.stringify({ error: 'photo_url must point to the dish-photos or avatars bucket' }), {
+  if (bucket !== 'dish-photos' && bucket !== 'avatars' && bucket !== 'menu-photos') {
+    return new Response(JSON.stringify({ error: 'photo_url must point to the dish-photos, avatars, or menu-photos bucket' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
