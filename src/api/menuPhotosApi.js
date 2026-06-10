@@ -99,8 +99,10 @@ export const menuPhotosApi = {
           )
           const isUnsafe = modError || !modResult || modResult.is_unsafe === true
           if (isUnsafe) {
-            // Best-effort cleanup — ignore removal errors
-            await supabase.storage.from('menu-photos').remove([path])
+            const { error: removeErr } = await supabase.storage.from('menu-photos').remove([path])
+            if (removeErr) {
+              logger.error('menu-photos: failed to delete rejected upload', { path, error: removeErr.message })
+            }
             throw new Error("That image couldn't be used — please try a clearer photo of the menu.")
           }
         } catch (modErr) {
@@ -109,7 +111,10 @@ export const menuPhotosApi = {
             throw modErr
           }
           // Moderation call itself failed — also fail closed, remove the upload
-          await supabase.storage.from('menu-photos').remove([path])
+          const { error: removeErr } = await supabase.storage.from('menu-photos').remove([path])
+          if (removeErr) {
+            logger.error('menu-photos: failed to delete rejected upload', { path, error: removeErr.message })
+          }
           throw new Error("That image couldn't be used — please try a clearer photo of the menu.")
         }
 
