@@ -89,6 +89,30 @@ export const menuPhotosApi = {
           .from('menu-photos')
           .getPublicUrl(path)
 
+        // Moderate the uploaded image before accepting it.
+        // Fail-closed: if moderation errors or flags it as unsafe,
+        // delete the object and throw a readable error.
+        try {
+          const { data: modResult, error: modError } = await supabase.functions.invoke(
+            'photo-moderate',
+            { body: { photo_url: publicUrl } }
+          )
+          const isUnsafe = modError || !modResult || modResult.is_unsafe === true
+          if (isUnsafe) {
+            // Best-effort cleanup — ignore removal errors
+            await supabase.storage.from('menu-photos').remove([path])
+            throw new Error("That image couldn't be used — please try a clearer photo of the menu.")
+          }
+        } catch (modErr) {
+          // Re-throw our own safety error; classify any unexpected error
+          if (modErr.message && modErr.message.includes("That image couldn't be used")) {
+            throw modErr
+          }
+          // Moderation call itself failed — also fail closed, remove the upload
+          await supabase.storage.from('menu-photos').remove([path])
+          throw new Error("That image couldn't be used — please try a clearer photo of the menu.")
+        }
+
         publicUrls.push(publicUrl)
       }
 

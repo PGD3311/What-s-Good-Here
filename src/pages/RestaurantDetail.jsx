@@ -19,6 +19,7 @@ import { useLocationContext } from '../context/LocationContext'
 import { useDishes } from '../hooks/useDishes'
 import { LoginModal } from '../components/Auth/LoginModal'
 import { RestaurantDishes, RestaurantMenu, MenuImportStatus, CheckInButton } from '../components/restaurants'
+import { MenuPhotoUploadModal } from '../components/menu'
 import { useUserCheckIns } from '../hooks/useUserCheckIns'
 import { useMenuImportStatus } from '../hooks/useMenuImportStatus'
 import { useNearbyRestaurant } from '../hooks/useNearbyRestaurant'
@@ -46,6 +47,7 @@ export function RestaurantDetail() {
   const [activeTab, setActiveTab] = useState(null) // null = auto-detect
   const [dishSearchQuery, setDishSearchQuery] = useState('')
   const [loginModalOpen, setLoginModalOpen] = useState(false)
+  const [menuPhotoModalOpen, setMenuPhotoModalOpen] = useState(false)
   const [friendsVotesByDish, setFriendsVotesByDish] = useState({})
   const [tasteCompatByFriend, setTasteCompatByFriend] = useState({})
   const [expandedReview, setExpandedReview] = useState(null)
@@ -708,7 +710,11 @@ export function RestaurantDetail() {
 
       {/* Menu import status — shown only when no dishes yet */}
       {!dishesLoading && (
-        <MenuImportStatus restaurantId={restaurantId} dishCount={dishes?.length ?? 0} />
+        <MenuImportStatus
+          restaurantId={restaurantId}
+          dishCount={dishes?.length ?? 0}
+          onAddByPhoto={() => setMenuPhotoModalOpen(true)}
+        />
       )}
 
       {/* Dish Content */}
@@ -743,6 +749,7 @@ export function RestaurantDetail() {
           error={dishesError}
           searchQuery={dishSearchQuery}
           menuSectionOrder={restaurant?.menu_section_order || []}
+          onAddByPhoto={() => setMenuPhotoModalOpen(true)}
         />
       )}
       </div>
@@ -778,6 +785,20 @@ export function RestaurantDetail() {
           </div>
         </div>
       )}
+
+      <MenuPhotoUploadModal
+        restaurantId={restaurantId}
+        restaurantName={restaurant?.name || ''}
+        isOpen={menuPhotoModalOpen}
+        onClose={() => setMenuPhotoModalOpen(false)}
+        onCommitted={() => {
+          // Refetch dishes — same mechanism as the post-vote refetch above.
+          // useDishes returns refetch from React Query; calling it directly
+          // invalidates the ['dishes', 'restaurant', restaurantId, null] cache
+          // and re-runs getDishesForRestaurant.
+          refetch()
+        }}
+      />
 
       <LoginModal
         isOpen={loginModalOpen}

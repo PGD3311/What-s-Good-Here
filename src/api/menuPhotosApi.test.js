@@ -19,6 +19,7 @@ vi.mock('../lib/supabase', () => {
   }
 })
 
+
 vi.mock('../lib/rateLimiter', () => ({
   checkPhotoUploadRateLimit: vi.fn(),
 }))
@@ -72,6 +73,16 @@ describe('menuPhotosApi', () => {
   // -------------------------------------------------------------------------
 
   describe('uploadMenuPhotos', () => {
+    // Default: moderation returns safe for all tests unless overridden
+    beforeEach(() => {
+      supabase.functions.invoke.mockImplementation((fnName) => {
+        if (fnName === 'photo-moderate') {
+          return Promise.resolve({ data: { is_unsafe: false, is_food_photo: true }, error: null })
+        }
+        return Promise.resolve({ data: null, error: null })
+      })
+    })
+
     it('returns public URLs for each uploaded file', async () => {
       supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-123' } } })
       checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
@@ -239,6 +250,89 @@ describe('menuPhotosApi', () => {
       ).rejects.toThrow(/invalid file type/i)
 
       expect(upload).not.toHaveBeenCalled()
+    })
+
+    // ---- Moderation tests ----
+
+    it('calls photo-moderate edge function after each upload', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-mod' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      mockStorageBucket({ publicUrl: 'https://cdn.example.com/photo.jpg' })
+
+      const invokeTracker = []
+      supabase.functions.invoke.mockImplementation((fnName, opts) => {
+        invokeTracker.push({ fnName, opts })
+        return Promise.resolve({ data: { is_unsafe: false }, error: null })
+      })
+
+      await menuPhotosApi.uploadMenuPhotos('rest-mod', [makeFile()])
+
+      const modCalls = invokeTracker.filter(c => c.fnName === 'photo-moderate')
+      expect(modCalls).toHaveLength(1)
+      expect(modCalls[0].opts.body.photo_url).toBe('https://cdn.example.com/photo.jpg')
+    })
+
+    it('throws a readable error and deletes the upload when photo-moderate returns is_unsafe=true', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-unsafe' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+
+      const remove = vi.fn().mockResolvedValue({ error: null })
+      const upload = vi.fn().mockResolvedValue({ data: {}, error: null })
+      const getPublicUrl = vi.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/bad.jpg' } })
+      supabase.storage.from.mockImplementation(() => ({ upload, getPublicUrl, remove }))
+
+      supabase.functions.invoke.mockImplementation((fnName) => {
+        if (fnName === 'photo-moderate') {
+          return Promise.resolve({ data: { is_unsafe: true }, error: null })
+        }
+        return Promise.resolve({ data: null, error: null })
+      })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-unsafe', [makeFile()])
+      ).rejects.toThrow(/That image couldn't be used/)
+
+      // Should have attempted to delete the unsafe upload
+      expect(remove).toHaveBeenCalled()
+    })
+
+    it('fails closed and deletes the upload when photo-moderate returns an error', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-moderr' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+
+      const remove = vi.fn().mockResolvedValue({ error: null })
+      const upload = vi.fn().mockResolvedValue({ data: {}, error: null })
+      const getPublicUrl = vi.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/err.jpg' } })
+      supabase.storage.from.mockImplementation(() => ({ upload, getPublicUrl, remove }))
+
+      supabase.functions.invoke.mockImplementation((fnName) => {
+        if (fnName === 'photo-moderate') {
+          return Promise.resolve({ data: null, error: { message: 'internal error' } })
+        }
+        return Promise.resolve({ data: null, error: null })
+      })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-moderr', [makeFile()])
+      ).rejects.toThrow(/That image couldn't be used/)
+
+      expect(remove).toHaveBeenCalled()
+    })
+
+    it('returns only safe public URLs when moderation passes', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-safe' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+      mockStorageBucket({ publicUrl: 'https://cdn.example.com/safe.jpg' })
+
+      supabase.functions.invoke.mockImplementation((fnName) => {
+        if (fnName === 'photo-moderate') {
+          return Promise.resolve({ data: { is_unsafe: false, is_food_photo: true }, error: null })
+        }
+        return Promise.resolve({ data: null, error: null })
+      })
+
+      const result = await menuPhotosApi.uploadMenuPhotos('rest-safe', [makeFile()])
+      expect(result).toEqual(['https://cdn.example.com/safe.jpg'])
     })
   })
 
