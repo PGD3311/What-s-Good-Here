@@ -414,8 +414,19 @@ function acceptProbe(res: Response, probedUrl: string): boolean {
     return false
   }
 
-  // Off-origin bounce
-  if (finalUrl.hostname.toLowerCase() !== probedParsed.hostname.toLowerCase()) return false
+  // Off-origin bounce — allow www↔bare and proper-subdomain redirects (canonical
+  // TLS redirects, e.g. foo.com/menu → www.foo.com/menu) but reject genuinely
+  // off-site finals (foo.com → evil.com).
+  const probedHost = probedParsed.hostname.toLowerCase()
+  const finalHost = finalUrl.hostname.toLowerCase()
+  const stripWww = (h: string) => h.replace(/^www\./, '')
+  const probedStripped = stripWww(probedHost)
+  const finalStripped = stripWww(finalHost)
+  const sameSite =
+    probedStripped === finalStripped ||
+    finalStripped.endsWith('.' + probedStripped) ||
+    probedStripped.endsWith('.' + finalStripped)
+  if (!sameSite) return false
 
   // Normalize pathnames: lowercase, strip trailing slash
   const finalPath = finalUrl.pathname.toLowerCase().replace(/\/+$/, '') || '/'
@@ -1524,14 +1535,23 @@ serve(async (req) => {
 
           // Re-discover the menu URL when:
           //  (a) we have no menu_url at all, OR
-          //  (b) the stored menu_url is the website root (a past homepage-
-          //      fallback victim whose real /menu page was never found).
-          // Condition (b) ensures this fix reaches exactly the restaurants
-          // it's meant to correct — without it, a row already pointing at
-          // the homepage root would never get re-discovered.
-          const storedIsHomepageRoot = menuUrl && (() => {
-            try { return new URL(menuUrl).pathname.replace(/\/+$/, '') === '' } catch { return false }
-          })()
+          //  (b) the stored menu_url is the website root AND shares the same
+          //      host as the restaurant's website (a past homepage-fallback
+          //      victim whose real /menu page was never found).
+          //
+          // Condition (b) is intentionally narrow: a legit menu at a different
+          // host with a root path (e.g. https://menu.example.com/) must NOT
+          // be treated as "stuck on homepage" — that would cause churn by
+          // re-running discovery every refresh for a perfectly valid URL.
+          const sameHostRoot = (mu: string, wu: string): boolean => {
+            try {
+              const m = new URL(mu)
+              const w = new URL(wu)
+              const strip = (h: string) => h.replace(/^www\./, '')
+              return strip(m.hostname) === strip(w.hostname) && m.pathname.replace(/\/+$/, '') === ''
+            } catch { return false }
+          }
+          const storedIsHomepageRoot = !!(menuUrl && websiteUrl && sameHostRoot(menuUrl, websiteUrl))
           if ((!menuUrl || storedIsHomepageRoot) && (websiteUrl || menuUrl)) {
             const found = await findMenuUrl(websiteUrl || menuUrl!)
             if (found && found !== menuUrl) {
@@ -1540,7 +1560,12 @@ serve(async (req) => {
               // Force re-extraction of the corrected URL by clearing the
               // content hash — defeats the hash short-circuit so the real
               // menu page is extracted on this run, not skipped as "unchanged".
+              // Must also null the IN-MEMORY field: the hash short-circuit
+              // reads restaurant.menu_content_hash directly; staging the null
+              // only in dbUpdates leaves the in-memory value intact and the
+              // short-circuit still exits early as 'hash_unchanged'.
               dbUpdates.menu_content_hash = null
+              restaurant.menu_content_hash = null
             } else if (!found) {
               // Ephemeral fallback for THIS run only. Many restaurants link the
               // menu as a PDF or image (e.g. /wp-content/uploads/*.pdf) only from

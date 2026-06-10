@@ -377,9 +377,18 @@ export function findBestMenuLink(html: string, baseUrl: string): string | null {
     const dedupKey = abs.hostname.toLowerCase() + abs.pathname.toLowerCase()
     if (seen.has(dedupKey)) continue
 
-    // Skip the base page itself
+    // Skip the base page itself AND its www/bare alias at the root path.
+    // Without the alias check, a site whose homepage is foo.com/ but emits a
+    // self-link to www.foo.com/ (or vice-versa) would slip through as a menu
+    // candidate — a link to the root of the same site is never a menu page.
     const linkPathNorm = abs.pathname.toLowerCase().replace(/\/+$/, '')
-    if (linkHost === base.hostname.toLowerCase() && linkPathNorm === basePathNorm) continue
+    const isBaseHost = linkHost === base.hostname.toLowerCase()
+    const isBaseAliasRoot =
+      linkHostStripped === baseHost &&
+      linkPathNorm === '' &&
+      basePathNorm === ''
+    if (isBaseHost && linkPathNorm === basePathNorm) continue
+    if (isBaseAliasRoot) continue
 
     const score = scoreMenuLink(abs.pathname, innerText)
     if (score <= 0) continue

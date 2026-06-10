@@ -851,6 +851,36 @@ describe('findBestMenuLink', () => {
     expect(result).toBe('https://www.example-restaurant.com/food')
   })
 
+  it('skips www-alias self-link at root (foo.com base, www.foo.com/ link)', () => {
+    // A site whose homepage is foo.com/ emitting a canonical link to www.foo.com/
+    // is a self-link — it must never surface as a menu candidate.
+    const html = `
+      <a href="https://www.example-restaurant.com/">Home</a>
+      <a href="/menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, 'https://example-restaurant.com/')
+    expect(result).toBe('https://example-restaurant.com/menu')
+  })
+
+  it('skips bare-alias self-link at root (www.foo.com base, foo.com/ link)', () => {
+    const html = `
+      <a href="https://example-restaurant.com/">Home</a>
+      <a href="/menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, 'https://www.example-restaurant.com/')
+    expect(result).toBe('https://www.example-restaurant.com/menu')
+  })
+
+  it('does NOT skip menu.<base> root — that is a genuine menu subdomain', () => {
+    // menu.example-restaurant.com/ is a different host from the base;
+    // the www-alias root skip must not fire here.
+    const html = `
+      <a href="https://menu.example-restaurant.com/">View Menu</a>
+    `
+    const result = findBestMenuLink(html, 'https://www.example-restaurant.com/')
+    expect(result).toBe('https://menu.example-restaurant.com/')
+  })
+
   it('tiebreaks by shorter pathname when both have menu token and same score', () => {
     // Both links contain the menu token and score identically (menu +5 in path,
     // same anchor text). Shorter pathname wins.
