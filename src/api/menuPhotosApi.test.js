@@ -319,6 +319,62 @@ describe('menuPhotosApi', () => {
       expect(remove).toHaveBeenCalled()
     })
 
+    it('logs loudly when remove fails after is_unsafe', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-removefail' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+
+      const { logger } = await import('../utils/logger')
+      const remove = vi.fn().mockResolvedValue({ error: { message: 'storage delete failed' } })
+      const upload = vi.fn().mockResolvedValue({ data: {}, error: null })
+      const getPublicUrl = vi.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/bad2.jpg' } })
+      supabase.storage.from.mockImplementation(() => ({ upload, getPublicUrl, remove }))
+
+      supabase.functions.invoke.mockImplementation((fnName) => {
+        if (fnName === 'photo-moderate') {
+          return Promise.resolve({ data: { is_unsafe: true }, error: null })
+        }
+        return Promise.resolve({ data: null, error: null })
+      })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-removefail', [makeFile()])
+      ).rejects.toThrow(/That image couldn't be used/)
+
+      expect(remove).toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalledWith(
+        'menu-photos: failed to delete rejected upload',
+        expect.objectContaining({ error: 'storage delete failed' })
+      )
+    })
+
+    it('logs loudly when remove fails after moderation error', async () => {
+      supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-removefail2' } } })
+      checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })
+
+      const { logger } = await import('../utils/logger')
+      const remove = vi.fn().mockResolvedValue({ error: { message: 'network error' } })
+      const upload = vi.fn().mockResolvedValue({ data: {}, error: null })
+      const getPublicUrl = vi.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/err2.jpg' } })
+      supabase.storage.from.mockImplementation(() => ({ upload, getPublicUrl, remove }))
+
+      supabase.functions.invoke.mockImplementation((fnName) => {
+        if (fnName === 'photo-moderate') {
+          return Promise.resolve({ data: null, error: { message: 'edge function 500' } })
+        }
+        return Promise.resolve({ data: null, error: null })
+      })
+
+      await expect(
+        menuPhotosApi.uploadMenuPhotos('rest-removefail2', [makeFile()])
+      ).rejects.toThrow(/That image couldn't be used/)
+
+      expect(remove).toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalledWith(
+        'menu-photos: failed to delete rejected upload',
+        expect.objectContaining({ error: 'network error' })
+      )
+    })
+
     it('returns only safe public URLs when moderation passes', async () => {
       supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'uid-safe' } } })
       checkPhotoUploadRateLimit.mockReturnValue({ allowed: true })

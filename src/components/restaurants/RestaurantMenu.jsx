@@ -155,6 +155,26 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
               Check back soon
             </p>
           )}
+          {!searchQuery && onAddByPhoto && (
+            <button
+              type="button"
+              onClick={onAddByPhoto}
+              className="mt-4 inline-flex items-center gap-2 py-2 px-4 rounded-lg transition-all active:scale-[0.98]"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--color-divider)',
+                color: 'var(--color-text-tertiary)',
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+              aria-label="Add menu by photo"
+            >
+              <span aria-hidden="true">📷</span>
+              Add / improve the menu
+            </button>
+          )}
         </div>
       </div>
     )

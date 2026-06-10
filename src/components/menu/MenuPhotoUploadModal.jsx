@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { LoginModal } from '../Auth/LoginModal'
 import { menuPhotosApi } from '../../api/menuPhotosApi'
@@ -96,6 +96,31 @@ export function MenuPhotoUploadModal({ restaurantId, restaurantName, isOpen, onC
 
   const modalRef = useFocusTrap(isOpen, onClose)
 
+  // Tracks whether the modal is currently open so async handlers can bail out
+  // after the user closes while an upload/extract/commit is in flight.
+  const isOpenRef = useRef(isOpen)
+  useEffect(() => {
+    isOpenRef.current = isOpen
+  })
+
+  // Reset to initial state whenever the modal closes (isOpen flips false).
+  // This ensures a reopen always shows a fresh 'pick' screen with no stale
+  // review/done state — mirrors LoginModal's pattern of resetting on hide.
+  useEffect(() => {
+    if (!isOpen) {
+      setStep('pick')
+      setSelectedFiles([])
+      setWorkingMsg('')
+      setExtractionId(null)
+      setExtractedDishes([])
+      setMenuSectionOrder([])
+      setIncludes([])
+      setPriceOverrides({})
+      setCommitResult(null)
+      setErrorMsg(null)
+    }
+  }, [isOpen])
+
   // ---- reset on close ----
   const handleClose = useCallback(() => {
     setStep('pick')
@@ -137,12 +162,14 @@ export function MenuPhotoUploadModal({ restaurantId, restaurantName, isOpen, onC
     try {
       photoUrls = await menuPhotosApi.uploadMenuPhotos(restaurantId, selectedFiles)
     } catch (err) {
+      if (!isOpenRef.current) return
       logger.error('MenuPhotoUploadModal: upload failed', err)
       setErrorMsg(err?.message || 'Upload failed — please try again.')
       setStep('pick')
       return
     }
 
+    if (!isOpenRef.current) return
     setWorkingMsg('Reading the menu…')
     let extraction
     try {
@@ -152,11 +179,14 @@ export function MenuPhotoUploadModal({ restaurantId, restaurantName, isOpen, onC
         photoUrls,
       })
     } catch (err) {
+      if (!isOpenRef.current) return
       logger.error('MenuPhotoUploadModal: extract failed', err)
       setErrorMsg(err?.message || 'Couldn\'t read the menu — please try a clearer photo.')
       setStep('pick')
       return
     }
+
+    if (!isOpenRef.current) return
 
     if (!extraction.dishes || extraction.dishes.length === 0) {
       setStep('pick')
@@ -213,10 +243,12 @@ export function MenuPhotoUploadModal({ restaurantId, restaurantName, isOpen, onC
         includes,
         priceOverrides,
       })
+      if (!isOpenRef.current) return
       setCommitResult(result)
       setStep('done')
       if (onCommitted) onCommitted()
     } catch (err) {
+      if (!isOpenRef.current) return
       logger.error('MenuPhotoUploadModal: commit failed', err)
       setErrorMsg(err?.message || 'Something went wrong — please try again.')
       setStep('review')

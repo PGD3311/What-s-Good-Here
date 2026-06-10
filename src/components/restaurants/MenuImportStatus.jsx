@@ -34,9 +34,9 @@ const snapBtnStyle = {
 export function MenuImportStatus({ restaurantId, dishCount, onAddByPhoto }) {
   const { status, isImporting, hasFailed, loading } = useMenuImportStatus(restaurantId)
 
-  if (loading || dishCount > 0) return null
-  if (status === null) return null
-  if (status === 'completed' && dishCount > 0) return null
+  // Hide when: still loading, or there are dishes and no failure (real menu exists).
+  if (loading) return null
+  if (dishCount > 0 && !hasFailed) return null
 
   return (
     <div
@@ -54,7 +54,15 @@ export function MenuImportStatus({ restaurantId, dishCount, onAddByPhoto }) {
           </p>
         </>
       )}
-      {status === 'completed' && dishCount === 0 && (
+      {!isImporting && status === null && dishCount === 0 && (
+        <>
+          <p style={headingStyle}>No menu yet</p>
+          <p style={{ fontSize: '14px', lineHeight: '1.5' }}>
+            No menu yet — add it from a photo.
+          </p>
+        </>
+      )}
+      {!isImporting && status === 'completed' && dishCount === 0 && (
         <>
           <p style={headingStyle}>Menu coming soon</p>
           <p style={{ fontSize: '14px', lineHeight: '1.5' }}>
