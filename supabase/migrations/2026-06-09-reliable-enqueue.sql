@@ -104,13 +104,13 @@ SELECT cron.schedule(
           (NOT (
              mij.error_code IN ('fetch_timeout','dns_error','claude_error','unknown_error')
              OR (mij.error_code = 'fetch_error'
-                 AND (mij.error_context->>'http_status') ~ '^(408|425|429|5[0-9][0-9])$')
+                 AND COALESCE(mij.error_context->>'http_status', '') ~ '^(408|425|429|5[0-9][0-9])$')
            ) AND mij.created_at > NOW() - INTERVAL '30 days')
           -- TRANSIENT deads: only a 6-hour cooldown, then re-enqueue-eligible
           OR (
              (mij.error_code IN ('fetch_timeout','dns_error','claude_error','unknown_error')
               OR (mij.error_code = 'fetch_error'
-                  AND (mij.error_context->>'http_status') ~ '^(408|425|429|5[0-9][0-9])$'))
+                  AND COALESCE(mij.error_context->>'http_status', '') ~ '^(408|425|429|5[0-9][0-9])$'))
              AND mij.created_at > NOW() - INTERVAL '6 hours')
         )
     )
