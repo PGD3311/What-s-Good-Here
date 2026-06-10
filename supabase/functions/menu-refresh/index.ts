@@ -3,7 +3,7 @@ import { encode as encodeBase64 } from 'https://deno.land/std@0.177.0/encoding/b
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
-import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, findBestMenuLink, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
 import { safeFetch } from '../_shared/ssrf.ts'
 import { detectBentoBox, buildBentoBoxMenuText, parseSchemaOrgMenuItems } from './bentobox.ts'
 
@@ -381,40 +381,125 @@ function sleep(ms: number): Promise<void> {
 const GOOGLE_API_KEY = Deno.env.get('GOOGLE_PLACES_API_KEY')
 
 const MENU_PATHS = [
-  // More specific paths first — less likely to hit a wrong page
+  // More specific paths first — less likely to hit a wrong page (also defines
+  // Step B priority among accepted probes: first match in this order wins).
   '/food-menu', '/dinner-menu', '/lunch-menu', '/breakfast-menu', '/brunch-menu',
-  '/our-menu', '/menus', '/food-drink', '/food--drinks',
-  '/menu', '/menu-1', '/menu-2', '/food', '/eat', '/dining',
+  '/our-menu', '/the-menu', '/our-food', '/menus', '/food-drink', '/food--drinks',
+  '/food-menus', '/menu/food',
+  '/menu', '/menu-1', '/menu-2', '/food', '/eats', '/eat', '/dining',
   '/dinner', '/breakfast', '/lunch',
   '/order', '/order-online',
 ]
 
 /**
- * Probe a website for common menu URL paths (HEAD requests)
+ * Reject a probe result if the server bounced us to a different page.
+ *
+ * Soft-404 / SPA defense: some hosts 200 every route (SPA shell) or redirect
+ * all unknown paths back to the homepage. We detect the two most common failure
+ * modes:
+ *  1. Redirect-to-root: the final URL's pathname is empty/root/index while we
+ *     probed a non-root path → homepage soft-404.
+ *  2. Content-swap: the final pathname no longer contains the probed path's
+ *     last segment → the server substituted a different resource (e.g.
+ *     /menu → /order-online bounce).
+ *  3. Off-origin bounce: the final host differs from the probed host.
+ */
+function acceptProbe(res: Response, probedUrl: string): boolean {
+  let finalUrl: URL
+  let probedParsed: URL
+  try {
+    finalUrl = new URL(res.url || probedUrl)
+    probedParsed = new URL(probedUrl)
+  } catch {
+    return false
+  }
+
+  // Off-origin bounce
+  if (finalUrl.hostname.toLowerCase() !== probedParsed.hostname.toLowerCase()) return false
+
+  // Normalize pathnames: lowercase, strip trailing slash
+  const finalPath = finalUrl.pathname.toLowerCase().replace(/\/+$/, '') || '/'
+  const probedPath = probedParsed.pathname.toLowerCase().replace(/\/+$/, '')
+
+  // If we probed a non-root path, reject root/index redirects (soft-404)
+  if (probedPath && probedPath !== '/') {
+    const isRootOrIndex = finalPath === '' || finalPath === '/' ||
+      finalPath === '/index.html' || finalPath === '/index' || finalPath === '/home'
+    if (isRootOrIndex) return false
+  }
+
+  // Reject if the final pathname no longer contains the probed path's last segment
+  // e.g. probed /menu → final /order-online: "menu" ∉ "/order-online"
+  const probedLastSegment = probedPath.split('/').filter(Boolean).pop()
+  if (probedLastSegment && !finalPath.includes(probedLastSegment)) return false
+
+  return true
+}
+
+/**
+ * Find the best menu URL for a restaurant website.
+ *
+ * Step A (PRIMARY): Fetch the homepage and look for a menu nav link using
+ * findBestMenuLink. This is a single GET that reads what the restaurant itself
+ * advertises — far more accurate than blind probing. SPA homepages whose links
+ * are JS-injected yield null here and fall through to Step B.
+ *
+ * Step B (FALLBACK): Fire all MENU_PATHS as concurrent GET probes (3s abort
+ * each, body cancelled). Take the first path (in MENU_PATHS order) whose
+ * probe passes acceptProbe(). Wall-time ≈ 3s regardless of path count.
  */
 async function findMenuUrl(websiteUrl: string): Promise<string | null> {
   if (!websiteUrl) return null
   let base = websiteUrl.replace(/\/+$/, '')
   if (!base.startsWith('http')) base = 'https://' + base
 
-  for (const path of MENU_PATHS) {
-    const candidate = base + path
-    try {
+  // ── Step A: anchor discovery ──────────────────────────────────────────────
+  // Follow the link the site itself exposes. One homepage GET; avoids the
+  // sequential-probe time bomb and SPA-false-positive issues.
+  try {
+    const home = await fetchRawHtml(base)
+    if (home.type === 'html') {
+      const link = findBestMenuLink(home.html, base)
+      if (link) return link
+    }
+  } catch {
+    // Best-effort — fall through to Step B
+  }
+
+  // ── Step B: parallel path probe ───────────────────────────────────────────
+  // Fire all paths concurrently. Each probe: GET, 3s abort, body cancelled.
+  // Take the FIRST path (in MENU_PATHS order) that passes acceptProbe.
+  type ProbeResult = { path: string; accepted: boolean }
+
+  const probeResults = await Promise.allSettled(
+    MENU_PATHS.map(async (path): Promise<ProbeResult> => {
+      const candidate = base + path
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-      // safeFetch validates the host + every redirect hop (SSRF guard). A blocked,
-      // malformed, or over-redirecting candidate throws and is skipped by catch.
-      const res = await safeFetch(candidate, {
-        method: 'HEAD',
-        signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-Bot/1.0)' },
-      })
-      clearTimeout(timeout)
-      if (res.ok) return candidate
-    } catch {
-      // skip
+      const timeout = setTimeout(() => controller.abort(), 3000)
+      try {
+        const res = await safeFetch(candidate, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-Bot/1.0)' },
+        })
+        await res.body?.cancel()
+        return { path, accepted: res.ok && acceptProbe(res, candidate) }
+      } catch {
+        return { path, accepted: false }
+      } finally {
+        clearTimeout(timeout)
+      }
+    })
+  )
+
+  // Return the first accepted path in MENU_PATHS order (priority preserved).
+  for (let i = 0; i < MENU_PATHS.length; i++) {
+    const result = probeResults[i]
+    if (result.status === 'fulfilled' && result.value.accepted) {
+      return base + MENU_PATHS[i]
     }
   }
+
   return null
 }
 
@@ -1437,12 +1522,26 @@ serve(async (req) => {
             }
           }
 
-          if (!menuUrl && websiteUrl) {
-            const found = await findMenuUrl(websiteUrl)
-            if (found) {
+          // Re-discover the menu URL when:
+          //  (a) we have no menu_url at all, OR
+          //  (b) the stored menu_url is the website root (a past homepage-
+          //      fallback victim whose real /menu page was never found).
+          // Condition (b) ensures this fix reaches exactly the restaurants
+          // it's meant to correct — without it, a row already pointing at
+          // the homepage root would never get re-discovered.
+          const storedIsHomepageRoot = menuUrl && (() => {
+            try { return new URL(menuUrl).pathname.replace(/\/+$/, '') === '' } catch { return false }
+          })()
+          if ((!menuUrl || storedIsHomepageRoot) && (websiteUrl || menuUrl)) {
+            const found = await findMenuUrl(websiteUrl || menuUrl!)
+            if (found && found !== menuUrl) {
               menuUrl = found
-              dbUpdates.menu_url = menuUrl
-            } else {
+              dbUpdates.menu_url = found
+              // Force re-extraction of the corrected URL by clearing the
+              // content hash — defeats the hash short-circuit so the real
+              // menu page is extracted on this run, not skipped as "unchanged".
+              dbUpdates.menu_content_hash = null
+            } else if (!found) {
               // Ephemeral fallback for THIS run only. Many restaurants link the
               // menu as a PDF or image (e.g. /wp-content/uploads/*.pdf) only from
               // the homepage — paths findMenuUrl's probe list misses. Letting the
@@ -1451,9 +1550,11 @@ serve(async (req) => {
               // HTML. We do NOT persist this to dbUpdates.menu_url — that would
               // lock the restaurant into the homepage forever and prevent
               // future discovery of a real /menu URL.
-              let normalized = websiteUrl.replace(/\/+$/, '')
-              if (!normalized.startsWith('http')) normalized = 'https://' + normalized
-              menuUrl = normalized
+              if (!menuUrl) {
+                let normalized = (websiteUrl || '').replace(/\/+$/, '')
+                if (!normalized.startsWith('http')) normalized = 'https://' + normalized
+                menuUrl = normalized
+              }
             }
           }
 

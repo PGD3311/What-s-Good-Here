@@ -253,6 +253,159 @@ const SUB_MENU_NEGATIVE_TEXT = [
   /\bprivate\b/i,
 ]
 
+// ─── findBestMenuLink scoring constants ────────────────────────────────────
+// Separate from the asset scoreCandidate above: asset scoring positively weights
+// "raw bar"/"seafood" (food-menu assets) and lacks nav-page negatives. Here we
+// need a DEDICATED scorer that picks the site's actual menu PAGE link from nav
+// anchors — a different job with different signals.
+
+const MENU_LINK_POSITIVES: KeywordWeight[] = [
+  { pattern: /\bmenu\b/i, weight: 5 },
+  { pattern: /\bfood\b/i, weight: 3 },
+  { pattern: /\bdinner\b/i, weight: 2 },
+  { pattern: /\blunch\b/i, weight: 2 },
+  { pattern: /\bbrunch\b/i, weight: 2 },
+  { pattern: /\bbreakfast\b/i, weight: 2 },
+]
+
+const MENU_LINK_NEGATIVES: KeywordWeight[] = [
+  { pattern: /\bdrinks?\b/i, weight: -4 },
+  { pattern: /\bwines?\b/i, weight: -4 },
+  { pattern: /\bcocktails?\b/i, weight: -4 },
+  { pattern: /\bbar\b/i, weight: -4 },
+  { pattern: /\braw[\s-]?bar\b/i, weight: -4 },
+  { pattern: /\boyster[\s-]?bar\b/i, weight: -4 },
+  { pattern: /\babout\b/i, weight: -5 },
+  { pattern: /\bcontact\b/i, weight: -5 },
+  { pattern: /\breservations?\b/i, weight: -5 },
+  { pattern: /\border(?:[\s-]online)?\b/i, weight: -5 },
+  { pattern: /\bcatering\b/i, weight: -5 },
+  { pattern: /\bevents?\b/i, weight: -5 },
+  { pattern: /\bgift[\s-]?cards?\b/i, weight: -5 },
+  { pattern: /\bcareers?\b/i, weight: -5 },
+  { pattern: /\bjobs?\b/i, weight: -5 },
+  { pattern: /\bblog\b/i, weight: -5 },
+  { pattern: /\bnews\b/i, weight: -5 },
+  { pattern: /\bgallery\b/i, weight: -5 },
+  { pattern: /\bpress\b/i, weight: -5 },
+  { pattern: /\bprivate\b/i, weight: -5 },
+]
+
+function scoreMenuLink(path: string, text: string): number {
+  const subject = normalize(path) + ' ' + normalize(text)
+  let score = 0
+  for (const { pattern, weight } of MENU_LINK_POSITIVES) {
+    if (pattern.test(subject)) score += weight
+  }
+  for (const { pattern, weight } of MENU_LINK_NEGATIVES) {
+    if (pattern.test(subject)) score += weight
+  }
+  return score
+}
+
+/**
+ * Find the single best food-menu PAGE link on a homepage.
+ *
+ * Scans anchor tags, scores each href+text combination with a dedicated
+ * menu-link scorer (NOT the asset scoreCandidate), and returns the absolute
+ * URL of the top candidate, or null if none exceed 0.
+ *
+ * Host-scope rule: accepts the link iff its host equals baseHost, or equals
+ * 'www.'+baseHost, or ends with '.'+baseHost (proper subdomain). Rejects all
+ * other cross-origin links. PDF/image hrefs are skipped (asset candidates).
+ * The base page itself is skipped (self-link).
+ *
+ * Ranking: prefer a link whose text OR path contains the 'menu' token;
+ * tiebreak by score desc, then by shorter pathname.
+ */
+export function findBestMenuLink(html: string, baseUrl: string): string | null {
+  let base: URL
+  try {
+    base = new URL(baseUrl)
+  } catch {
+    return null
+  }
+
+  // Compute baseHost with leading www. stripped for host-scope comparison.
+  const baseHost = base.hostname.toLowerCase().replace(/^www\./, '')
+  // Normalize the base pathname for self-link detection.
+  const basePathNorm = base.pathname.toLowerCase().replace(/\/+$/, '')
+
+  const MENU_TOKEN = /\bmenu\b/i
+
+  interface LinkCandidate {
+    href: string
+    score: number
+    hasMenuToken: boolean
+    pathnameLen: number
+  }
+
+  const candidates: LinkCandidate[] = []
+  const seen = new Set<string>()
+
+  const anchorRegex = /<a\b[^>]*\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  let m
+  while ((m = anchorRegex.exec(html)) !== null) {
+    const rawHref = m[1]
+    const innerText = stripTags(m[2]).slice(0, 200)
+
+    // Absolutize
+    let abs: URL
+    try {
+      abs = new URL(rawHref, base)
+    } catch {
+      continue
+    }
+
+    // Protocol must be http/https
+    if (abs.protocol !== 'http:' && abs.protocol !== 'https:') continue
+
+    // Skip PDF/image assets — those are handled by discoverMenuCandidates
+    if (PDF_EXT.test(abs.href) || IMAGE_EXT.test(abs.href)) continue
+
+    // Host-scope check: accept same origin (with or without www), and proper
+    // subdomains (e.g. menu.foo.com when base is foo.com or www.foo.com).
+    const linkHost = abs.hostname.toLowerCase()
+    const linkHostStripped = linkHost.replace(/^www\./, '')
+    const sameOrigin =
+      linkHostStripped === baseHost ||
+      linkHost === 'www.' + baseHost ||
+      linkHostStripped.endsWith('.' + baseHost)
+    if (!sameOrigin) continue
+
+    // Dedup by href (case-insensitive pathname)
+    const dedupKey = abs.hostname.toLowerCase() + abs.pathname.toLowerCase()
+    if (seen.has(dedupKey)) continue
+
+    // Skip the base page itself
+    const linkPathNorm = abs.pathname.toLowerCase().replace(/\/+$/, '')
+    if (linkHost === base.hostname.toLowerCase() && linkPathNorm === basePathNorm) continue
+
+    const score = scoreMenuLink(abs.pathname, innerText)
+    if (score <= 0) continue
+
+    seen.add(dedupKey)
+    const hasMenuToken = MENU_TOKEN.test(abs.pathname) || MENU_TOKEN.test(innerText)
+    candidates.push({
+      href: abs.href,
+      score,
+      hasMenuToken,
+      pathnameLen: abs.pathname.length,
+    })
+  }
+
+  if (candidates.length === 0) return null
+
+  // Sort: menu-token links first, then by score desc, then by shorter pathname.
+  candidates.sort((a, b) => {
+    if (a.hasMenuToken !== b.hasMenuToken) return a.hasMenuToken ? -1 : 1
+    if (b.score !== a.score) return b.score - a.score
+    return a.pathnameLen - b.pathnameLen
+  })
+
+  return candidates[0].href
+}
+
 /**
  * Find sub-menu page URLs on a parent menu page. Used as Pattern 1 fallback
  * when the menu page itself yielded no dishes — many restaurants split their
