@@ -39,6 +39,7 @@ export function ScanMenu() {
         not_a_menu: !!payload?.not_a_menu,
       })
     } catch (err) {
+      await minSweep // failures still get one full sweep — no sub-second flash
       logger.error('Scan failed:', err)
       setLocalError(err?.message || 'Scan failed — try again')
       capture('scan_failed', { restaurant_id: restaurant.id, reason: err?.message })

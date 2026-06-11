@@ -7,14 +7,14 @@ import { useLocationContext } from '../../context/LocationContext'
 export function RestaurantConfirmChip({ confirmed, onConfirm }) {
   const [picking, setPicking] = useState(false)
   const [query, setQuery] = useState('')
-  const { nearbyRestaurant, hasRealLocation } = useNearbyRestaurant(300)
+  const { nearbyRestaurant, hasRealLocation, isLoading: locating } = useNearbyRestaurant(300)
   const { location } = useLocationContext()
   // Picker is shown when the user taps "change" OR when nothing is nearby to confirm
   const pickerActive = !confirmed && (picking || !nearbyRestaurant)
-  const { nearby } = useNearbyRestaurants(location?.lat, location?.lng, 1500, pickerActive && hasRealLocation)
+  const { nearby, loading: nearbyLoading } = useNearbyRestaurants(location?.lat, location?.lng, 1500, pickerActive && hasRealLocation)
   // Only local DB results can anchor a scan (they have a restaurant id);
   // Places-only suggestions are intentionally excluded.
-  const { localResults } = useRestaurantSearch(query, location?.lat, location?.lng, pickerActive)
+  const { localResults, loading: searchLoading } = useRestaurantSearch(query, location?.lat, location?.lng, pickerActive)
 
   if (confirmed) {
     return (
@@ -23,6 +23,13 @@ export function RestaurantConfirmChip({ confirmed, onConfirm }) {
         style={{ background: 'var(--color-surface-elevated)', color: 'var(--color-text-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
         📍 {confirmed.name} <span style={{ color: 'var(--color-accent-gold)' }}>change</span>
       </button>
+    )
+  }
+  if (!picking && locating) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+        📍 Finding where you are…
+      </p>
     )
   }
   if (!picking && nearbyRestaurant) {
@@ -50,6 +57,9 @@ export function RestaurantConfirmChip({ confirmed, onConfirm }) {
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="mt-2 rounded-xl overflow-hidden" style={{ background: 'var(--color-surface-elevated)' }}>
+        {(query.trim().length >= 2 ? searchLoading : nearbyLoading) && suggestions.length === 0 && (
+          <p className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-tertiary)' }}>Searching…</p>
+        )}
         {suggestions.slice(0, 6).map(r => (
           <button key={r.id} onClick={() => { onConfirm(r); setPicking(false) }}
             className="w-full text-left px-4 py-3 text-sm font-semibold border-b last:border-0"
