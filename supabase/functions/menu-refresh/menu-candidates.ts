@@ -83,6 +83,60 @@ const NEGATIVE_KEYWORDS: KeywordWeight[] = [
   { pattern: /\bpress\b/i, weight: -4 },
 ]
 
+// Drinks scorer — inverted from the food model. Used by the drinks-recovery
+// pass to surface a SEPARATE cocktail/coffee menu (food assets score these
+// terms strongly negative, so they never reach the LLM otherwise). Food terms
+// are negative here so a food menu can't win the drink track. Noise negatives
+// are intentionally duplicated (not shared) so this never perturbs the food
+// scorer above.
+const DRINK_POSITIVE_KEYWORDS: KeywordWeight[] = [
+  { pattern: /\bcocktails?\b/i, weight: 5 },
+  { pattern: /\bdrinks?\b/i, weight: 5 },
+  { pattern: /\bbeverages?\b/i, weight: 4 },
+  { pattern: /\bcoffee\b/i, weight: 4 },
+  { pattern: /\bespresso\b/i, weight: 3 },
+  { pattern: /\bbar[\s-]?menu\b/i, weight: 4 },
+  { pattern: /\bbar\b/i, weight: 2 },
+  { pattern: /\bcaf[eé]\b/i, weight: 2 },
+  { pattern: /\bwines?\b/i, weight: 2 },
+  { pattern: /\bhappy[\s-]?hour\b/i, weight: 2 },
+]
+
+const DRINK_NEGATIVE_KEYWORDS: KeywordWeight[] = [
+  // Food suppressors — a food menu must not win the drink track.
+  { pattern: /\bfood\b/i, weight: -4 },
+  { pattern: /\bdinner\b/i, weight: -4 },
+  { pattern: /\blunch\b/i, weight: -4 },
+  { pattern: /\bbreakfast\b/i, weight: -4 },
+  { pattern: /\bbrunch\b/i, weight: -4 },
+  { pattern: /\bentrees?\b/i, weight: -2 },
+  // Noise (duplicated from the food NEGATIVE_KEYWORDS on purpose).
+  { pattern: /\ballergens?\b/i, weight: -8 },
+  { pattern: /\bnutrition(al)?\b/i, weight: -6 },
+  { pattern: /\bgift[\s-]?cards?\b/i, weight: -8 },
+  { pattern: /\bgiftcards?\b/i, weight: -8 },
+  { pattern: /\bcatering\b/i, weight: -4 },
+  { pattern: /\bprivate[\s-]?events?\b/i, weight: -6 },
+  { pattern: /\bterms\b/i, weight: -10 },
+  { pattern: /\bprivacy\b/i, weight: -10 },
+  { pattern: /\bpolicy\b/i, weight: -8 },
+  { pattern: /\bapplication\b/i, weight: -8 },
+  { pattern: /\bemployment\b/i, weight: -10 },
+  { pattern: /\bjob\b/i, weight: -8 },
+  { pattern: /\bcontract\b/i, weight: -8 },
+  { pattern: /\bwaiver\b/i, weight: -10 },
+  { pattern: /\brules\b/i, weight: -6 },
+  { pattern: /\blogo\b/i, weight: -10 },
+  { pattern: /\bfavicon\b/i, weight: -10 },
+  { pattern: /\bicon\b/i, weight: -8 },
+  { pattern: /\bheader\b/i, weight: -8 },
+  { pattern: /\bbanner\b/i, weight: -8 },
+  { pattern: /\bhero\b/i, weight: -8 },
+  { pattern: /\bavatar\b/i, weight: -8 },
+  { pattern: /\bthumbnail\b/i, weight: -6 },
+  { pattern: /\bgallery\b/i, weight: -6 },
+]
+
 const PDF_EXT = /\.pdf(\?|#|$)/i
 const IMAGE_EXT = /\.(png|jpe?g|webp)(\?|#|$)/i
 
@@ -107,18 +161,23 @@ function normalize(s: string): string {
   return safeDecode(s).replace(/_/g, ' ')
 }
 
-export function scoreCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
+function scoreWith(
+  positive: KeywordWeight[],
+  negative: KeywordWeight[],
+  url: string,
+  context: string,
+): { score: number; evidence: string; hasNegative: boolean } {
   const decoded = `${normalize(url)} ${normalize(context)}`
   let score = 0
   let hasNegative = false
   const hits: string[] = []
-  for (const { pattern, weight } of POSITIVE_KEYWORDS) {
+  for (const { pattern, weight } of positive) {
     if (pattern.test(decoded)) {
       score += weight
       hits.push(`+${weight}:${pattern.source}`)
     }
   }
-  for (const { pattern, weight } of NEGATIVE_KEYWORDS) {
+  for (const { pattern, weight } of negative) {
     if (pattern.test(decoded)) {
       score += weight
       hasNegative = true
@@ -126,6 +185,14 @@ export function scoreCandidate(url: string, context: string = ''): { score: numb
     }
   }
   return { score, evidence: hits.join(' '), hasNegative }
+}
+
+export function scoreCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
+  return scoreWith(POSITIVE_KEYWORDS, NEGATIVE_KEYWORDS, url, context)
+}
+
+export function scoreDrinkCandidate(url: string, context: string = ''): { score: number; evidence: string; hasNegative: boolean } {
+  return scoreWith(DRINK_POSITIVE_KEYWORDS, DRINK_NEGATIVE_KEYWORDS, url, context)
 }
 
 interface RawMatch {
@@ -253,6 +320,30 @@ const SUB_MENU_NEGATIVE_TEXT = [
   /\bprivate\b/i,
 ]
 
+const DRINK_SUB_PAGE_PATH_PATTERNS = [
+  /\/(?:[\w-]*-)?cocktails?(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?drinks?(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?bar(?:-menu)?\/?$/i,
+  /\/(?:[\w-]*-)?beverages?(?:-menu)?\/?$/i,
+]
+
+const DRINK_SUB_PAGE_ANCHOR_PATTERNS = [
+  /\bcocktails?\b/i,
+  /\bdrinks?\b/i,
+  /\bbar\b/i,
+  /\bbeverages?\b/i,
+  /\bhappy[\s-]?hour(?:[\s-]?menu)?\b/i,
+]
+
+const DRINK_SUB_PAGE_NEGATIVE_TEXT = [
+  /\bfood\b/i, /\bdinner\b/i, /\blunch\b/i, /\bbrunch\b/i, /\bbreakfast\b/i,
+  /\bgift[\s-]?cards?\b/i, /\bcatering\b/i, /\bprivate\b/i, /\bevents?\b/i,
+  // "Raw Bar" / "Oyster Bar" are seafood (food) pages, not drink menus — the
+  // bare `bar` path/anchor patterns above would otherwise surface them. Common
+  // on Martha's Vineyard. Must precede the bar match (negative check runs first).
+  /\braw[\s-]?bar\b/i, /\boyster[\s-]?bar\b/i,
+]
+
 /**
  * Find sub-menu page URLs on a parent menu page. Used as Pattern 1 fallback
  * when the menu page itself yielded no dishes — many restaurants split their
@@ -314,6 +405,59 @@ export function findSubMenuPages(html: string, baseUrl: string, max = 4): string
     out.push(target)
     if (out.length >= max) break
   }
+  return out
+}
+
+/**
+ * Find drinks/cocktail/bar sub-pages on a parent menu page. Mirror of
+ * findSubMenuPages but inverted: food anchors are disqualified, drink anchors
+ * qualify. Same-origin only; assets skipped; capped at `max` (default 1 —
+ * the drinks-recovery pass tries at most one source).
+ */
+export function findDrinkSubPages(html: string, baseUrl: string, max = 1): string[] {
+  const base = new URL(baseUrl)
+  const baseKey = base.origin + base.pathname + base.search
+  const found = new Set<string>([baseKey])
+  const out: string[] = []
+  const anchorRegex = /<a\b[^>]*\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  let m
+  while ((m = anchorRegex.exec(html)) !== null) {
+    let absolute: URL
+    try { absolute = new URL(m[1], base) } catch { continue }
+    if (absolute.origin !== base.origin) continue
+    if (PDF_EXT.test(absolute.href) || IMAGE_EXT.test(absolute.href)) continue
+    const innerText = stripTags(m[2]).replace(/&amp;/gi, '&').replace(/&#38;/g, '&').slice(0, 100)
+    if (DRINK_SUB_PAGE_NEGATIVE_TEXT.some(p => p.test(innerText))) continue
+    const pathMatches = DRINK_SUB_PAGE_PATH_PATTERNS.some(p => p.test(absolute.pathname))
+    const textMatches = DRINK_SUB_PAGE_ANCHOR_PATTERNS.some(p => p.test(innerText))
+    if (!pathMatches && !textMatches) continue
+    const target = absolute.origin + absolute.pathname + absolute.search
+    if (found.has(target)) continue
+    found.add(target)
+    out.push(target)
+    if (out.length >= max) break
+  }
+  return out
+}
+
+/**
+ * Discover drinks-menu candidates (separate cocktail/coffee assets) on a page,
+ * scored with the inverted drink model and a SYMMETRIC positive gate
+ * (pdf > 0, image > 0). The food path passes PDFs at >= 0 because a restaurant
+ * PDF is usually a menu — that prior does NOT hold for drinks, so a neutral
+ * opaque PDF must not become the "best drinks asset" and burn the extra call.
+ * No neutral-image fallback. Sorted by score desc.
+ */
+export function discoverDrinkCandidates(html: string, baseUrl: string): MenuCandidate[] {
+  const raw = extractRawMatches(html, baseUrl)
+  const out: MenuCandidate[] = []
+  for (const r of raw) {
+    const type = classifyType(r.url)
+    if (!type) continue
+    const { score, evidence } = scoreDrinkCandidate(r.url, r.context)
+    if (score > 0) out.push({ url: r.url, type, score, source: r.source, evidence })
+  }
+  out.sort((a, b) => b.score - a.score)
   return out
 }
 

@@ -3,7 +3,7 @@ import { encode as encodeBase64 } from 'https://deno.land/std@0.177.0/encoding/b
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
-import { discoverMenuCandidates, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, discoverDrinkCandidates, findMenuIframes, findSubMenuPages, findDrinkSubPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
 import { safeFetch } from '../_shared/ssrf.ts'
 import { detectBentoBox, buildBentoBoxMenuText, parseSchemaOrgMenuItems } from './bentobox.ts'
 
@@ -350,7 +350,7 @@ const STALE_DAYS = 14
 //   - features      : output-schema features (e.g. desc+dietary tags from PR #229)
 // Format is intentionally human-readable so the stored value alone tells you
 // which extractor produced a row — easier to debug than a bare integer.
-const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1|thin-fallback-v1|bentobox-jsonld-v1|conservas-skip-v1|menu-groups-v2'
+const CURRENT_EXTRACTOR_FINGERPRINT = 'sonnet-4-6|prompt-v6|pipeline-v2|desc150+dietary-v2|cocktails-v1|thin-fallback-v1|bentobox-jsonld-v1|conservas-skip-v1|menu-groups-v2|drinks-pass-v1'
 
 // Signals that a restaurant is closed (check before wasting Claude API call)
 const CLOSED_SIGNALS = [
@@ -721,6 +721,15 @@ const SPARSE_TEXT_THRESHOLD = 2000
 // worst case of a false positive is "waits for a human" rather than "garbage".
 const PRICE_COVERAGE_FLOOR = 0.2
 
+// Drinks recovery (Gap 6): if a food extraction found FEWER than this many
+// cocktail/coffee dishes AND a dedicated drinks asset/sub-page exists, run one
+// extra LLM pass on the best drinks source. Low (not zero) because the food
+// prompt already extracts inline drinks — one brunch bloody mary must not
+// suppress recovery of a separate 20-item cocktail list.
+const DRINK_RECOVERY_THRESHOLD = 5
+
+const DRINK_RECOVERY_HINT = 'This is the restaurant\'s DRINKS menu. Extract ONLY alcoholic cocktails (category "cocktails") and coffee drinks (category "coffee"), following the cocktail and coffee rules in your instructions. Do not extract wine, beer, or non-alcoholic beverages.'
+
 // Merge two candidate lists by URL (last-write-wins on score), then re-sort.
 // Used when Browserless renders surface JS-injected assets that weren't in the raw HTML.
 function mergeCandidates(a: MenuCandidate[], b: MenuCandidate[]): MenuCandidate[] {
@@ -764,7 +773,7 @@ function toHttpsUrls(urls: string[]): string[] {
 /**
  * Extract dishes from menu text using Claude
  */
-async function extractMenuWithClaude(content: string, restaurantName: string): Promise<MenuExtractionResult> {
+async function extractMenuWithClaude(content: string, restaurantName: string, extractionHint?: string): Promise<MenuExtractionResult> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -782,7 +791,7 @@ async function extractMenuWithClaude(content: string, restaurantName: string): P
       messages: [
         {
           role: 'user',
-          content: `Extract the full menu from "${restaurantName}":\n\n${content}`,
+          content: `Extract the full menu from "${restaurantName}":\n\n${content}${extractionHint ? '\n\n' + extractionHint : ''}`,
         },
       ],
       system: MENU_EXTRACTION_PROMPT,
@@ -884,7 +893,8 @@ async function downloadImageAsBase64(
  */
 async function extractMenuFromImagesWithClaude(
   imageUrls: string[],
-  restaurantName: string
+  restaurantName: string,
+  extractionHint?: string
 ): Promise<MenuExtractionResult> {
   const httpsUrls = toHttpsUrls(imageUrls)
   if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
@@ -916,7 +926,7 @@ async function extractMenuFromImagesWithClaude(
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${successful.length === 1 ? 'attached image' : `${successful.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${successful.length === 1 ? 'attached image' : `${successful.length} attached images`}. The images are page-ordered. If different images represent different services (breakfast, lunch, dinner), preserve those as menu sections.${extractionHint ? '\n\n' + extractionHint : ''}`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -969,7 +979,8 @@ async function extractMenuFromImagesWithClaude(
  */
 async function extractMenuFromPdfsWithClaude(
   pdfUrls: string[],
-  restaurantName: string
+  restaurantName: string,
+  extractionHint?: string
 ): Promise<MenuExtractionResult> {
   const httpsUrls = toHttpsUrls(pdfUrls)
   if (httpsUrls.length === 0) return { dishes: [], menu_section_order: [] }
@@ -986,7 +997,7 @@ async function extractMenuFromPdfsWithClaude(
 
   content.push({
     type: 'text',
-    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached PDF' : `${httpsUrls.length} attached PDFs`}. Combine all dishes into a single output. If different PDFs represent different meal services (breakfast, lunch, dinner), preserve those as menu sections.`,
+    text: `Extract the full menu from "${restaurantName}" from the ${httpsUrls.length === 1 ? 'attached PDF' : `${httpsUrls.length} attached PDFs`}. Combine all dishes into a single output. If different PDFs represent different meal services (breakfast, lunch, dinner), preserve those as menu sections.${extractionHint ? '\n\n' + extractionHint : ''}`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1297,6 +1308,82 @@ async function upsertDishes(
   }
 }
 
+/**
+ * Drinks recovery (Gap 6). When the food extraction found few cocktail/coffee
+ * dishes, try ONE extra LLM pass on the best dedicated drinks source and return
+ * the additive drink dishes + any new sections. Caller merges. Bounded to one
+ * Sonnet call.
+ */
+async function runDrinkRecovery(
+  extracted: MenuExtractionResult,
+  opts: { html: string; menuUrl: string; restaurantName: string; triedUrls: Set<string> },
+): Promise<{ dishes: ExtractedDish[]; sections: string[]; telemetry: Record<string, unknown> }> {
+  const keepDrinks = (r: MenuExtractionResult | null): ExtractedDish[] =>
+    (r?.dishes ?? []).filter(d => d.category === 'cocktails' || d.category === 'coffee')
+
+  const drinkCountBefore = extracted.dishes.filter(
+    d => d.category === 'cocktails' || d.category === 'coffee',
+  ).length
+  const telemetry: Record<string, unknown> = {
+    triggered: false, drink_count_before: drinkCountBefore, source: null, url: null, dishes_found: 0,
+  }
+  if (drinkCountBefore >= DRINK_RECOVERY_THRESHOLD) return { dishes: [], sections: [], telemetry }
+
+  const drinkAssets = discoverDrinkCandidates(opts.html, opts.menuUrl)
+  let result: MenuExtractionResult | null = null
+  let source: string | null = null
+  let usedUrl: string | null = null
+
+  if (drinkAssets.length > 0) {
+    const best = drinkAssets[0]
+    usedUrl = best.url
+    source = best.type
+    opts.triedUrls.add(best.url)
+    try {
+      result = best.type === 'image'
+        ? await extractMenuFromImagesWithClaude([best.url], opts.restaurantName, DRINK_RECOVERY_HINT)
+        : await extractMenuFromPdfsWithClaude([best.url], opts.restaurantName, DRINK_RECOVERY_HINT)
+    } catch (err) {
+      console.error(`${opts.restaurantName}: drink asset extraction failed:`, err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  let kept = keepDrinks(result)
+
+  if (kept.length === 0) {
+    const subPages = findDrinkSubPages(opts.html, opts.menuUrl, 1)
+    if (subPages.length > 0) {
+      const subUrl = subPages[0]
+      try {
+        const subFetch = await fetchRawHtml(subUrl)
+        if (subFetch.type === 'pdf') {
+          result = await extractMenuFromPdfsWithClaude([subFetch.pdfUrl], opts.restaurantName, DRINK_RECOVERY_HINT)
+          source = 'pdf'; usedUrl = subUrl
+        } else {
+          const subText = extractMenuTextFromHtml(subFetch.html)
+          if (subText.length >= 50) {
+            result = await extractMenuWithClaude(subText, opts.restaurantName, DRINK_RECOVERY_HINT)
+            source = 'sub-page'; usedUrl = subUrl
+          }
+        }
+        kept = keepDrinks(result)
+      } catch (err) {
+        console.error(`${opts.restaurantName}: drink sub-page failed:`, err instanceof Error ? err.message : String(err))
+      }
+    }
+  }
+
+  if (kept.length === 0) return { dishes: [], sections: [], telemetry }
+
+  const drinkDishes = kept.map(d => ({ ...d, menu_group: null as string | null }))
+
+  telemetry.triggered = true
+  telemetry.source = source
+  telemetry.url = usedUrl
+  telemetry.dishes_found = drinkDishes.length
+  return { dishes: drinkDishes, sections: result!.menu_section_order, telemetry }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -1517,6 +1604,34 @@ serve(async (req) => {
             }
 
             if (pdfExtracted.dishes.length > 0) {
+              // Drinks recovery for direct-PDF menus: the food PDF won't carry the cocktail list.
+              let pdfDrinkPass: Record<string, unknown> = { triggered: false }
+              {
+                let html = ''
+                try {
+                  const site = websiteUrl || menuUrl
+                  if (site) {
+                    const f = await fetchRawHtml(site)
+                    if (f.type === 'html') html = f.html
+                  }
+                } catch { /* best effort */ }
+                if (html) {
+                  const rec = await runDrinkRecovery(pdfExtracted, {
+                    html, menuUrl: websiteUrl || menuUrl, restaurantName: restaurant.name, triedUrls: new Set(),
+                  })
+                  pdfDrinkPass = rec.telemetry
+                  if (rec.dishes.length > 0) {
+                    const existingKeys = new Set(pdfExtracted.dishes.map(d => `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`))
+                    for (const d of rec.dishes) {
+                      const k = `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`
+                      if (!existingKeys.has(k)) { pdfExtracted.dishes.push(d); existingKeys.add(k) }
+                    }
+                    for (const sec of rec.sections) {
+                      if (!pdfExtracted.menu_section_order.includes(sec)) pdfExtracted.menu_section_order.push(sec)
+                    }
+                  }
+                }
+              }
               const stats = await upsertDishes(supabase, restaurant.id, pdfExtracted)
               // Note: we deliberately do not store menu_content_hash here —
               // PDFs route through a different fetch path with no equivalent
@@ -1543,6 +1658,7 @@ serve(async (req) => {
                   batch_dedup_skipped: stats.batchDedupSkipped,
                   cross_category_skipped: stats.crossCategorySkipped,
                   price_gate_rejected: stats.priceGateRejected,
+                  drink_pass: pdfDrinkPass,
                 },
                 lock_expires_at: null,
                 updated_at: new Date().toISOString(),
@@ -2128,6 +2244,30 @@ serve(async (req) => {
             }
           }
 
+          // --- Drinks recovery (Gap 6) ---
+          let drinkPass: Record<string, unknown> = { triggered: false }
+          {
+            const rec = await runDrinkRecovery(extracted, {
+              html: rawHtml,            // raw HTML markup for asset/anchor discovery
+              menuUrl,
+              restaurantName: restaurant.name,
+              triedUrls,
+            })
+            drinkPass = rec.telemetry
+            if (rec.dishes.length > 0) {
+              const existingKeys = new Set(
+                extracted.dishes.map(d => `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`),
+              )
+              for (const d of rec.dishes) {
+                const k = `${d.name.toLowerCase()}|${(d.menu_section || '').toLowerCase()}`
+                if (!existingKeys.has(k)) { extracted.dishes.push(d); existingKeys.add(k) }
+              }
+              for (const sec of rec.sections) {
+                if (!extracted.menu_section_order.includes(sec)) extracted.menu_section_order.push(sec)
+              }
+            }
+          }
+
           // Success path: upsert dishes, store raw hash + render telemetry
           // Note: we hash the raw text (rawHash), not the rendered text. Next run can skip
           // cheaply when the raw HTML shell is unchanged. Mild staleness on JS sites is
@@ -2178,6 +2318,7 @@ serve(async (req) => {
               batch_dedup_skipped: stats.batchDedupSkipped,
               cross_category_skipped: stats.crossCategorySkipped,
               price_gate_rejected: stats.priceGateRejected,
+              drink_pass: drinkPass,
               ...(mergeTelemetry ?? {}),
             },
             lock_expires_at: null,
