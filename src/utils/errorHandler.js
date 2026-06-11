@@ -43,8 +43,15 @@ export function classifyError(error) {
   // correctly (429 → RATE_LIMIT, 401 → AUTH_ERROR, 5xx → SERVER_ERROR).
   const code = error.code || error.status || error.context?.status
 
-  // Network errors
-  if (message.includes('network') || message.includes('failed to fetch')) {
+  // Network errors. The last two patterns are supabase-js functions.invoke
+  // failures (FunctionsFetchError / FunctionsRelayError) whose messages don't
+  // contain "network" or "fetch".
+  if (
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('failed to send a request') ||
+    message.includes('relay error')
+  ) {
     return ErrorTypes.NETWORK_ERROR
   }
 
