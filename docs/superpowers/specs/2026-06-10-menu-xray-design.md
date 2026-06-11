@@ -46,7 +46,8 @@ wow feature and the menu-photo OCR content-acquisition direction
    `getRatingColor` (green ≥ 8.0, amber ≥ 6.0). Below-threshold votes = "Early" tier.
 5. **No verdict words on chips.** Rating number + color only (Dan: "just show the
    rating and its color"). The only worded chip is `🆕 be the first`. Never any
-   negative label — brand rule: celebrate winners, let numbers speak for the rest.
+   negative label; colors follow `getRatingColor` app-wide including red below 6.0
+   (Dan: "keep color consistent") — the restraint is in words, not color.
 6. **Re-rendered X-Ray view**, not chips anchored on the photo. Claude vision returns
    no pixel geometry; photo-anchoring would force a second OCR vendor and janky
    placement. Scan animation plays over the photo, result renders as clean WGH UI.
@@ -93,13 +94,15 @@ Consumed by chips, summary line, and decide overlay.
 
 | Tier | Condition | Chip shows |
 |---|---|---|
-| Rated | `totalVotes >= MIN_VOTES_FOR_RANKING` | `● 9.4` — number colored by `getRatingColor` (green ≥ 8.0, amber ≥ 6.0). No words. |
+| Rated | `totalVotes >= MIN_VOTES_FOR_RANKING` | `● 9.4` — number colored by `getRatingColor` exactly as everywhere else in the app (green ≥ 8.0, amber ≥ 6.0, red below — Dan's call 2026-06-10: one color language app-wide). No words. |
 | Early | 1 to threshold−1 votes | `9.2 · 2 votes`, muted gray — visibly provisional |
 | New | 0 votes / just ingested | `🆕 be the first` — dashed gold outline; the only worded chip |
 
 - Thresholds come from existing constants — a dish must never show green on the scan
   and amber on its own page.
-- No negative branch exists. Low-rated dishes show a muted number, nothing more.
+- No worded negative branch exists. Low-rated dishes show their number in the app's
+  standard color (red below 6.0, per `getRatingColor`) — the color is data, the
+  absence of words is the brand restraint.
 - Decide overlay is the one place with editorial voice ("Get the Hot Lobster Roll" /
   "The island has spoken") because the user explicitly asked for an opinion. Shows
   dish name (Amatic SC), rating, vote count, 1–2 "also great" alternates (other
