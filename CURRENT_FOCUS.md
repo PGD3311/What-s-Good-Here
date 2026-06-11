@@ -2,95 +2,57 @@
 
 *Dan (or any Claude session starting work) updates this file at session start. Every other Claude session reads it first to avoid collisions.*
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-06-09
 
 ---
 
 ## Active handoff
 
-**v1.0 SHIPPED 2026-05-15 (same-day Apple approval). v1.1 status: 17 PRs merged (including #198 menu-refresh pipeline fixes, merged 2026-05-16). T42 data-quality sweep partially in flight — #3 (stale menus) jumped from "0 done" to "159 dishes refreshed/added" today.**
+**Parallel session active (2026-06-09):** `feat/menu-url-reachability` — menu-refresh URL-reachability fix (Gap 7), design doc committed (`5b5d9c5`). Don't touch menu-refresh surfaces without checking.
 
-9 days to Memorial Day (5/25). Web users get v1.1 continuously (Vercel auto-deploy on merge). **iOS users are still on v1.0** — Capacitor config has `webDir: 'dist'` with NO `server.url`, so iOS uses the locally bundled web assets. To push v1.1 to App Store users: `npm run build` → `npx cap sync ios` → Xcode archive → TestFlight → App Store review. None of the v1.1 PRs touched native iOS code, so the build is trivial; submission cycle is the only real cost.
+Also live: `build/v2.2-build1` is origin/main + one local iOS build commit (`0a44e33`), pending Dan's Xcode archive + submit.
 
-The bar from here is **care, not features** — every menu real, every restaurant open, every locals' list trustworthy.
+Where we are: **v1.0 shipped 5/15. v1.9 (build 5) shipped 5/31. v2.0 submitted 6/2** (rate-first UI + curator onboarding + add-dish discoverability). **v2.2 (build 1) cut 6/9** — profile redesign + locals tap-target/profile-link fixes (PRs #314–#316). Web users always current via Vercel; iOS lags by one submission cycle (Capacitor bundles `dist`, no `server.url` — frontend changes need a build, backend changes go live instantly).
 
-**Known parallel sessions:** Denis has 6 stale-ish open PRs from late April (#110, #111, #113, #115, #120, plus older). None blocking — review when you have a window. `fix/codex-hardening-wave-2` may still be live on Denis's side — confirm before touching shared surfaces.
-
----
-
-## v1.1 — what's DONE (since 5/15 launch)
-
-**Auth + onboarding polish**
-- ✅ #185 — email confirmation code exchange on web (live post-launch hotfix)
-- ✅ #186 — live "too short" username hint on auth input
-- ✅ #187 — closed-restaurant banner on dish page + friendlier "name taken" copy
-
-**Profile rebuild — the big push (5/15 → 5/16)**
-- ✅ #188 — re-add People tab on /profile for searching users
-- ✅ #189 — profile picture upload (your own profile, MVP)
-- ✅ #190 — inline people search above Your Food Story, drop People tab
-- ✅ #191 — UserProfile visual parity with own profile (avatar, food story, no share button)
-- ✅ #192 — drop Food Map + make Food Story items linkable
-- ✅ #194 — surface `avatar_url` everywhere users appear (Phase 2)
-- ✅ #196 — moderate avatar uploads + codex hardening (fail-closed, URL parsing, cache-busted moderation URL)
-- ✅ #197 — Seal `variant='icon'` everywhere — match iOS app icon across web
-
-**Search + UX**
-- ✅ #184 — post-launch cleanup (drop /10, dead favorites, reorder categories)
-- ✅ #195 — rank user search by follower count server-side (not after limit)
-
-**Legal**
-- ✅ #193 — remove home address from Privacy + Terms, add Denis as co-operator
-
-**Backlog scoping**
-- ✅ #182 — T42 data-quality sweep task defined
-- ✅ #183 — T42 #5 — local lists added to the sweep
-
-**Menu-refresh pipeline sprint (5/16) — PR #198 MERGED, deployed live to Denis's project**
-- 4 code fixes (each codex-reviewed): DNS-vs-Claude error classifier · direct-PDF Content-Type detection · base64 image mode for Claude vision (bypasses Anthropic robots.txt) · anchor-text-aware sub-page detection. 47 menu-candidates tests pass.
-- Triggered + verified live on 6 stale restaurants. Pipeline now handles direct-PDF responses (19 Raw +73 dishes) + ASPX/PHP sub-page navigation (Farm Neck +24 from PDFs found via the cafe menu hub). Mad Martha refreshed earlier (+24). Aalia's was a dead domain — corrected URL, but site is a JS-SPA the pipeline still can't extract from; **imported manually from screenshots (+38 dishes)**.
-- Bad Martha = Toast 403 (Toast actively blocks scrapers). Fundamentally unfixable from code — needs ~5 manual entries from their site copy ('pretzels, charcuterie, pizzas').
-- **159 fresh/new dishes landed today.** That's the first real chunk of T42 #3.
-- Two new v1.2 bugs surfaced during the sprint (saved to memory + tasks): coffee category missing (users asking to rate coffee), `is_offensive()` substring match on `spic` blocks any new dish/restaurant name containing `spicy`.
+The bar is still **care, not features** — every menu real, every restaurant open, every locals' list trustworthy.
 
 ---
 
-## v1.1 — what NEEDS WORK
+## Next up (in order)
 
-**Ship v1.1 — what's left**
+1. **#184 — mint-link signup redirect bug (Denis, 6/2, unanswered).** VERIFIED STILL BROKEN as of 6/9. PR #265 fixed the same-browser email-verification path only; the cross-device PKCE branch drops the destination: `AuthCallback.jsx:50-53` discards `safeNext` when the code verifier is missing (the normal mobile case — sign up in native app/in-app browser, open email in Safari), and `CrossDevicePkce.jsx:22` calls `signInWithMagicLink(email)` without the redirect arg it already supports. Fix: thread `safeNext` → cross-device state → `signInWithMagicLink(email, next)` → carry `?next` through the magic-link callback. **Two feature asks gated behind it:** shareable area-Top-10 mint link + "sign up & make your Top 10" link.
+2. **#181 — review Share to Instagram (PR #298, open since 6/2).** Denis needs Dan for (a) eyeballing the 1080×1080 canvas share card (`npm run dev` → playlist → share) and (b) Xcode rebuild + real-iPhone test (new `@capacitor/filesystem` dep). Not in the v2.2 build; could ride the next one.
+3. **Shareable Local Lists plan** — `docs/superpowers/plans/2026-05-27-shareable-local-lists.md` (untracked, never committed or executed). 8-task plan: clone-to-playlist RPC + Share/Save buttons on `/locals/:userId` + OG preview. Overlaps heavily with #184's feature asks — reconcile with Denis's version before building.
+4. **T42 data-quality sweep** (see `TASKS.md`) — #3 stale menus IN PROGRESS (pipeline works, cron rolling); #1 closed restaurants, #2 seasonal-not-open, #4 garbage dishes, #5 list hygiene NOT STARTED.
 
-1. **(Optional) Cut a v1.1 App Store build** — every web change is shipped; iOS users still on v1.0 bundle. New build is mechanical (`npm run build` → `cap sync ios` → archive → TestFlight → submit). No native code changes since v1.0 so submission risk is low.
-2. **T42 — Post-App-Store data quality sweep** (the main body of work, see `TASKS.md` for full spec, attack in order — no point refreshing menus for places that closed last year):
-   - **#1 Permanently closed restaurants** — pull `business_status` from Google Places for every restaurant with `google_place_id`. Hide `CLOSED_PERMANENTLY`. Flag `CLOSED_TEMPORARILY`. **NOT STARTED.**
-   - **#2 Seasonal restaurants not yet open** — no Google review in last 30 days = probably still dark. Flag with "Opens soon" badge or hide until first recent activity. **NOT STARTED.**
-   - **#3 Stale menus** — refresh anything where `menu_last_checked IS NULL OR < now() - interval '30 days'`. **IN PROGRESS** — 6 done today (5 via pipeline, 1 manual), ~30+ others still stale. The pipeline now actually works for most shapes; rolling the cron will drain the queue.
-   - **#4 Garbage dishes** — placeholder names (`^Item \d+$`), null prices, missing descriptions, missing category. Acceptance: zero placeholder-named dishes, reasonable coverage on top-ranked dishes. **NOT STARTED.**
-   - **#5 Local lists (curator top-10s)** — the trust front door. Find lists pointing at closed restaurants, orphaned dish refs, abandoned curators (< 10 items + > 60 days idle), empty lists, missing display_name, `is_local_curator = false` but visible. **NOT STARTED.**
+---
 
-**On "should we launch v1.1 to the App Store?"** — yes if you want iOS users on parity with web before Memorial Day. The build itself is one command (`npm run build && npx cap sync ios`); the real cost is Apple review (1-3 days, occasionally + 1 rejection cycle). At 9 days to Memorial Day you still have margin for a rejection cycle if you submit in the next ~3 days. After the build is up, T42 #1 (closed-restaurant Google Places check) is the highest-leverage next move — kills credibility risk from showing closed restaurants over Memorial Day weekend.
+## Waiting on Denis (nudges sent, no replies)
 
-**Smaller post-launch items (not blocking T42 but worth keeping in view)**
+- **#174 / #180** — Jitter strategy reframe (liveness + App Attest) + iOS-keystroke-dead bug. Silent since 6/1. No more jitter work ships until he responds.
+- **#182** — CHECK-constraint-on-mutable-rows pattern still on `restaurants.name`, `profiles.display_name`, `votes.review_text` — his call.
+- **#185** — QR codes handoff (6/9, `marketing/qr-codes/`, pointing at wghapp.com).
 
-- **Issue #156** — Unify email auth on `verifyOtp` + `token_hash`, retire `exchangeCodeForSession` pipeline (post-launch refactor — was parked behind launch, still worth doing)
-- **Browser E2E realignment** — 6 of 13 browser-chromium specs drifted (`/hub` removed, locals UI redesigned, restaurants/browse selectors changed). Per-spec UI realignment, PR-sized.
-- **Denis's open PRs (5)** — review #110 (Call button on dish), #111 ("You're here" badge), #113 (search bar unify), #115 (B2B metrics doc), #120 (Oak Bluffs menu tooling). Some may have bitrotted in 3 weeks — assess before merging.
+Hotline housekeeping: #175/#176/#183 + ~15 FYI threads (#155–#171) are resolved but never closed. Unexpected third account (TerFree70) commented on #171 on 5/28 — glance at it.
 
-**Pre-existing post-launch backlog** (still parked, not v1.1 scope unless reprioritized)
-- Ask WGH v1 — conversational AI dish finder. Was P1 in memory but smart call was to wait for real user data to calibrate prompts against.
-- Jitter WAR v2 — keystroke biometrics for review trust. Wait for review volume.
-- Toast POS integration — Order Now buttons with auto-detected slugs (Denis-led).
-- Check In + action buttons (Order/Directions/Call) on dishes + restaurants (Denis-led; #110 + #111 are partial).
-- Scoring history, FriendsFeed, TastePersonalityCard, Specials/events/hub (Launch 2.0+).
+---
+
+## Known issues / debt
+
+- **Browser E2E broken on main** — geolocation permission not granted in `playwright.config.js`; `[data-dish-id]` never visible. ~30min fix, affects all homepage-touching specs.
+- **Menu-refresh Path A vs Path B consolidation** — post-launch P0 per Codex (Path B: dumber extractor, no locking).
+- **Issue #156** — unify email auth on `verifyOtp` + `token_hash`, retire `exchangeCodeForSession` (related surface to the #184 fix — don't let them collide).
+- **DEVLOG.md** — no entry since 2/25; either backfill or stop pretending it's current.
+- Untracked `deno.lock` in the working tree (from Deno CI work) — commit or ignore.
 
 ---
 
 ## Daily ritual
 
-Post-launch:
 1. Check inbox for App Store / TestFlight notifications, `wghapp@wghapp.com` for user reports
-2. Check Sentry for unexpected error spikes — first real-user traffic is the most informative
-3. Check Agent Phone for messages from Denis's Claude (`gh issue list --repo Denisgingras75/wgh-phone --state open --label "📨 for-dan"`)
-4. Run major changes through Codex CLI before pushing (`/codex-cli`)
+2. Check Sentry for unexpected error spikes
+3. Check Agent Phone (`gh issue list --repo Denisgingras75/wgh-phone --state open --label "📨 for-dan"`)
+4. Run major changes through Codex CLI before pushing (`/codex-cli`), one fix at a time
 
 ---
 
@@ -99,12 +61,9 @@ Post-launch:
 | Topic | File |
 |---|---|
 | Post-launch data quality sweep | `TASKS.md` → T42 |
-| Launch readiness checklist (now historical) | `LAUNCH-READINESS.md` |
-| ASC description (Dan's voice) | `docs/superpowers/specs/2026-05-13-app-store-description.md` |
-| ASC submission paste guide | `docs/superpowers/specs/2026-05-06-app-store-submission-day.md` |
-| Reviewer notes copy | `docs/superpowers/specs/2026-05-03-app-store-reviewer-notes.md` |
-| Privacy nutrition labels | `docs/app-store-connect-privacy-details.md` |
-| What's New v1.0 copy | `docs/superpowers/specs/2026-05-06-app-store-whats-new.md` |
+| Shareable local lists plan (unexecuted) | `docs/superpowers/plans/2026-05-27-shareable-local-lists.md` |
+| Share to Instagram design/plan | `docs/superpowers/specs/2026-06-01-share-to-instagram-design.md` (in PR #298) |
+| Launch readiness checklist (historical) | `LAUNCH-READINESS.md` |
 | JWT generator script (Apple) | `scripts/generate-apple-client-secret.mjs` (KEY_ID = 9LL6V25287, expires 2026-11-04) |
 
 ---
@@ -116,4 +75,4 @@ Post-launch:
 - **If `Last updated` is >24h old, treat the file as stale** — ask Dan what's current.
 - **Always Codex-review before shipping** — `/codex-cli` per fix, not batched.
 - **One active handoff per surface.** Parallel sessions OK if scopes don't overlap; append a second handoff block.
-- **Tasks are the canonical to-do.** T42 in `TASKS.md` is the source of truth for v1.1 data-quality work.
+- **Tasks are the canonical to-do.** T42 in `TASKS.md` is the source of truth for data-quality work.

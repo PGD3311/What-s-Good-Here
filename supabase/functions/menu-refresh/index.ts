@@ -1384,6 +1384,26 @@ async function runDrinkRecovery(
   return { dishes: drinkDishes, sections: result!.menu_section_order, telemetry }
 }
 
+// Block-like target statuses worth a residential-proxy retry. NOT all 4xx —
+// BrowserlessError 'TARGET_ERROR' fires for any target >= 400, so escalating on
+// 404/410/500 would waste residential units.
+const UNBLOCK_RETRY_STATUSES = new Set([401, 403, 429, 503])
+
+/**
+ * fetchRenderedHtml wrapper: on a target-side BLOCK (401/403/429/503), retry
+ * once through the residential /unblock proxy. Non-block errors propagate.
+ */
+async function renderWithUnblockFallback(url: string, opts: Parameters<typeof fetchRenderedHtml>[1] = {}): Promise<string> {
+  try {
+    return await fetchRenderedHtml(url, opts)
+  } catch (err) {
+    if (err instanceof BrowserlessError && UNBLOCK_RETRY_STATUSES.has(err.status)) {
+      return await fetchRenderedHtml(url, { ...opts, useUnblock: true })
+    }
+    throw err
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -1566,24 +1586,51 @@ serve(async (req) => {
           }
 
           // --- Fetch + extract (with render fallback for JS-rendered sites) ---
-          let fetchResult: MenuFetchResult
+          // eslint-disable-next-line prefer-const
+          let fetchResult: MenuFetchResult = null!
+          let prefetchRendered = false
           try {
             fetchResult = await fetchRawHtml(menuUrl)
           } catch (fetchErr) {
             const classified = classifyError(fetchErr)
-            const newAttemptCount = job.attempt_count + 1
-            await supabase.from('menu_import_jobs').update({
-              status: newAttemptCount >= job.max_attempts ? 'dead' : 'pending',
-              attempt_count: newAttemptCount,
-              run_after: newAttemptCount >= job.max_attempts ? undefined : calculateBackoff(newAttemptCount).toISOString(),
-              error_code: classified.code,
-              error_message: classified.message,
-              error_context: { ...classified.context, menu_url: menuUrl },
-              lock_expires_at: null,
-              updated_at: new Date().toISOString(),
-            }).eq('id', job.id)
-            results.push({ job_id: job.id, status: 'fetch_failed', restaurant: restaurant.name, error: classified.code })
-            continue
+            // Recovery: if the raw fetch was blocked (401/403/429/503), attempt
+            // a residential-proxy render before declaring fetch_failed. On
+            // success, synthesize an html fetchResult and fall through to normal
+            // processing; on failure, keep today's fetch_failed behaviour.
+            let recovered = false
+            if (
+              classified.code === 'fetch_error' &&
+              ['401', '403', '429', '503'].includes(String(classified.context?.http_status))
+            ) {
+              try {
+                const html = await renderWithUnblockFallback(menuUrl, { useUnblock: true, gotoTimeout: 45000, waitForTimeoutMs: 12000 })
+                const recoveredText = extractMenuTextFromHtml(html)
+                if (recoveredText.length >= 50) {
+                  fetchResult = { type: 'html', html }
+                  prefetchRendered = true
+                  recovered = true
+                } else {
+                  throw new Error('unblock recovery empty')
+                }
+              } catch {
+                // fall through to fetch_failed below
+              }
+            }
+            if (!recovered) {
+              const newAttemptCount = job.attempt_count + 1
+              await supabase.from('menu_import_jobs').update({
+                status: newAttemptCount >= job.max_attempts ? 'dead' : 'pending',
+                attempt_count: newAttemptCount,
+                run_after: newAttemptCount >= job.max_attempts ? undefined : calculateBackoff(newAttemptCount).toISOString(),
+                error_code: classified.code,
+                error_message: classified.message,
+                error_context: { ...classified.context, menu_url: menuUrl },
+                lock_expires_at: null,
+                updated_at: new Date().toISOString(),
+              }).eq('id', job.id)
+              results.push({ job_id: job.id, status: 'fetch_failed', restaurant: restaurant.name, error: classified.code })
+              continue
+            }
           }
 
           // Direct-PDF shortcut: menu_url served `application/pdf` (Squarespace
@@ -1704,7 +1751,7 @@ serve(async (req) => {
           const rawText = extractMenuTextFromHtml(rawHtml)
           const rawTextLen = rawText.length
           let extractionContent = rawText
-          let rendererAttempted = false
+          let rendererAttempted = prefetchRendered
           let renderSucceeded = false
           let renderError: string | null = null
           let renderedTextLen: number | null = null
@@ -1804,12 +1851,13 @@ serve(async (req) => {
             }
           }
 
-          // Render fallback #1: content too short AND CMS requires rendering
-          if (extractionContent.length < 50 && cmsRequiresRender(cms)) {
-            console.log(`${restaurant.name}: content too short + ${cms} CMS, attempting render fallback`)
+          // Render fallback #1: content too short — fire for ANY JS shell,
+          // not just known CMSs. An empty text body is a JS shell by definition.
+          if (extractionContent.length < 50) {
+            console.log(`${restaurant.name}: content too short (cms: ${cms}), attempting render fallback`)
             rendererAttempted = true  // mark ATTEMPTED regardless of outcome
             try {
-              const renderedHtml = await fetchRenderedHtml(menuUrl, {
+              const renderedHtml = await renderWithUnblockFallback(menuUrl, {
                 gotoTimeout: 45000,
                 waitForTimeoutMs: 12000,  // Wix needs time to hydrate menu API data
               })
@@ -1818,8 +1866,11 @@ serve(async (req) => {
               if (renderedText.length >= 50) {
                 extractionContent = renderedText
                 renderSucceeded = true
-                // Re-discover candidates from the rendered HTML — JS-injected menu
-                // PDFs/images are invisible in raw HTML.
+              }
+              // Always re-discover candidates from the rendered HTML, even when
+              // renderedText is short — a JS-injected menu image/PDF link is
+              // useful even with near-zero body text.
+              if (renderedHtml.length > 0) {
                 candidates = mergeCandidates(candidates, discoverMenuCandidates(renderedHtml, menuUrl))
               }
             } catch (renderErr) {
@@ -1828,7 +1879,16 @@ serve(async (req) => {
             }
           }
 
-          if (extractionContent.length < 50) {
+          // Only bail here when there is neither usable text NOR any asset
+          // candidate to try — a render may have surfaced PDF/image candidates
+          // even when body text is thin, and asset extraction at ~1807 will
+          // try those candidates when we survive this guard.
+          if (extractionContent.length < 50 && candidates.length === 0) {
+            // If we already attempted a render and still can't read the page,
+            // flag it for manual import so it surfaces in the queue.
+            if (rendererAttempted) {
+              await supabase.from('restaurants').update({ needs_manual_menu: true }).eq('id', restaurant.id)
+            }
             const classified = classifyError(null, 'page_too_short')
             const newAttemptCount = job.attempt_count + 1
             await supabase.from('menu_import_jobs').update({
@@ -2101,7 +2161,7 @@ serve(async (req) => {
             console.log(`${restaurant.name}: Sonnet found 0 dishes in ${cms} site, attempting render fallback`)
             rendererAttempted = true  // mark ATTEMPTED regardless of outcome
             try {
-              const renderedHtml = await fetchRenderedHtml(menuUrl, {
+              const renderedHtml = await renderWithUnblockFallback(menuUrl, {
                 gotoTimeout: 45000,
                 waitForTimeoutMs: 12000,  // Wix needs time to hydrate menu API data
               })
