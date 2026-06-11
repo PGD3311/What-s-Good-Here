@@ -1,5 +1,5 @@
 -- Menu X-Ray (2026-06-11): menu_scans audit table, private storage bucket,
--- batch pg_trgm match RPC, fail-closed rate limiters, dishes name trgm index.
+-- batch pg_trgm match RPC, fail-closed rate limiters.
 -- All additive (CREATE IF NOT EXISTS / OR REPLACE / ON CONFLICT DO NOTHING).
 -- No rollback block needed: drop the new objects to revert; nothing existing is altered.
 
@@ -30,9 +30,10 @@ VALUES ('menu-scans', 'menu-scans', false, 5242880,
 ON CONFLICT (id) DO NOTHING;
 -- No storage.objects policies: private bucket, service-role-only read/write.
 
--- 3. Trigram index for name matching ------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_dishes_name_trgm
-  ON dishes USING gin (lower(name) gin_trgm_ops);
+-- 3. (No trigram index.) match_menu_dishes scores similarity() over a
+-- regexp-normalized expression scoped to one restaurant's dishes (~50-200
+-- rows) — a GIN trgm index on name would never be used by that access
+-- pattern (similarity() in ORDER BY doesn't use trgm indexes; only % / <-> do).
 
 -- 4. Batch match RPC -----------------------------------------------------------
 -- Returns the TOP TWO candidates per query name (rank 1 and 2) so the edge
@@ -64,7 +65,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
            similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) AS s,
            ROW_NUMBER() OVER (
              PARTITION BY normalized.qname
-             ORDER BY similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) DESC
+             ORDER BY similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) DESC,
+                      d.total_votes DESC, d.id
            ) AS rn
     FROM normalized
     JOIN dishes d ON d.restaurant_id = p_restaurant_id
@@ -130,3 +132,16 @@ BEGIN
   RETURN jsonb_build_object('allowed', true);
 END;
 $$;
+
+-- 6. Grants ----------------------------------------------------------------------
+-- Lock down who can call the new functions. The match RPC and strict IP
+-- limiter are edge-function-only (service role); the two user wrappers are
+-- called with the end-user's JWT (authenticated role).
+REVOKE EXECUTE ON FUNCTION match_menu_dishes(UUID, TEXT[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION match_menu_dishes(UUID, TEXT[]) TO service_role;
+REVOKE EXECUTE ON FUNCTION check_and_record_ip_rate_limit_strict(TEXT, TEXT, INT, INT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION check_and_record_ip_rate_limit_strict(TEXT, TEXT, INT, INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION check_menu_scan_rate_limit() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_menu_scan_rate_limit() TO authenticated;
+REVOKE EXECUTE ON FUNCTION check_menu_ingest_rate_limit() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_menu_ingest_rate_limit() TO authenticated;

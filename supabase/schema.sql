@@ -500,9 +500,11 @@ CREATE INDEX IF NOT EXISTS idx_dishes_restaurant_toplevel ON dishes(restaurant_i
 CREATE INDEX IF NOT EXISTS idx_dishes_consensus_eligible ON dishes(id) WHERE total_votes >= 5 AND avg_rating IS NOT NULL;
 CREATE INDEX IF NOT EXISTS dishes_dietary_tags_idx ON dishes USING GIN (dietary_tags);
 CREATE INDEX IF NOT EXISTS dishes_description_trgm_idx ON dishes USING GIN (description gin_trgm_ops);
--- Menu X-Ray: accelerates similarity() name matching in match_menu_dishes.
-CREATE INDEX IF NOT EXISTS idx_dishes_name_trgm
-  ON dishes USING gin (lower(name) gin_trgm_ops);
+-- Menu X-Ray: deliberately NO trigram index on dishes.name. match_menu_dishes
+-- scores similarity() over a regexp-normalized expression scoped to one
+-- restaurant's dishes (~50-200 rows) — a GIN trgm index on name would never be
+-- used by that access pattern (similarity() in ORDER BY doesn't use trgm
+-- indexes; only % / <-> do).
 
 -- votes
 CREATE INDEX IF NOT EXISTS idx_votes_dish ON votes(dish_id);
@@ -3899,6 +3901,17 @@ GRANT EXECUTE ON FUNCTION get_ranked_dishes(DECIMAL, DECIMAL, INT, TEXT, TEXT, T
 GRANT EXECUTE ON FUNCTION get_restaurant_dishes(UUID) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_dish_variants(UUID) TO anon, authenticated;
 
+-- Menu X-Ray: the strict IP limiter is edge-function-only (service role); the
+-- two user wrappers are called with the end-user's JWT (authenticated role).
+-- (match_menu_dishes grants live next to its definition further down — the
+-- function isn't created yet at this point in the file.)
+REVOKE EXECUTE ON FUNCTION check_and_record_ip_rate_limit_strict(TEXT, TEXT, INT, INT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION check_and_record_ip_rate_limit_strict(TEXT, TEXT, INT, INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION check_menu_scan_rate_limit() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_menu_scan_rate_limit() TO authenticated;
+REVOKE EXECUTE ON FUNCTION check_menu_ingest_rate_limit() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_menu_ingest_rate_limit() TO authenticated;
+
 
 -- =============================================
 -- 15. STORAGE POLICIES
@@ -4296,7 +4309,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
            similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) AS s,
            ROW_NUMBER() OVER (
              PARTITION BY normalized.qname
-             ORDER BY similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) DESC
+             ORDER BY similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) DESC,
+                      d.total_votes DESC, d.id
            ) AS rn
     FROM normalized
     JOIN dishes d ON d.restaurant_id = p_restaurant_id
@@ -4306,6 +4320,10 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   FROM ranked
   WHERE ranked.rn <= 2 AND ranked.s > 0.30;
 $$;
+
+-- Edge-function-only: callers go through the menu-xray function (service role).
+REVOKE EXECUTE ON FUNCTION match_menu_dishes(UUID, TEXT[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION match_menu_dishes(UUID, TEXT[]) TO service_role;
 
 -- =============================================
 -- Section 22: Account Deletion (Apple Guideline 5.1.1(v))
