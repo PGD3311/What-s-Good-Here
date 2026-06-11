@@ -25,8 +25,13 @@ function json(req: Request, status: number, body: unknown): Response {
   })
 }
 function clientIp(req: Request): string {
-  return req.headers.get('cf-connecting-ip')
-    || (req.headers.get('x-forwarded-for') || '').split(',')[0].trim()
+  // cf-connecting-ip is set by the trusted edge and can't be client-forged.
+  // For x-forwarded-for, proxies APPEND — the FIRST entry is client-suppliable,
+  // so take the LAST (added by the proxy closest to us).
+  const cf = req.headers.get('cf-connecting-ip')
+  if (cf) return cf.trim()
+  const xff = (req.headers.get('x-forwarded-for') || '').split(',').map((s) => s.trim()).filter(Boolean)
+  return xff.length > 0 ? xff[xff.length - 1] : ''
 }
 
 Deno.serve(async (req) => {
@@ -53,6 +58,10 @@ Deno.serve(async (req) => {
     const { data: { user } } = await authClient.auth.getUser()
 
     // Rate limit: user-keyed for logged-in, fail-closed IP for guests.
+    // Known trade-off: a rate-limited user can log out and get the guest IP
+    // quota (10/hr) on top — bounded at ~$0.30/hr/IP of LLM spend, and we
+    // deliberately don't IP-limit logged-in users because island restaurant
+    // wifi + carrier CGNAT put many legit users behind one IP.
     if (user) {
       const { data: rl } = await authClient.rpc('check_menu_scan_rate_limit')
       if (!rl?.allowed) return json(req, 429, { error: rl?.message || 'Rate limited', retry_after: rl?.retry_after_seconds })
@@ -133,10 +142,13 @@ Deno.serve(async (req) => {
         .upload(scanFile, bytes, { contentType: media_type })
       if (!upErr) photoPath = scanFile
     }
-    await service.from('menu_scans').insert({
+    // Audit logging must never turn a successful scan into a 500 — by this
+    // point the user-visible work (and any ingest) already happened.
+    const { error: auditError } = await service.from('menu_scans').insert({
       restaurant_id, user_id: user?.id ?? null, photo_path: photoPath,
       extracted: { dishes: items }, matched_count: accepted.size, ingested_count: ingested.length,
     })
+    if (auditError) console.error('[menu-xray] audit insert failed:', auditError.message)
 
     // ---- Response payload ----
     const sectionOrder: string[] = []
