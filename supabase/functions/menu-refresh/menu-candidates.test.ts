@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverDrinkCandidates, discoverMenuCandidates, findDrinkSubPages, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
+import { discoverDrinkCandidates, discoverMenuCandidates, findBestMenuLink, findDrinkSubPages, findMenuIframes, findSubMenuPages, isBlockedHostname, isKnownMenuIframeHost, scoreCandidate, scoreDrinkCandidate } from './menu-candidates.ts'
 
 describe('scoreCandidate', () => {
   it('positive: menu in URL', () => {
@@ -843,5 +843,164 @@ describe('isKnownMenuIframeHost', () => {
   it('normalizes trailing dot (DNS-equivalent FQDN forms)', () => {
     expect(isKnownMenuIframeHost('popmenu.com.')).toBe(true)
     expect(isKnownMenuIframeHost('order.popmenu.com.')).toBe(true)
+  })
+})
+
+describe('findBestMenuLink', () => {
+  const base = 'https://www.example-restaurant.com/'
+
+  it('picks /menu over /about', () => {
+    const html = `
+      <nav>
+        <a href="/menu">Menu</a>
+        <a href="/about">About Us</a>
+        <a href="/contact">Contact</a>
+      </nav>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBe('https://www.example-restaurant.com/menu')
+  })
+
+  it('prefers a "menu"-texted link over a bare /food link', () => {
+    const html = `
+      <nav>
+        <a href="/food">Our food</a>
+        <a href="/dining">Dining</a>
+        <a href="/explore">See the Menu</a>
+      </nav>
+    `
+    const result = findBestMenuLink(html, base)
+    // /explore has anchor text "See the Menu" — menu token in text wins
+    expect(result).toBe('https://www.example-restaurant.com/explore')
+  })
+
+  it('rejects cross-origin links', () => {
+    const html = `
+      <a href="https://other-site.com/menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBeNull()
+  })
+
+  it('accepts a menu.<base> subdomain as same-site', () => {
+    const html = `
+      <a href="https://menu.example-restaurant.com/">View Menu</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBe('https://menu.example-restaurant.com/')
+  })
+
+  it('accepts www.base when base has no www', () => {
+    const html = `<a href="https://www.example-restaurant.com/food-menu">Food Menu</a>`
+    const result = findBestMenuLink(html, 'https://example-restaurant.com/')
+    expect(result).toBe('https://www.example-restaurant.com/food-menu')
+  })
+
+  it('rejects PDF hrefs', () => {
+    const html = `
+      <a href="/menu.pdf">Menu</a>
+      <a href="/food">Food</a>
+    `
+    const result = findBestMenuLink(html, base)
+    // /food has score +3, /menu.pdf should be skipped; /food has no menu token so score 3 only
+    expect(result).toBe('https://www.example-restaurant.com/food')
+  })
+
+  it('rejects image hrefs', () => {
+    const html = `
+      <a href="/menu.png">Menu Photo</a>
+      <a href="/our-menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBe('https://www.example-restaurant.com/our-menu')
+  })
+
+  it('returns null when no eligible menu link exists', () => {
+    const html = `
+      <a href="/about">About</a>
+      <a href="/contact">Contact</a>
+      <a href="/reservations">Reservations</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBeNull()
+  })
+
+  it('excludes a /drinks link (negative score)', () => {
+    const html = `
+      <a href="/drinks">Drinks</a>
+      <a href="/wine">Wine List</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBeNull()
+  })
+
+  it('excludes a /catering link (negative score)', () => {
+    const html = `
+      <a href="/catering">Catering</a>
+      <a href="/events">Events</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBeNull()
+  })
+
+  it('returns null when all links are below score threshold', () => {
+    // /about scores -5, cocktails scores -4 — all negative
+    const html = `
+      <a href="/about">About</a>
+      <a href="/cocktails">Cocktails</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBeNull()
+  })
+
+  it('skips the base page itself (self-link)', () => {
+    const html = `
+      <a href="/">Home</a>
+      <a href="https://www.example-restaurant.com/">Root</a>
+      <a href="/food">Food</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBe('https://www.example-restaurant.com/food')
+  })
+
+  it('skips www-alias self-link at root (foo.com base, www.foo.com/ link)', () => {
+    // A site whose homepage is foo.com/ emitting a canonical link to www.foo.com/
+    // is a self-link — it must never surface as a menu candidate.
+    const html = `
+      <a href="https://www.example-restaurant.com/">Home</a>
+      <a href="/menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, 'https://example-restaurant.com/')
+    expect(result).toBe('https://example-restaurant.com/menu')
+  })
+
+  it('skips bare-alias self-link at root (www.foo.com base, foo.com/ link)', () => {
+    const html = `
+      <a href="https://example-restaurant.com/">Home</a>
+      <a href="/menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, 'https://www.example-restaurant.com/')
+    expect(result).toBe('https://www.example-restaurant.com/menu')
+  })
+
+  it('does NOT skip menu.<base> root — that is a genuine menu subdomain', () => {
+    // menu.example-restaurant.com/ is a different host from the base;
+    // the www-alias root skip must not fire here.
+    const html = `
+      <a href="https://menu.example-restaurant.com/">View Menu</a>
+    `
+    const result = findBestMenuLink(html, 'https://www.example-restaurant.com/')
+    expect(result).toBe('https://menu.example-restaurant.com/')
+  })
+
+  it('tiebreaks by shorter pathname when both have menu token and same score', () => {
+    // Both links contain the menu token and score identically (menu +5 in path,
+    // same anchor text). Shorter pathname wins.
+    const html = `
+      <a href="/view-our-menu/page">Menu</a>
+      <a href="/menu">Menu</a>
+    `
+    const result = findBestMenuLink(html, base)
+    expect(result).toBe('https://www.example-restaurant.com/menu')
   })
 })
