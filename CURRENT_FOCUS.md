@@ -2,11 +2,13 @@
 
 *Dan (or any Claude session starting work) updates this file at session start. Every other Claude session reads it first to avoid collisions.*
 
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-10
 
 ---
 
 ## Active handoff
+
+**Menu X-Ray session (Dan, 2026-06-10, branch `feat/menu-xray`) — building the hero feature:** scan a physical menu → Claude vision extracts → pg_trgm match → rating chips → quiet menu ingest. Spec: `docs/superpowers/specs/2026-06-10-menu-xray-design.md` · Plan: `docs/superpowers/plans/2026-06-10-menu-xray.md`. Validation spike PASSED 7/7 on real menu photos. **Claimed surfaces:** `supabase/functions/menu-xray/` (new), `src/components/scan/` (new), `src/pages/ScanMenu.jsx` (new), `src/utils/verdict.js`, `src/api/menuScanApi.js`, `src/hooks/useMenuScan.js`, `src/App.jsx` (/scan route), `src/pages/RestaurantDetail.jsx` (header button), `supabase/schema.sql` (appending menu_scans table + 4 RPCs). Reads menu-refresh code but NEVER edits it.
 
 **Parallel session active (2026-06-09):** `feat/menu-url-reachability` — menu-refresh URL-reachability fix (Gap 7), design doc committed (`5b5d9c5`). Don't touch menu-refresh surfaces without checking.
 
