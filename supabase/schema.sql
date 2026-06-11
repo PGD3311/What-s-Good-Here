@@ -432,6 +432,21 @@ CREATE TABLE IF NOT EXISTS pending_apple_revocations (
   )
 );
 
+-- 1y. menu_scans (Menu X-Ray: audit log of menu-photo scans)
+-- One row per scan; written by the menu-scan Edge Function via service role.
+CREATE TABLE IF NOT EXISTS menu_scans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,   -- NULL = guest scan
+  photo_path TEXT,                                             -- NULL for guests (no photo retained)
+  extracted JSONB,
+  matched_count INT NOT NULL DEFAULT 0,
+  ingested_count INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_menu_scans_restaurant ON menu_scans(restaurant_id, created_at DESC);
+
 -- 1v. category_median_prices (view)
 -- SECURITY INVOKER ensures this runs with the querying user's permissions, not the creator's
 CREATE OR REPLACE VIEW category_median_prices
@@ -485,6 +500,11 @@ CREATE INDEX IF NOT EXISTS idx_dishes_restaurant_toplevel ON dishes(restaurant_i
 CREATE INDEX IF NOT EXISTS idx_dishes_consensus_eligible ON dishes(id) WHERE total_votes >= 5 AND avg_rating IS NOT NULL;
 CREATE INDEX IF NOT EXISTS dishes_dietary_tags_idx ON dishes USING GIN (dietary_tags);
 CREATE INDEX IF NOT EXISTS dishes_description_trgm_idx ON dishes USING GIN (description gin_trgm_ops);
+-- Menu X-Ray: deliberately NO trigram index on dishes.name. match_menu_dishes
+-- scores similarity() over a regexp-normalized expression scoped to one
+-- restaurant's dishes (~50-200 rows) — a GIN trgm index on name would never be
+-- used by that access pattern (similarity() in ORDER BY doesn't use trgm
+-- indexes; only % / <-> do).
 
 -- votes
 CREATE INDEX IF NOT EXISTS idx_votes_dish ON votes(dish_id);
@@ -777,6 +797,11 @@ ALTER TABLE user_apple_tokens ENABLE ROW LEVEL SECURITY;
 
 -- pending_apple_revocations: service-role only. No policies for authenticated role = deny all.
 ALTER TABLE pending_apple_revocations ENABLE ROW LEVEL SECURITY;
+
+-- menu_scans: users read own scans; inserts via service role only (no INSERT policy on purpose).
+ALTER TABLE menu_scans ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "menu_scans_select_own" ON menu_scans
+  FOR SELECT USING (menu_scans.user_id = (SELECT auth.uid()));
 
 -- jitter_profiles + jitter_samples: users can read own profile, insert own samples, service role manages all
 ALTER TABLE jitter_profiles ENABLE ROW LEVEL SECURITY;
@@ -2253,6 +2278,50 @@ BEGIN
 END;
 $$;
 
+-- Guest menu scans (Menu X-Ray): FAIL-CLOSED IP limiter. Unlike
+-- check_and_record_ip_rate_limit (fail-open, fine for Places proxies behind
+-- Google quotas), this endpoint burns LLM tokens — unverifiable callers are
+-- rejected.
+CREATE OR REPLACE FUNCTION check_and_record_ip_rate_limit_strict(
+  p_ip TEXT, p_action TEXT, p_max_attempts INT DEFAULT 10, p_window_seconds INT DEFAULT 3600
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_ip INET;
+  v_count INT;
+  v_oldest TIMESTAMPTZ;
+  v_cutoff TIMESTAMPTZ;
+  v_retry_after INT;
+BEGIN
+  IF p_ip IS NULL OR length(trim(p_ip)) = 0 THEN
+    RETURN jsonb_build_object('allowed', false, 'message', 'Could not verify request origin.');
+  END IF;
+  BEGIN
+    v_ip := p_ip::INET;
+  EXCEPTION WHEN others THEN
+    RETURN jsonb_build_object('allowed', false, 'message', 'Could not verify request origin.');
+  END;
+
+  v_cutoff := NOW() - (p_window_seconds || ' seconds')::INTERVAL;
+
+  SELECT COUNT(*), MIN(ip_rate_limits.created_at) INTO v_count, v_oldest
+  FROM ip_rate_limits
+  WHERE ip_rate_limits.ip_address = v_ip
+    AND ip_rate_limits.action = p_action
+    AND ip_rate_limits.created_at > v_cutoff;
+
+  IF v_count >= p_max_attempts THEN
+    v_retry_after := EXTRACT(EPOCH FROM (v_oldest + (p_window_seconds || ' seconds')::INTERVAL - NOW()))::INT;
+    IF v_retry_after < 0 THEN v_retry_after := 0; END IF;
+    RETURN jsonb_build_object('allowed', false, 'retry_after_seconds', v_retry_after,
+      'message', 'Too many requests. Please wait ' || v_retry_after || ' seconds.');
+  END IF;
+
+  INSERT INTO ip_rate_limits (ip_address, action) VALUES (v_ip, p_action);
+  RETURN jsonb_build_object('allowed', true);
+END;
+$$;
+
 -- Atomic user vote upsert. Targets the partial unique index:
 -- votes_user_unique ON votes (dish_id, user_id) WHERE source = 'user'.
 -- DROP guarantees replay against an existing DB with the pre-Phase-2 signature
@@ -2331,6 +2400,18 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 CREATE OR REPLACE FUNCTION check_photo_upload_rate_limit()
 RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   SELECT check_and_record_rate_limit('photo_upload', 5, 60);
+$$;
+
+-- Convenience: Menu X-Ray logged-in scan rate limiting (5 per minute)
+CREATE OR REPLACE FUNCTION check_menu_scan_rate_limit()
+RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT check_and_record_rate_limit('menu_scan', 5, 60);
+$$;
+
+-- Convenience: Menu X-Ray ingest throttle (at most 3 ingesting scans per user per hour)
+CREATE OR REPLACE FUNCTION check_menu_ingest_rate_limit()
+RETURNS JSONB LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT check_and_record_rate_limit('menu_scan_ingest', 3, 3600);
 $$;
 
 
@@ -3820,6 +3901,17 @@ GRANT EXECUTE ON FUNCTION get_ranked_dishes(DECIMAL, DECIMAL, INT, TEXT, TEXT, T
 GRANT EXECUTE ON FUNCTION get_restaurant_dishes(UUID) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_dish_variants(UUID) TO anon, authenticated;
 
+-- Menu X-Ray: the strict IP limiter is edge-function-only (service role); the
+-- two user wrappers are called with the end-user's JWT (authenticated role).
+-- (match_menu_dishes grants live next to its definition further down — the
+-- function isn't created yet at this point in the file.)
+REVOKE EXECUTE ON FUNCTION check_and_record_ip_rate_limit_strict(TEXT, TEXT, INT, INT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION check_and_record_ip_rate_limit_strict(TEXT, TEXT, INT, INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION check_menu_scan_rate_limit() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_menu_scan_rate_limit() TO authenticated;
+REVOKE EXECUTE ON FUNCTION check_menu_ingest_rate_limit() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION check_menu_ingest_rate_limit() TO authenticated;
+
 
 -- =============================================
 -- 15. STORAGE POLICIES
@@ -3845,6 +3937,15 @@ CREATE POLICY "dish_photos_update_own" ON storage.objects
 DROP POLICY IF EXISTS "dish_photos_delete_own" ON storage.objects;
 CREATE POLICY "dish_photos_delete_own" ON storage.objects
   FOR DELETE USING (bucket_id = 'dish-photos' AND (select auth.uid()) = owner);
+
+-- menu-scans bucket (Menu X-Ray): private, service-role-only read/write —
+-- no storage.objects policies on purpose. Client converts HEIC -> JPEG before
+-- upload (canvas re-encode), and Anthropic only accepts jpeg/png/webp/gif,
+-- so the allowlist is deliberately narrow.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('menu-scans', 'menu-scans', false, 5242880,
+        ARRAY['image/jpeg', 'image/png', 'image/webp'])
+ON CONFLICT (id) DO NOTHING;
 
 
 -- =============================================
@@ -4177,6 +4278,52 @@ SELECT cron.schedule(
   ON CONFLICT (restaurant_id) WHERE status IN ('pending', 'processing') DO NOTHING
   $$
 );
+
+-- RPC: match_menu_dishes (Menu X-Ray batch pg_trgm matcher)
+-- Returns the TOP TWO candidates per query name (rank 1 and 2) so the edge
+-- function can apply the accept rule (threshold + top1-vs-top2 margin) and a
+-- category tiebreak. 0.30 floor just trims noise; the real accept threshold
+-- lives in the edge function.
+CREATE OR REPLACE FUNCTION match_menu_dishes(p_restaurant_id UUID, p_names TEXT[])
+RETURNS TABLE (
+  query_name TEXT,
+  rank INT,
+  dish_id UUID,
+  dish_name TEXT,
+  dish_category TEXT,
+  avg_rating DECIMAL,
+  total_votes BIGINT,
+  price DECIMAL,
+  sim REAL
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  WITH queries AS (
+    SELECT unnest(p_names) AS qname
+  ), normalized AS (
+    SELECT queries.qname,
+           trim(regexp_replace(lower(queries.qname), '[^a-z0-9]+', ' ', 'g')) AS qnorm
+    FROM queries
+  ), ranked AS (
+    SELECT normalized.qname,
+           d.id, d.name, d.category, d.avg_rating, d.total_votes, d.price,
+           similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) AS s,
+           ROW_NUMBER() OVER (
+             PARTITION BY normalized.qname
+             ORDER BY similarity(trim(regexp_replace(lower(d.name), '[^a-z0-9]+', ' ', 'g')), normalized.qnorm) DESC,
+                      d.total_votes DESC, d.id
+           ) AS rn
+    FROM normalized
+    JOIN dishes d ON d.restaurant_id = p_restaurant_id
+  )
+  SELECT ranked.qname, ranked.rn::INT, ranked.id, ranked.name, ranked.category,
+         ranked.avg_rating, ranked.total_votes, ranked.price, ranked.s
+  FROM ranked
+  WHERE ranked.rn <= 2 AND ranked.s > 0.30;
+$$;
+
+-- Edge-function-only: callers go through the menu-xray function (service role).
+REVOKE EXECUTE ON FUNCTION match_menu_dishes(UUID, TEXT[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION match_menu_dishes(UUID, TEXT[]) TO service_role;
 
 -- =============================================
 -- Section 22: Account Deletion (Apple Guideline 5.1.1(v))

@@ -653,3 +653,14 @@ Do NOT start Phase 2 until Phase 1 has been live for ≥7 days and Sentry shows 
 **Do NOT block on Apple verdict.** This work ships independently — every fix improves the live web experience immediately, and rides into the next TestFlight automatically.
 
 Spec: `docs/superpowers/specs/2026-04-12-binary-vote-removal-design.md`.
+
+## T43: Menu X-Ray follow-ups (feature shipped on feat/menu-xray, 2026-06-10)
+
+Core feature is live: scan a physical menu → rating chips overlay → quiet menu ingest. These are the deliberate deferrals:
+
+- **Homepage camera entry** — one-line PR adding the camera icon to the homepage header. Gated on a few days of restaurant-page field testing (the rollout valve from the spec).
+- **Latency** — live scan of a 27-dish menu took ~33s on Sonnet vision. The sweep animation holds, but A/B Haiku extraction (~3-4x faster) once there's scan volume to compare quality on.
+- **Playwright spec for /scan** — blocked on the known `playwright.config.js` geolocation fix (browser E2E env broken on main).
+- **Multi-page menus** — re-scan currently replaces results; merge view is deferred polish.
+- **On-device OCR** — cost optimization, revisit at scan volume. v2 live-AR overlay: dream item, requires text geometry.
+- **`menu_scans` mining** — the audit table accumulates ground-truth photos + extraction results; feeds the self-learning menu refresher idea later.

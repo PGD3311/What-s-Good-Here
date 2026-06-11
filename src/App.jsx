@@ -60,6 +60,7 @@ const PlaylistPage = lazyWithRetry(() => import('./pages/Playlist'), 'Playlist')
 const Locals = lazyWithRetry(() => import('./pages/Locals'), 'Locals')
 const LocalsCurator = lazyWithRetry(() => import('./pages/LocalsCurator'), 'LocalsCurator')
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'), 'NotFound')
+const ScanMenu = lazyWithRetry(() => import('./pages/ScanMenu'), 'ScanMenu')
 
 // Prefetch functions for smoother navigation - call on hover/focus
 export const prefetchRoutes = {
@@ -153,6 +154,7 @@ function App() {
               <Route path="/waitlist" element={<Waitlist />} />
               <Route path="/locals" element={<Layout><Locals /></Layout>} />
               <Route path="/locals/:userId" element={<Layout><LocalsCurator /></Layout>} />
+              <Route path="/scan" element={<ScanMenu />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

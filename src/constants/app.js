@@ -4,6 +4,7 @@
 // Dishes with fewer votes show as "Early" and rank BELOW all ranked dishes
 // (the get_ranked_dishes RPC tiers on this same threshold — keep them in sync).
 // Pre-launch: 3 (a single fluke/troll vote can't top a well-voted dish). Bump to 5, then 10 as volume grows.
+// Mirrored in supabase/functions/menu-xray/index.ts (best-dish gate) — keep in sync.
 export const MIN_VOTES_FOR_RANKING = 3
 
 // Maximum character length for review text
