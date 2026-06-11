@@ -3,7 +3,7 @@ import { encode as encodeBase64 } from 'https://deno.land/std@0.177.0/encoding/b
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { detectCms, cmsRequiresRender } from './cms-detect.ts'
 import { fetchRenderedHtml, BrowserlessError } from './browserless.ts'
-import { discoverMenuCandidates, discoverDrinkCandidates, findMenuIframes, findSubMenuPages, findDrinkSubPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
+import { discoverMenuCandidates, discoverDrinkCandidates, findBestMenuLink, findMenuIframes, findSubMenuPages, findDrinkSubPages, isBlockedHostname, isKnownMenuIframeHost, type MenuCandidate } from './menu-candidates.ts'
 import { safeFetch } from '../_shared/ssrf.ts'
 import { detectBentoBox, buildBentoBoxMenuText, parseSchemaOrgMenuItems } from './bentobox.ts'
 
@@ -381,40 +381,136 @@ function sleep(ms: number): Promise<void> {
 const GOOGLE_API_KEY = Deno.env.get('GOOGLE_PLACES_API_KEY')
 
 const MENU_PATHS = [
-  // More specific paths first — less likely to hit a wrong page
+  // More specific paths first — less likely to hit a wrong page (also defines
+  // Step B priority among accepted probes: first match in this order wins).
   '/food-menu', '/dinner-menu', '/lunch-menu', '/breakfast-menu', '/brunch-menu',
-  '/our-menu', '/menus', '/food-drink', '/food--drinks',
-  '/menu', '/menu-1', '/menu-2', '/food', '/eat', '/dining',
+  '/our-menu', '/the-menu', '/our-food', '/menus', '/food-drink', '/food--drinks',
+  '/food-menus', '/menu/food',
+  '/menu', '/menu-1', '/menu-2', '/food', '/eats', '/eat', '/dining',
   '/dinner', '/breakfast', '/lunch',
   '/order', '/order-online',
 ]
 
 /**
- * Probe a website for common menu URL paths (HEAD requests)
+ * Reject a probe result if the server bounced us to a different page.
+ *
+ * Soft-404 / SPA defense: some hosts 200 every route (SPA shell) or redirect
+ * all unknown paths back to the homepage. We detect the two most common failure
+ * modes:
+ *  1. Redirect-to-root: the final URL's pathname is empty/root/index while we
+ *     probed a non-root path → homepage soft-404.
+ *  2. Content-swap: the final pathname no longer contains the probed path's
+ *     last segment → the server substituted a different resource (e.g.
+ *     /menu → /order-online bounce).
+ *  3. Off-origin bounce: the final host differs from the probed host.
+ */
+function acceptProbe(res: Response, probedUrl: string): boolean {
+  let finalUrl: URL
+  let probedParsed: URL
+  try {
+    finalUrl = new URL(res.url || probedUrl)
+    probedParsed = new URL(probedUrl)
+  } catch {
+    return false
+  }
+
+  // Off-origin bounce — allow www↔bare and proper-subdomain redirects (canonical
+  // TLS redirects, e.g. foo.com/menu → www.foo.com/menu) but reject genuinely
+  // off-site finals (foo.com → evil.com).
+  const probedHost = probedParsed.hostname.toLowerCase()
+  const finalHost = finalUrl.hostname.toLowerCase()
+  const stripWww = (h: string) => h.replace(/^www\./, '')
+  const probedStripped = stripWww(probedHost)
+  const finalStripped = stripWww(finalHost)
+  const sameSite =
+    probedStripped === finalStripped ||
+    finalStripped.endsWith('.' + probedStripped) ||
+    probedStripped.endsWith('.' + finalStripped)
+  if (!sameSite) return false
+
+  // Normalize pathnames: lowercase, strip trailing slash
+  const finalPath = finalUrl.pathname.toLowerCase().replace(/\/+$/, '') || '/'
+  const probedPath = probedParsed.pathname.toLowerCase().replace(/\/+$/, '')
+
+  // If we probed a non-root path, reject root/index redirects (soft-404)
+  if (probedPath && probedPath !== '/') {
+    const isRootOrIndex = finalPath === '' || finalPath === '/' ||
+      finalPath === '/index.html' || finalPath === '/index' || finalPath === '/home'
+    if (isRootOrIndex) return false
+  }
+
+  // Reject if the final pathname no longer contains the probed path's last segment
+  // e.g. probed /menu → final /order-online: "menu" ∉ "/order-online"
+  const probedLastSegment = probedPath.split('/').filter(Boolean).pop()
+  if (probedLastSegment && !finalPath.includes(probedLastSegment)) return false
+
+  return true
+}
+
+/**
+ * Find the best menu URL for a restaurant website.
+ *
+ * Step A (PRIMARY): Fetch the homepage and look for a menu nav link using
+ * findBestMenuLink. This is a single GET that reads what the restaurant itself
+ * advertises — far more accurate than blind probing. SPA homepages whose links
+ * are JS-injected yield null here and fall through to Step B.
+ *
+ * Step B (FALLBACK): Fire all MENU_PATHS as concurrent GET probes (3s abort
+ * each, body cancelled). Take the first path (in MENU_PATHS order) whose
+ * probe passes acceptProbe(). Wall-time ≈ 3s regardless of path count.
  */
 async function findMenuUrl(websiteUrl: string): Promise<string | null> {
   if (!websiteUrl) return null
   let base = websiteUrl.replace(/\/+$/, '')
   if (!base.startsWith('http')) base = 'https://' + base
 
-  for (const path of MENU_PATHS) {
-    const candidate = base + path
-    try {
+  // ── Step A: anchor discovery ──────────────────────────────────────────────
+  // Follow the link the site itself exposes. One homepage GET; avoids the
+  // sequential-probe time bomb and SPA-false-positive issues.
+  try {
+    const home = await fetchRawHtml(base)
+    if (home.type === 'html') {
+      const link = findBestMenuLink(home.html, base)
+      if (link) return link
+    }
+  } catch {
+    // Best-effort — fall through to Step B
+  }
+
+  // ── Step B: parallel path probe ───────────────────────────────────────────
+  // Fire all paths concurrently. Each probe: GET, 3s abort, body cancelled.
+  // Take the FIRST path (in MENU_PATHS order) that passes acceptProbe.
+  type ProbeResult = { path: string; accepted: boolean }
+
+  const probeResults = await Promise.allSettled(
+    MENU_PATHS.map(async (path): Promise<ProbeResult> => {
+      const candidate = base + path
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-      // safeFetch validates the host + every redirect hop (SSRF guard). A blocked,
-      // malformed, or over-redirecting candidate throws and is skipped by catch.
-      const res = await safeFetch(candidate, {
-        method: 'HEAD',
-        signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-Bot/1.0)' },
-      })
-      clearTimeout(timeout)
-      if (res.ok) return candidate
-    } catch {
-      // skip
+      const timeout = setTimeout(() => controller.abort(), 3000)
+      try {
+        const res = await safeFetch(candidate, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsGoodHere-Bot/1.0)' },
+        })
+        await res.body?.cancel()
+        return { path, accepted: res.ok && acceptProbe(res, candidate) }
+      } catch {
+        return { path, accepted: false }
+      } finally {
+        clearTimeout(timeout)
+      }
+    })
+  )
+
+  // Return the first accepted path in MENU_PATHS order (priority preserved).
+  for (let i = 0; i < MENU_PATHS.length; i++) {
+    const result = probeResults[i]
+    if (result.status === 'fulfilled' && result.value.accepted) {
+      return base + MENU_PATHS[i]
     }
   }
+
   return null
 }
 
@@ -1384,6 +1480,26 @@ async function runDrinkRecovery(
   return { dishes: drinkDishes, sections: result!.menu_section_order, telemetry }
 }
 
+// Block-like target statuses worth a residential-proxy retry. NOT all 4xx —
+// BrowserlessError 'TARGET_ERROR' fires for any target >= 400, so escalating on
+// 404/410/500 would waste residential units.
+const UNBLOCK_RETRY_STATUSES = new Set([401, 403, 429, 503])
+
+/**
+ * fetchRenderedHtml wrapper: on a target-side BLOCK (401/403/429/503), retry
+ * once through the residential /unblock proxy. Non-block errors propagate.
+ */
+async function renderWithUnblockFallback(url: string, opts: Parameters<typeof fetchRenderedHtml>[1] = {}): Promise<string> {
+  try {
+    return await fetchRenderedHtml(url, opts)
+  } catch (err) {
+    if (err instanceof BrowserlessError && UNBLOCK_RETRY_STATUSES.has(err.status)) {
+      return await fetchRenderedHtml(url, { ...opts, useUnblock: true })
+    }
+    throw err
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -1524,12 +1640,40 @@ serve(async (req) => {
             }
           }
 
-          if (!menuUrl && websiteUrl) {
-            const found = await findMenuUrl(websiteUrl)
-            if (found) {
+          // Re-discover the menu URL when:
+          //  (a) we have no menu_url at all, OR
+          //  (b) the stored menu_url is the website root AND shares the same
+          //      host as the restaurant's website (a past homepage-fallback
+          //      victim whose real /menu page was never found).
+          //
+          // Condition (b) is intentionally narrow: a legit menu at a different
+          // host with a root path (e.g. https://menu.example.com/) must NOT
+          // be treated as "stuck on homepage" — that would cause churn by
+          // re-running discovery every refresh for a perfectly valid URL.
+          const sameHostRoot = (mu: string, wu: string): boolean => {
+            try {
+              const m = new URL(mu)
+              const w = new URL(wu)
+              const strip = (h: string) => h.replace(/^www\./, '')
+              return strip(m.hostname) === strip(w.hostname) && m.pathname.replace(/\/+$/, '') === ''
+            } catch { return false }
+          }
+          const storedIsHomepageRoot = !!(menuUrl && websiteUrl && sameHostRoot(menuUrl, websiteUrl))
+          if ((!menuUrl || storedIsHomepageRoot) && (websiteUrl || menuUrl)) {
+            const found = await findMenuUrl(websiteUrl || menuUrl!)
+            if (found && found !== menuUrl) {
               menuUrl = found
-              dbUpdates.menu_url = menuUrl
-            } else {
+              dbUpdates.menu_url = found
+              // Force re-extraction of the corrected URL by clearing the
+              // content hash — defeats the hash short-circuit so the real
+              // menu page is extracted on this run, not skipped as "unchanged".
+              // Must also null the IN-MEMORY field: the hash short-circuit
+              // reads restaurant.menu_content_hash directly; staging the null
+              // only in dbUpdates leaves the in-memory value intact and the
+              // short-circuit still exits early as 'hash_unchanged'.
+              dbUpdates.menu_content_hash = null
+              restaurant.menu_content_hash = null
+            } else if (!found) {
               // Ephemeral fallback for THIS run only. Many restaurants link the
               // menu as a PDF or image (e.g. /wp-content/uploads/*.pdf) only from
               // the homepage — paths findMenuUrl's probe list misses. Letting the
@@ -1538,9 +1682,11 @@ serve(async (req) => {
               // HTML. We do NOT persist this to dbUpdates.menu_url — that would
               // lock the restaurant into the homepage forever and prevent
               // future discovery of a real /menu URL.
-              let normalized = websiteUrl.replace(/\/+$/, '')
-              if (!normalized.startsWith('http')) normalized = 'https://' + normalized
-              menuUrl = normalized
+              if (!menuUrl) {
+                let normalized = (websiteUrl || '').replace(/\/+$/, '')
+                if (!normalized.startsWith('http')) normalized = 'https://' + normalized
+                menuUrl = normalized
+              }
             }
           }
 
@@ -1566,24 +1712,51 @@ serve(async (req) => {
           }
 
           // --- Fetch + extract (with render fallback for JS-rendered sites) ---
-          let fetchResult: MenuFetchResult
+          // eslint-disable-next-line prefer-const
+          let fetchResult: MenuFetchResult = null!
+          let prefetchRendered = false
           try {
             fetchResult = await fetchRawHtml(menuUrl)
           } catch (fetchErr) {
             const classified = classifyError(fetchErr)
-            const newAttemptCount = job.attempt_count + 1
-            await supabase.from('menu_import_jobs').update({
-              status: newAttemptCount >= job.max_attempts ? 'dead' : 'pending',
-              attempt_count: newAttemptCount,
-              run_after: newAttemptCount >= job.max_attempts ? undefined : calculateBackoff(newAttemptCount).toISOString(),
-              error_code: classified.code,
-              error_message: classified.message,
-              error_context: { ...classified.context, menu_url: menuUrl },
-              lock_expires_at: null,
-              updated_at: new Date().toISOString(),
-            }).eq('id', job.id)
-            results.push({ job_id: job.id, status: 'fetch_failed', restaurant: restaurant.name, error: classified.code })
-            continue
+            // Recovery: if the raw fetch was blocked (401/403/429/503), attempt
+            // a residential-proxy render before declaring fetch_failed. On
+            // success, synthesize an html fetchResult and fall through to normal
+            // processing; on failure, keep today's fetch_failed behaviour.
+            let recovered = false
+            if (
+              classified.code === 'fetch_error' &&
+              ['401', '403', '429', '503'].includes(String(classified.context?.http_status))
+            ) {
+              try {
+                const html = await renderWithUnblockFallback(menuUrl, { useUnblock: true, gotoTimeout: 45000, waitForTimeoutMs: 12000 })
+                const recoveredText = extractMenuTextFromHtml(html)
+                if (recoveredText.length >= 50) {
+                  fetchResult = { type: 'html', html }
+                  prefetchRendered = true
+                  recovered = true
+                } else {
+                  throw new Error('unblock recovery empty')
+                }
+              } catch {
+                // fall through to fetch_failed below
+              }
+            }
+            if (!recovered) {
+              const newAttemptCount = job.attempt_count + 1
+              await supabase.from('menu_import_jobs').update({
+                status: newAttemptCount >= job.max_attempts ? 'dead' : 'pending',
+                attempt_count: newAttemptCount,
+                run_after: newAttemptCount >= job.max_attempts ? undefined : calculateBackoff(newAttemptCount).toISOString(),
+                error_code: classified.code,
+                error_message: classified.message,
+                error_context: { ...classified.context, menu_url: menuUrl },
+                lock_expires_at: null,
+                updated_at: new Date().toISOString(),
+              }).eq('id', job.id)
+              results.push({ job_id: job.id, status: 'fetch_failed', restaurant: restaurant.name, error: classified.code })
+              continue
+            }
           }
 
           // Direct-PDF shortcut: menu_url served `application/pdf` (Squarespace
@@ -1704,7 +1877,7 @@ serve(async (req) => {
           const rawText = extractMenuTextFromHtml(rawHtml)
           const rawTextLen = rawText.length
           let extractionContent = rawText
-          let rendererAttempted = false
+          let rendererAttempted = prefetchRendered
           let renderSucceeded = false
           let renderError: string | null = null
           let renderedTextLen: number | null = null
@@ -1804,12 +1977,13 @@ serve(async (req) => {
             }
           }
 
-          // Render fallback #1: content too short AND CMS requires rendering
-          if (extractionContent.length < 50 && cmsRequiresRender(cms)) {
-            console.log(`${restaurant.name}: content too short + ${cms} CMS, attempting render fallback`)
+          // Render fallback #1: content too short — fire for ANY JS shell,
+          // not just known CMSs. An empty text body is a JS shell by definition.
+          if (extractionContent.length < 50) {
+            console.log(`${restaurant.name}: content too short (cms: ${cms}), attempting render fallback`)
             rendererAttempted = true  // mark ATTEMPTED regardless of outcome
             try {
-              const renderedHtml = await fetchRenderedHtml(menuUrl, {
+              const renderedHtml = await renderWithUnblockFallback(menuUrl, {
                 gotoTimeout: 45000,
                 waitForTimeoutMs: 12000,  // Wix needs time to hydrate menu API data
               })
@@ -1818,8 +1992,11 @@ serve(async (req) => {
               if (renderedText.length >= 50) {
                 extractionContent = renderedText
                 renderSucceeded = true
-                // Re-discover candidates from the rendered HTML — JS-injected menu
-                // PDFs/images are invisible in raw HTML.
+              }
+              // Always re-discover candidates from the rendered HTML, even when
+              // renderedText is short — a JS-injected menu image/PDF link is
+              // useful even with near-zero body text.
+              if (renderedHtml.length > 0) {
                 candidates = mergeCandidates(candidates, discoverMenuCandidates(renderedHtml, menuUrl))
               }
             } catch (renderErr) {
@@ -1828,7 +2005,16 @@ serve(async (req) => {
             }
           }
 
-          if (extractionContent.length < 50) {
+          // Only bail here when there is neither usable text NOR any asset
+          // candidate to try — a render may have surfaced PDF/image candidates
+          // even when body text is thin, and asset extraction at ~1807 will
+          // try those candidates when we survive this guard.
+          if (extractionContent.length < 50 && candidates.length === 0) {
+            // If we already attempted a render and still can't read the page,
+            // flag it for manual import so it surfaces in the queue.
+            if (rendererAttempted) {
+              await supabase.from('restaurants').update({ needs_manual_menu: true }).eq('id', restaurant.id)
+            }
             const classified = classifyError(null, 'page_too_short')
             const newAttemptCount = job.attempt_count + 1
             await supabase.from('menu_import_jobs').update({
@@ -2101,7 +2287,7 @@ serve(async (req) => {
             console.log(`${restaurant.name}: Sonnet found 0 dishes in ${cms} site, attempting render fallback`)
             rendererAttempted = true  // mark ATTEMPTED regardless of outcome
             try {
-              const renderedHtml = await fetchRenderedHtml(menuUrl, {
+              const renderedHtml = await renderWithUnblockFallback(menuUrl, {
                 gotoTimeout: 45000,
                 waitForTimeoutMs: 12000,  // Wix needs time to hydrate menu API data
               })
