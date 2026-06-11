@@ -1,6 +1,28 @@
 import { MIN_VOTES_FOR_RANKING } from '../../constants/app'
 import { XRayRow } from './XRayRow'
 
+// Each section is its own mini-leaderboard: rated dishes first (best rating,
+// then most votes), early-signal dishes next, never-rated last. The user is
+// holding the paper menu — IT owns the canonical order; the X-Ray view's job
+// is judgment. Array.prototype.sort is stable, so unrated dishes keep their
+// menu order at the bottom of the section.
+function rankTier(item) {
+  const votes = item.match?.totalVotes || 0
+  if (votes >= MIN_VOTES_FOR_RANKING) return 2
+  if (votes > 0) return 1
+  return 0
+}
+
+function rankSectionItems(items) {
+  return items.slice().sort((a, b) => {
+    const tierDiff = rankTier(b) - rankTier(a)
+    if (tierDiff !== 0) return tierDiff
+    const ratingDiff = (b.match?.avgRating ?? 0) - (a.match?.avgRating ?? 0)
+    if (ratingDiff !== 0) return ratingDiff
+    return (b.match?.totalVotes ?? 0) - (a.match?.totalVotes ?? 0)
+  })
+}
+
 export function XRayResults({ result, photoUrl }) {
   const { restaurant, sections, best, summary } = result
   const favorites = sections
@@ -29,7 +51,7 @@ export function XRayResults({ result, photoUrl }) {
           <h2 className="text-xl border-b pb-0.5 mb-1" style={{ fontFamily: "'Amatic SC', cursive", fontWeight: 700, color: 'var(--color-accent-gold)', borderColor: 'var(--color-category-strip)' }}>
             {section.name}
           </h2>
-          {section.items.map((item, i) => (
+          {rankSectionItems(section.items).map((item, i) => (
             <XRayRow
               key={`${section.name}-${item.name}-${i}`}
               item={item}
