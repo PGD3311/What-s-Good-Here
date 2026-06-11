@@ -330,7 +330,10 @@ const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp']
 const MAGIC: Record<string, (b: Uint8Array) => boolean> = {
   'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
   'image/png': (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
-  'image/webp': (b) => b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
+  // WebP requires BOTH the RIFF container header (bytes 0-3) and WEBP (bytes 8-11).
+  'image/webp': (b) =>
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
 }
 
 export function validateImagePayload(base64: string, mediaType: string): { ok: boolean; error?: string } {
@@ -379,8 +382,14 @@ export function decideMatches(items: ExtractedItem[], rows: MatchRow[]): Map<str
     list.push(r)
     byName.set(r.query_name, list)
   }
+  // Name IS identity here: the match RPC queries by name, and dish ingest
+  // dedupes by normalized name — so duplicate extracted names (same dish in
+  // two sections) intentionally resolve once. First occurrence wins.
   const accepted = new Map<string, MatchRow>()
+  const seenNames = new Set<string>()
   for (const item of items) {
+    if (seenNames.has(item.name)) continue
+    seenNames.add(item.name)
     const cands = (byName.get(item.name) || []).slice().sort((a, b) => a.rank - b.rank)
     const top = cands[0]
     if (!top || top.sim <= SIM_ACCEPT) continue
@@ -390,13 +399,20 @@ export function decideMatches(items: ExtractedItem[], rows: MatchRow[]): Map<str
       accepted.set(item.name, top)
       continue
     }
-    const agreeing = cands.filter((c) => c.dish_category === item.category)
+    // Near-tie: category agreement breaks it — but the agreeing row must
+    // itself clear the accept threshold (a weak third candidate that merely
+    // shares the category is not a match).
+    const agreeing = cands.filter((c) => c.dish_category === item.category && c.sim > SIM_ACCEPT)
     if (agreeing.length === 1) accepted.set(item.name, agreeing[0])
   }
   return accepted
 }
 
 export interface ExistingDish { id: string; name: string; category: string; price: number | null }
+
+// The prompt contract allows exactly these five tags; anything else from the
+// model is dropped at the gate.
+const ALLOWED_DIETARY_TAGS = ['vegan', 'vegetarian', 'gluten_free', 'dairy_free', 'nut_free']
 
 export function buildIngestList(
   items: ExtractedItem[],
@@ -408,21 +424,26 @@ export function buildIngestList(
   const out = []
   for (const item of items) {
     if (matchedNames.has(item.name)) continue
-    const name = (item.name || '').trim()
+    // Strip zero-width characters before the length gate so visually blank
+    // names can't sneak through, then require a substantive normalized key.
+    const name = (item.name || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
     if (name.length < 2 || name.length > 80) continue
     const key = normalizeDishKey(name, item.category)
-    if (!key || existingKeys.has(key) || seen.has(key)) continue
+    if (!key || key.length < 2 || existingKeys.has(key) || seen.has(key)) continue
     seen.add(key)
     const category = VALID_CATEGORIES.includes((item.category || '').toLowerCase())
       ? item.category.toLowerCase() : 'entree'
     const price = typeof item.price === 'number' && item.price > 0 && item.price < 500 ? item.price : null
+    const dietaryTags = Array.isArray(item.dietary_tags)
+      ? item.dietary_tags.filter((t): t is string => typeof t === 'string' && ALLOWED_DIETARY_TAGS.includes(t))
+      : []
     out.push({
       name,
       category,
       price,
       menu_section: item.menu_section || null,
       description: item.description || null,
-      dietary_tags: Array.isArray(item.dietary_tags) ? item.dietary_tags : [],
+      dietary_tags: dietaryTags,
     })
   }
   return out

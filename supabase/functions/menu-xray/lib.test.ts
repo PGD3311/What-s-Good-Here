@@ -66,3 +66,44 @@ Deno.test('garbage rows filtered: 1-char names, absurd prices, bad category coer
   assertEquals(out.find(d => d.name === 'Gold Plated Burger')?.price, null)
   assertEquals(out.find(d => d.name === 'Mystery Bowl')?.category, 'entree')
 })
+
+// --- Codex review regression tests -----------------------------------------
+Deno.test('webp without RIFF container header is rejected', () => {
+  // "WEBP" planted at offset 8 but bytes 0-3 are not "RIFF"
+  const fake = btoa(String.fromCharCode(0, 1, 2, 3, 4, 5, 6, 7, 0x57, 0x45, 0x42, 0x50))
+  assertEquals(validateImagePayload(fake, 'image/webp').ok, false)
+})
+Deno.test('valid webp header (RIFF....WEBP) is accepted', () => {
+  const good = btoa(String.fromCharCode(0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50))
+  assertEquals(validateImagePayload(good, 'image/webp').ok, true)
+})
+Deno.test('weak category-agreeing candidate below threshold is NOT accepted', () => {
+  const out = decideMatches([{ name: 'Tacos', category: 'taco' }], [
+    row('Tacos', 1, 0.51, { dish_category: 'sandwich' }),
+    row('Tacos', 2, 0.50, { dish_category: 'burger' }),
+  ])
+  assertEquals(out.has('Tacos'), false)
+})
+Deno.test('duplicate extracted names resolve once (first occurrence wins)', () => {
+  const out = decideMatches(
+    [{ name: 'House Salad', category: 'salad' }, { name: 'House Salad', category: 'apps' }],
+    [row('House Salad', 1, 0.9, { dish_category: 'salad' })],
+  )
+  assertEquals(out.get('House Salad')?.dish_category, 'salad')
+  assertEquals(out.size, 1)
+})
+Deno.test('dietary tags outside the contract whitelist are dropped', () => {
+  const out = buildIngestList(
+    [{ name: 'Weird Bowl', category: 'entree', price: 12, menu_section: null, description: null,
+       dietary_tags: ['vegan', 'gf-ish', 'DROP TABLE', 42 as unknown as string] }],
+    new Set<string>(), [],
+  )
+  assertEquals(out[0].dietary_tags, ['vegan'])
+})
+Deno.test('zero-width-padded names are rejected', () => {
+  const out = buildIngestList(
+    [{ name: 'A​', category: 'apps', price: 5, menu_section: null, description: null, dietary_tags: [] }],
+    new Set<string>(), [],
+  )
+  assertEquals(out.length, 0)
+})
