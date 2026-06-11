@@ -139,21 +139,28 @@ export function ScanMenu() {
 
         {/* The shutter — visibly locked until a restaurant is confirmed */}
         <div className="flex flex-col items-center gap-2.5">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!restaurant}
-            aria-label="Open the camera and scan the menu"
-            className="w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95"
-            style={restaurant
-              ? { background: 'var(--color-primary)', color: '#fff', boxShadow: '0 10px 28px rgba(228,68,10,0.38)', animation: 'shutter-ready 2.6s ease-in-out infinite' }
-              : { background: 'var(--color-surface-elevated)', color: 'var(--color-text-tertiary)', border: '2px dashed var(--color-text-tertiary)' }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="w-9 h-9">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-            </svg>
-          </button>
-          <p className="text-xs font-semibold" style={{ color: restaurant ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
+          <div className="relative">
+            {/* Pulse ring: separate element animating transform/opacity only
+                (compositor-friendly — never animate box-shadow on an infinite
+                loop). Hidden entirely under prefers-reduced-motion. */}
+            {restaurant && <span className="scan-shutter-ring" aria-hidden="true" />}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!restaurant}
+              aria-label={restaurant ? 'Open the camera and scan the menu' : 'Camera locked — pick your restaurant first'}
+              aria-describedby="scan-shutter-hint"
+              className="relative w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95"
+              style={restaurant
+                ? { background: 'var(--color-primary)', color: '#fff', boxShadow: '0 10px 28px rgba(228,68,10,0.38)' }
+                : { background: 'var(--color-surface-elevated)', color: 'var(--color-text-tertiary)', border: '2px dashed var(--color-text-tertiary)' }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="w-9 h-9">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+              </svg>
+            </button>
+          </div>
+          <p id="scan-shutter-hint" className="text-xs font-semibold" style={{ color: restaurant ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
             {restaurant
               ? (result || error ? 'Try another shot' : 'Snap the menu')
               : 'Pick your spot to unlock the camera'}
@@ -164,12 +171,20 @@ export function ScanMenu() {
       <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
         onChange={handleFileChange} style={{ display: 'none' }} />
       <style>{`
-        @keyframes shutter-ready {
-          0%, 100% { box-shadow: 0 10px 28px rgba(228,68,10,0.38); }
-          50% { box-shadow: 0 10px 36px rgba(228,68,10,0.6), 0 0 0 8px rgba(228,68,10,0.08); }
+        .scan-shutter-ring {
+          position: absolute; inset: 0; border-radius: 9999px;
+          border: 2px solid var(--color-primary);
+          animation: scan-shutter-pulse 2.6s ease-out infinite;
+          pointer-events: none;
+        }
+        @keyframes scan-shutter-pulse {
+          0%   { transform: scale(1);    opacity: 0.55; }
+          70%  { transform: scale(1.35); opacity: 0; }
+          100% { transform: scale(1.35); opacity: 0; }
         }
         @media (prefers-reduced-motion: reduce) {
-          @keyframes shutter-ready { 0%, 100% { box-shadow: 0 10px 28px rgba(228,68,10,0.38); } }
+          .scan-shutter-ring { animation: none; display: none; }
+          .xray-demo-line { animation: none; opacity: 0; }
         }
       `}</style>
     </div>
