@@ -18,10 +18,23 @@ const PROMPT_RE = /const MENU_EXTRACTION_PROMPT = `((?:[^`\\]|\\[\s\S])*)`/
 const XRAY_EXTRA_RULE =
   'If the image is NOT a menu (a person, a pet, scenery, a receipt), return exactly: {"dishes": [], "not_a_menu": true}'
 
+// The prompt is ~16.7KB today; a capture far below that means the lexer
+// truncated — and identical truncation on both sides would otherwise
+// false-pass on matching prefixes.
+const MIN_PROMPT_CHARS = 12000
+
 function readPrompt(path: string): string {
   const src = Deno.readTextFileSync(path)
   const m = src.match(PROMPT_RE)
   assert(m, `Could not locate MENU_EXTRACTION_PROMPT in ${path} — extraction regex needs updating`)
+  assert(
+    m[1].length >= MIN_PROMPT_CHARS,
+    `Prompt capture from ${path} is suspiciously short (${m[1].length} chars) — lexer truncation?`,
+  )
+  assert(
+    !m[1].includes('${'),
+    `Prompt in ${path} now contains \${} interpolation — PROMPT_RE only lexes static literals; rework the tripwire`,
+  )
   return m[1]
 }
 
@@ -29,9 +42,12 @@ Deno.test('menu-xray extraction prompt matches menu-refresh (modulo the delibera
   const refresh = readPrompt('supabase/functions/menu-refresh/index.ts')
   const xray = readPrompt('supabase/functions/menu-xray/lib.ts')
 
-  assert(
-    xray.includes(XRAY_EXTRA_RULE),
-    'menu-xray lost its not-a-menu rule — scans of non-menu photos will hallucinate dishes',
+  const ruleOccurrences = xray.split(XRAY_EXTRA_RULE).length - 1
+  assertEquals(
+    ruleOccurrences,
+    1,
+    'menu-xray must contain the not-a-menu rule exactly once (zero = scans of non-menu photos ' +
+      'will hallucinate dishes; more than one = the replace() below strips the wrong copy)',
   )
   const xrayNormalized = xray.replace(XRAY_EXTRA_RULE, '').replace(/\n+$/, '')
   const refreshNormalized = refresh.replace(/\n+$/, '')
@@ -47,9 +63,17 @@ Deno.test('menu-xray extraction prompt matches menu-refresh (modulo the delibera
 
 Deno.test('menu-xray normalizeDishKey matches menu-refresh extractors.ts', () => {
   const FN_RE = /export function normalizeDishKey[\s\S]*?\n}\n/
+  // Tail anchor: the function's final statement. If FN_RE's lazy match ever
+  // stops at an inner standalone `}` (a future if/for block), the capture
+  // loses this anchor and the test fails loudly instead of comparing prefixes.
+  const FN_TAIL = ".sort().join(' ')"
   const a = Deno.readTextFileSync('supabase/functions/menu-refresh/extractors.ts').match(FN_RE)
   const b = Deno.readTextFileSync('supabase/functions/menu-xray/lib.ts').match(FN_RE)
   assert(a && b, 'Could not locate normalizeDishKey in one of the copies — regex needs updating')
+  assert(
+    a[0].includes(FN_TAIL) && b[0].includes(FN_TAIL),
+    'normalizeDishKey capture lost its tail — FN_RE stopped at an inner brace; fix the regex',
+  )
   assertEquals(
     b[0],
     a[0],
