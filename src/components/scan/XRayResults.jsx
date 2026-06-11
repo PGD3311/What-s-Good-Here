@@ -1,4 +1,5 @@
 import { MIN_VOTES_FOR_RANKING } from '../../constants/app'
+import { getVerdict } from '../../utils/verdict'
 import { XRayRow } from './XRayRow'
 
 // Each section is its own mini-leaderboard: rated dishes first (best rating,
@@ -6,20 +7,25 @@ import { XRayRow } from './XRayRow'
 // holding the paper menu — IT owns the canonical order; the X-Ray view's job
 // is judgment. Array.prototype.sort is stable, so unrated dishes keep their
 // menu order at the bottom of the section.
-function rankTier(item) {
-  const votes = item.match?.totalVotes || 0
-  if (votes >= MIN_VOTES_FOR_RANKING) return 2
-  if (votes > 0) return 1
-  return 0
+// Tier comes from getVerdict — the SAME brain the chips render with — so a
+// malformed row (votes but no rating) can never sort rated while displaying
+// "be the first".
+const TIER_WEIGHT = { rated: 2, early: 1, new: 0 }
+
+function safeNumber(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
 }
 
 function rankSectionItems(items) {
   return items.slice().sort((a, b) => {
-    const tierDiff = rankTier(b) - rankTier(a)
+    const va = getVerdict(a.match?.avgRating, a.match?.totalVotes)
+    const vb = getVerdict(b.match?.avgRating, b.match?.totalVotes)
+    const tierDiff = TIER_WEIGHT[vb.tier] - TIER_WEIGHT[va.tier]
     if (tierDiff !== 0) return tierDiff
-    const ratingDiff = (b.match?.avgRating ?? 0) - (a.match?.avgRating ?? 0)
+    const ratingDiff = safeNumber(b.match?.avgRating) - safeNumber(a.match?.avgRating)
     if (ratingDiff !== 0) return ratingDiff
-    return (b.match?.totalVotes ?? 0) - (a.match?.totalVotes ?? 0)
+    return safeNumber(b.match?.totalVotes) - safeNumber(a.match?.totalVotes)
   })
 }
 
@@ -53,7 +59,7 @@ export function XRayResults({ result, photoUrl }) {
           </h2>
           {rankSectionItems(section.items).map((item, i) => (
             <XRayRow
-              key={`${section.name}-${item.name}-${i}`}
+              key={item.match?.dishId || `${section.name}-${item.name}`}
               item={item}
               restaurantId={restaurant.id}
               isBest={best != null && item.match?.dishId === best.dishId}

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { XRayResults } from './XRayResults'
+import { MIN_VOTES_FOR_RANKING } from '../../constants/app'
 
 const result = {
   restaurant: { id: 'r1', name: 'The Galley' },
@@ -29,6 +30,26 @@ describe('XRayResults', () => {
     expect(rows[0]).toHaveTextContent('Hot Lobster Roll')
     expect(rows[1]).toHaveTextContent('Fried Clams')
     expect(rows[2]).toHaveTextContent('Crab Cakes')
+  })
+
+  it('rated/early boundary tracks MIN_VOTES_FOR_RANKING; malformed rated rows never outrank real ones', () => {
+    const boundary = {
+      ...result,
+      best: null,
+      sections: [{ name: 'Mains', items: [
+        // votes-but-no-rating (malformed) — getVerdict calls this "new", must sink
+        { name: 'Glitch Dish', price: 10, match: { dishId: 'g1', avgRating: null, totalVotes: 50 }, ingested: false },
+        // exactly threshold-1 votes with a HIGHER rating than the rated dish — still early tier, below rated
+        { name: 'Early Star', price: 12, match: { dishId: 'e1', avgRating: 9.9, totalVotes: MIN_VOTES_FOR_RANKING - 1 }, ingested: false },
+        // exactly threshold votes — rated tier, wins the section
+        { name: 'Rated Solid', price: 14, match: { dishId: 'r1', avgRating: 7.5, totalVotes: MIN_VOTES_FOR_RANKING }, ingested: false },
+      ]}],
+    }
+    render(<MemoryRouter><XRayResults result={boundary} photoUrl={null} /></MemoryRouter>)
+    const rows = screen.getAllByRole('button')
+    expect(rows[0]).toHaveTextContent('Rated Solid')
+    expect(rows[1]).toHaveTextContent('Early Star')
+    expect(rows[2]).toHaveTextContent('Glitch Dish')
   })
 
   it('renders all three verdict tiers', () => {
