@@ -14,7 +14,7 @@ if (!dir || !apiKey) {
 // Pull the production prompt straight out of menu-refresh so the spike tests
 // EXACTLY what will ship. The const is a single template literal.
 const src = fs.readFileSync('supabase/functions/menu-refresh/index.ts', 'utf8')
-const m = src.match(/const MENU_EXTRACTION_PROMPT = `([\s\S]*?)`\n\n/)
+const m = src.match(/const MENU_EXTRACTION_PROMPT = `((?:[^`\\]|\\[\s\S])*)`/) // lexes escaped backticks correctly
 if (!m) { console.error('Could not locate MENU_EXTRACTION_PROMPT in menu-refresh/index.ts'); process.exit(1) }
 const PROMPT = m[1]
 

@@ -664,3 +664,11 @@ Core feature is live: scan a physical menu → rating chips overlay → quiet me
 - **Multi-page menus** — re-scan currently replaces results; merge view is deferred polish.
 - **On-device OCR** — cost optimization, revisit at scan volume. v2 live-AR overlay: dream item, requires text geometry.
 - **`menu_scans` mining** — the audit table accumulates ground-truth photos + extraction results; feeds the self-learning menu refresher idea later.
+
+## T44: Extraction-core consolidation (one prompt, one engine, two commit modes)
+
+**Trigger: whenever PR #320 revives OR the extraction prompt next changes — whichever first.** Not urgent today (all copies verified identical; T44's tripwire `supabase/functions/prompt-drift.deno.test.ts` fails CI on any drift).
+
+The debt: FOUR copies of MENU_EXTRACTION_PROMPT (menu-refresh, menu-xray/lib.ts, #320's extract-menu-from-photo, plus parse-menu's smaller variant) and two photo→menu pipelines (menu-xray instant ingest; #320's staged review flow, HELD undeployed).
+
+The shape (agreed 2026-06-11): `_shared/extraction.ts` carrying prompt + VALID_CATEGORIES + normalizeDishKey + the Claude call; all functions consume it; two commit modes (menu-xray instant-capped; #320 staged human review on menu_photo_extractions); deploy-drift managed per the SSRF-guard precedent (repo imports _shared, deployed copies inline, CLI redeploy reconciles) + the tripwire test until consolidation deletes it. Lanes are not a constraint (Dan's call, 2026-06-11) — Denis gets an FYI, not a veto. Full brainstorm → spec → plan session when triggered.
