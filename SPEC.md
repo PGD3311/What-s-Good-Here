@@ -172,10 +172,11 @@ Evidence: `schema.sql:1534-1776`
 
 **VERIFIED** — all triggers read directly from schema.sql
 
-### Edge Functions (9)
+### Edge Functions (10)
 
 | Function | Purpose | Trigger |
 |---|---|---|
+| `menu-xray` | Menu X-Ray: photo → Claude vision extract → pg_trgm match (`match_menu_dishes`) → verdict payload; quiet dish ingest from logged-in scans; `menu_scans` audit row + private `menu-scans` bucket photo proof. Guests get overlay only, fail-closed IP rate limit. | On-demand (`/scan` page) |
 | `places-autocomplete` | Google Places autocomplete proxy | On-demand (search) |
 | `places-details` | Google Places details proxy | On-demand (restaurant add) |
 | `places-nearby-search` | Google Places nearby search proxy | On-demand (discovery) |
@@ -460,6 +461,18 @@ Switching restaurants resets to "Top Rated" tab. Search filters work in both vie
 **Persistence:** radius and town saved to localStorage
 
 **VERIFIED** — `src/context/LocationContext.jsx`
+
+### Feature 22: Menu X-Ray
+
+**User flow:** `/scan` (camera button on RestaurantDetail header, or direct) → confirm restaurant (GPS proposal via `useNearbyRestaurant` + picker fallback) → snap menu photo → scan-sweep animation while the `menu-xray` Edge Function extracts (Claude vision, menu-refresh prompt family) and matches (`match_menu_dishes` pg_trgm RPC) → X-Ray results: sections with rating chips per dish → rows tap to dish page / rate flow → data-gated "🎯 Just tell me what to get" overlay when a dish clears `MIN_VOTES_FOR_RANKING`.
+**Verdict ladder:** `getVerdict()` in `src/utils/verdict.js` — rated (≥ threshold votes, colors via `getRatingColor`), early (1..threshold−1, muted score + count), new (`🆕 be the first`). No worded labels on scored chips.
+**Quiet ingest:** logged-in scans auto-upsert unmatched extracted dishes (menu-refresh normalization/dedupe gates, 40/scan cap, 3 ingesting scans/user/hr); photo proof stored in private `menu-scans` bucket; every scan logged to `menu_scans`. Guests: overlay only, no content writes, fail-closed per-IP rate limit (`check_and_record_ip_rate_limit_strict`).
+**Screens:** `ScanMenu.jsx` · **Components:** `src/components/scan/` (VerdictChip, XRayRow, XRayResults, ScanSweep, RestaurantConfirmChip, DecideOverlay)
+**Hooks/API:** `useMenuScan` → `menuScanApi.scanMenu()` → `menu-xray` Edge Function (single round trip)
+**Data writes:** dishes (ingest, additive only, never deletes/touches votes), menu_scans, storage `menu-scans`
+**Spec/plan:** `docs/superpowers/specs/2026-06-10-menu-xray-design.md` · `docs/superpowers/plans/2026-06-10-menu-xray.md`
+
+**VERIFIED** — live smoke 2026-06-10: Lookout Tavern photo → 27/27 dishes matched at sim 1.00, guest path wrote no dishes.
 
 ---
 
