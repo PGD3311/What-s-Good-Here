@@ -95,7 +95,7 @@ export function ScanMenu() {
           <div className="fixed bottom-6 left-4 right-4 z-30">
             <button onClick={() => { setDecideOpen(true); capture('decide_opened', { restaurant_id: restaurant.id }) }}
               className="w-full py-4 rounded-2xl font-bold text-base"
-              style={{ background: 'var(--color-rating)', color: '#fff', boxShadow: '0 8px 26px rgba(22,163,74,0.45)' }}>
+              style={{ background: 'var(--color-primary)', color: '#fff', boxShadow: '0 8px 26px rgba(228,68,10,0.42)' }}>
               🎯 Just tell me what to get
             </button>
           </div>
