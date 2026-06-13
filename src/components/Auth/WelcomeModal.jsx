@@ -122,12 +122,12 @@ export function WelcomeModal() {
             <Seal size={88} variant="icon" />
           </div>
 
-          {/* Brand name — Shantell Sans, matches home + login + splash */}
+          {/* Brand name — Fraunces, matches home + login + splash */}
           <h1
             style={{
               fontFamily: 'var(--font-display)',
               fontSize: '28px',
-              fontWeight: 700,
+              fontWeight: 600,
               color: 'var(--color-text-primary)',
               lineHeight: 1.1,
               letterSpacing: '0',
@@ -135,7 +135,7 @@ export function WelcomeModal() {
               zIndex: 1,
             }}
           >
-            What&rsquo;s <span style={{ color: 'var(--color-primary)' }}>Good</span> Here
+            What&rsquo;s <span style={{ color: 'var(--color-primary)', fontStyle: 'italic' }}>Good</span> Here
           </h1>
 
           {/* Welcome line */}

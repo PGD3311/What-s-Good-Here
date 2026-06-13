@@ -75,14 +75,14 @@ export default function Waitlist() {
           className="mb-4"
           style={{
             fontFamily: 'var(--font-display)',
-            fontWeight: 700,
+            fontWeight: 600,
             fontSize: '34px',
             lineHeight: 1.05,
             letterSpacing: '0',
             color: 'var(--color-text-primary)',
           }}
         >
-          What's <span style={{ color: 'var(--color-accent-gold)' }}>Good</span> Here
+          What's <span style={{ color: 'var(--color-primary)', fontStyle: 'italic' }}>Good</span> Here
         </h1>
 
         <p
