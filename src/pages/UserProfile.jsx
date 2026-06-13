@@ -445,11 +445,11 @@ export function UserProfile() {
               <h2
                 className="font-bold"
                 style={{
-                  fontFamily: "'Amatic SC', cursive",
+                  fontFamily: 'var(--font-display)',
                   color: 'var(--color-text-primary)',
-                  fontSize: '28px',
+                  fontSize: '22px',
                   fontWeight: 700,
-                  letterSpacing: '0.02em',
+                  letterSpacing: '0',
                   lineHeight: '1.2',
                 }}
               >

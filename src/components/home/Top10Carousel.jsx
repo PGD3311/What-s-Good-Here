@@ -175,12 +175,12 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
       {/* Section header — updates with active tab */}
       <div className="px-5 flex items-baseline justify-between mb-1">
         <h2 style={{
-          fontFamily: "'Amatic SC', cursive",
-          fontSize: '30px',
+          fontFamily: 'var(--font-display)',
+          fontSize: '23px',
           fontWeight: 700,
           color: 'var(--color-text-primary)',
-          letterSpacing: '0.02em',
-          lineHeight: 1,
+          letterSpacing: '0',
+          lineHeight: 1.05,
         }}>
           {activeTab.id === 'nearby' ? 'Top Rated Nearby' : 'Top ' + activeTab.label}
         </h2>

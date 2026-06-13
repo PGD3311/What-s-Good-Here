@@ -34,11 +34,11 @@ export function CuratorOnboardingSplash({ onDismiss }) {
       >
         <p
           style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontSize: '40px',
+            fontFamily: 'var(--font-display)',
+            fontSize: '28px',
             fontWeight: 700,
             color: 'var(--color-text-primary)',
-            lineHeight: 1,
+            lineHeight: 1.1,
             marginBottom: '6px',
           }}
         >

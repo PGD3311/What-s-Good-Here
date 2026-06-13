@@ -69,10 +69,10 @@ export function DishHero({ dish, allPhotos, isVariant, parentDish }) {
           <div className="flex-1 min-w-0">
             <h1
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 fontWeight: 700,
-                fontSize: '28px',
-                letterSpacing: '0.02em',
+                fontSize: '22px',
+                letterSpacing: '0',
                 color: 'var(--color-text-primary)',
                 lineHeight: 1.1,
                 margin: 0,

@@ -74,11 +74,11 @@ export default function Waitlist() {
         <h1
           className="mb-4"
           style={{
-            fontFamily: "'Amatic SC', cursive",
+            fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: '52px',
+            fontSize: '34px',
             lineHeight: 1.05,
-            letterSpacing: '0.01em',
+            letterSpacing: '0',
             color: 'var(--color-text-primary)',
           }}
         >
@@ -255,9 +255,9 @@ function SuccessState({ email }) {
     >
       <div
         style={{
-          fontFamily: "'Amatic SC', cursive",
+          fontFamily: 'var(--font-display)',
           fontWeight: 700,
-          fontSize: '32px',
+          fontSize: '22px',
           color: 'var(--color-accent-gold)',
           lineHeight: 1.1,
           marginBottom: '8px',

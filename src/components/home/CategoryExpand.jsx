@@ -56,11 +56,11 @@ export function CategoryExpand({ categoryId, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between" style={{ padding: '6px 0 6px' }}>
           <h3 style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontSize: '24px',
+            fontFamily: 'var(--font-display)',
+            fontSize: '20px',
             fontWeight: 700,
             color: 'var(--color-primary)',
-            lineHeight: 1,
+            lineHeight: 1.05,
           }}>
             Top {categoryLabel}
           </h3>
@@ -124,12 +124,12 @@ export function CategoryExpand({ categoryId, onClose }) {
         {!loading && unrankedDisplayed.length > 0 && (
           <div className="mt-4">
             <p style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '20px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '17px',
               fontWeight: 700,
               color: 'var(--color-text-secondary)',
               margin: '0 0 4px',
-              lineHeight: 1,
+              lineHeight: 1.05,
             }}>
               New on the menu
             </p>

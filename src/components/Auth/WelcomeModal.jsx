@@ -122,15 +122,15 @@ export function WelcomeModal() {
             <Seal size={88} variant="icon" />
           </div>
 
-          {/* Brand name — Amatic SC, matches home + login + splash */}
+          {/* Brand name — Shantell Sans, matches home + login + splash */}
           <h1
             style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '42px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '28px',
               fontWeight: 700,
               color: 'var(--color-text-primary)',
-              lineHeight: 1,
-              letterSpacing: '0.04em',
+              lineHeight: 1.1,
+              letterSpacing: '0',
               position: 'relative',
               zIndex: 1,
             }}

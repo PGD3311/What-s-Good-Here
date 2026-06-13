@@ -37,11 +37,11 @@ export function BatchSummary({
             <h1
               className="font-bold"
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 color: 'var(--color-text-primary)',
-                fontSize: '30px',
+                fontSize: '20px',
                 fontWeight: 700,
-                letterSpacing: '0.02em',
+                letterSpacing: '0',
               }}
             >
               Review Your Meal

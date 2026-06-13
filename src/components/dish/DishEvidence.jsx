@@ -130,10 +130,10 @@ export function DishEvidence({
           return (
           <div className="mb-4">
             <h3 style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '24px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '18px',
               fontWeight: 700,
-              letterSpacing: '0.02em',
+              letterSpacing: '0',
               color: 'var(--color-text-primary)',
               marginBottom: '12px',
             }}>

@@ -29,7 +29,7 @@ export function DecideOverlay({ open, onClose, result }) {
         <p className="text-xs font-semibold uppercase" style={{ color: 'var(--color-rating)', letterSpacing: '0.28em' }}>
           The island has spoken
         </p>
-        <h1 className="text-6xl leading-none my-2" style={{ fontFamily: "'Amatic SC', cursive", fontWeight: 700, color: '#fff' }}>
+        <h1 className="text-4xl my-2" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: '#fff', lineHeight: 1.1 }}>
           Get the<br />{best.name}
         </h1>
         <span className="px-4 py-2 rounded-full font-extrabold text-lg"

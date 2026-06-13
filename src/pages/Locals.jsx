@@ -27,17 +27,17 @@ var INNER = { padding: '20px 20px 96px', position: 'relative', maxWidth: '720px'
 
 var NAV_ROW = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }
 var CLOSE_BTN = { fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.02em', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }
-var PAGENO = { fontFamily: "'Amatic SC', cursive", fontSize: '16px', fontWeight: 700, color: 'var(--color-text-tertiary)' }
+var PAGENO = { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-tertiary)' }
 
 var STAMP_TINY = { position: 'absolute', top: '54px', right: '20px', width: '44px', height: '44px', transform: 'rotate(10deg)', opacity: 0.8, zIndex: 2 }
 
 var HEADER = { textAlign: 'center', marginBottom: '16px' }
-var EYEBROW = { fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)', lineHeight: 1 }
-var TITLE = { fontFamily: "'Amatic SC', cursive", fontWeight: 700, fontSize: '42px', lineHeight: 1, color: 'var(--color-text-primary)', margin: '2px 0 4px' }
+var EYEBROW = { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--color-accent-gold)', lineHeight: 1 }
+var TITLE = { fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '28px', lineHeight: 1, color: 'var(--color-text-primary)', margin: '2px 0 4px' }
 var TITLE_ACCENT = { color: 'var(--color-primary)' }
 var SUB = { fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }
 
-var SECTION_LABEL = { fontFamily: "'Amatic SC', cursive", fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)', margin: '14px 0 4px', lineHeight: 1 }
+var SECTION_LABEL = { fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--color-text-primary)', margin: '14px 0 4px', lineHeight: 1 }
 var SECTION_SUB = { fontSize: '11px', color: 'var(--color-text-tertiary)', marginBottom: '8px' }
 
 var ROW_CARD = {
@@ -54,13 +54,13 @@ var ROW_CARD = {
   textAlign: 'left',
 }
 
-var COUNT_BUBBLE = { width: '30px', height: '30px', borderRadius: '50%', background: 'var(--color-stamp-red)', color: 'var(--color-text-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Amatic SC', cursive", fontSize: '20px', fontWeight: 700, lineHeight: 1, flexShrink: 0 }
+var COUNT_BUBBLE = { width: '30px', height: '30px', borderRadius: '50%', background: 'var(--color-stamp-red)', color: 'var(--color-text-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, lineHeight: 1, flexShrink: 0 }
 var ROW_BODY = { flex: 1, minWidth: 0 }
 var DISH_NAME = { fontSize: '13px', fontWeight: 700, lineHeight: 1.1, color: 'var(--color-text-primary)' }
 var ROW_REST = { fontSize: '10.5px', color: 'var(--color-accent-gold)', marginTop: '1px' }
 var RATING = { fontSize: '15px', fontWeight: 700, color: 'var(--color-rating)', flexShrink: 0 }
 
-var CURATOR_NAME = { fontFamily: "'Amatic SC', cursive", fontSize: '24px', fontWeight: 700, lineHeight: 1, color: 'var(--color-text-primary)', marginBottom: '4px' }
+var CURATOR_NAME = { fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, lineHeight: 1, color: 'var(--color-text-primary)', marginBottom: '4px' }
 var CURATOR_TAGLINE = { fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.3 }
 var CHEVRON = { color: 'var(--color-text-tertiary)', fontSize: '18px', fontWeight: 300, flexShrink: 0 }
 

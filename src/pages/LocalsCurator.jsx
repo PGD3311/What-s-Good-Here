@@ -25,12 +25,12 @@ var INNER = { padding: '20px 24px 80px', position: 'relative', zIndex: 1, maxWid
 
 var NAV_ROW = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }
 var CLOSE = { fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }
-var PAGENO = { fontFamily: "'Amatic SC', cursive", fontSize: '16px', fontWeight: 700, color: 'var(--color-text-tertiary)' }
+var PAGENO = { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--color-text-tertiary)' }
 
 var STAMP_TINY = { position: 'absolute', top: '54px', right: '24px', width: '44px', height: '44px', transform: 'rotate(10deg)', opacity: 0.8, zIndex: 2 }
 
-var EYEBROW = { fontFamily: "'Amatic SC', cursive", fontSize: '18px', fontWeight: 700, color: 'var(--color-accent-gold)', marginBottom: '6px' }
-var TITLE = { fontFamily: "'Amatic SC', cursive", fontWeight: 700, fontSize: '52px', lineHeight: 0.95, color: 'var(--color-text-primary)' }
+var EYEBROW = { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--color-accent-gold)', marginBottom: '6px' }
+var TITLE = { fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '34px', lineHeight: 1.1, color: 'var(--color-text-primary)' }
 var BYLINE = { fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '16px' }
 
 var AVATAR_SIZE = 88
@@ -60,9 +60,9 @@ var ITEM = { marginBottom: '4px', padding: '7px 6px', borderRadius: '10px', curs
 // long dish names push past the right edge and the rating clips off-screen.
 var ITEM_HEAD = { display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '1px', minWidth: 0 }
 var RANK = {
-  fontFamily: "'Amatic SC', cursive",
+  fontFamily: 'var(--font-display)',
   fontWeight: 700,
-  fontSize: '22px',
+  fontSize: '16px',
   lineHeight: 1,
   color: 'var(--color-accent-gold)',
   flexShrink: 0,

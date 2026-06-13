@@ -325,7 +325,7 @@ export function RateYourMeal() {
           >
             <h1
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 fontSize: '34px',
                 color: 'var(--color-text-primary)',
               }}
@@ -373,8 +373,8 @@ export function RateYourMeal() {
         >
           <h1
             style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '34px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '24px',
               color: 'var(--color-text-primary)',
             }}
           >
@@ -487,8 +487,8 @@ export function RateYourMeal() {
           <h1
             className="mt-5"
             style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '40px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '28px',
               color: 'var(--color-text-primary)',
             }}
           >
