@@ -33,6 +33,17 @@ function clientIp(req: Request): string {
   const xff = (req.headers.get('x-forwarded-for') || '').split(',').map((s) => s.trim()).filter(Boolean)
   return xff.length > 0 ? xff[xff.length - 1] : ''
 }
+// Run side-effects (dish inserts, photo upload, audit row) AFTER the response is
+// sent. EdgeRuntime.waitUntil keeps the function alive to finish them, so the
+// user isn't kept waiting on DB writes they never see. Falls back to
+// fire-and-forget where EdgeRuntime isn't present (local/test).
+function runBackground(task: () => Promise<void>): void {
+  // Always attach the catch so a rejection anywhere in the closure is logged,
+  // never silently swallowed — on BOTH the EdgeRuntime and fallback paths.
+  const safe = task().catch((e) => console.error('[menu-xray] background task failed:', e))
+  const er = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime
+  if (er && typeof er.waitUntil === 'function') er.waitUntil(safe)
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors(req) })
@@ -83,9 +94,15 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        // Haiku: ~2x faster than Sonnet on menu vision at equal/better dish
+        // recall (validated on real photos 2026-06-13), and already the trusted
+        // model for parse-menu's extraction. Vision latency scales with OUTPUT
+        // tokens, so a fast model is the dominant lever on big menus.
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 8192,
-        system: MENU_EXTRACTION_PROMPT,
+        // Cache the 16.7KB system prompt — identical every scan, so after the
+        // first call it's a cache read (cheaper + faster input processing).
+        system: [{ type: 'text', text: MENU_EXTRACTION_PROMPT, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type, data: image_base64 } },
           { type: 'text', text: `Extract the full menu from "${restaurant.name}" from the attached photo of a physical menu.` },
@@ -99,9 +116,11 @@ Deno.serve(async (req) => {
     try { parsed = JSON.parse(raw) } catch { return json(req, 502, { error: 'Could not read the menu — try again' }) }
 
     if (parsed.not_a_menu) {
-      await service.from('menu_scans').insert({
-        restaurant_id, user_id: user?.id ?? null, extracted: { not_a_menu: true },
-        matched_count: 0, ingested_count: 0,
+      runBackground(async () => {
+        await service.from('menu_scans').insert({
+          restaurant_id, user_id: user?.id ?? null, extracted: { not_a_menu: true },
+          matched_count: 0, ingested_count: 0,
+        })
       })
       return json(req, 200, { not_a_menu: true })
     }
@@ -115,42 +134,52 @@ Deno.serve(async (req) => {
     if (matchError) return json(req, 500, { error: 'Matching failed' })
     const accepted = decideMatches(items, (matchRows || []) as MatchRow[])
 
-    // ---- Quiet ingest (logged-in only, throttled) ----
-    const ingested: string[] = []
+    // ---- Plan the quiet ingest (logged-in only, throttled) ----
+    // Planning is two fast indexed reads; the SLOW part — the per-row inserts,
+    // photo upload, audit row — runs in the background after the response, so
+    // the user sees the X-Ray view as soon as match completes, not after the
+    // writes. The planned list (not the actual insert result) drives the
+    // response's "new to the map" count — in practice they're identical, and a
+    // dish dropped by the offensive-name trigger is a vanishingly rare diff.
+    let plannedDishes: ReturnType<typeof buildIngestList> = []
     if (user) {
       const { data: ingestRl } = await authClient.rpc('check_menu_ingest_rate_limit')
       if (ingestRl?.allowed) {
         const { data: existing } = await service
           .from('dishes').select('id, name, category, price').eq('restaurant_id', restaurant_id)
-        const toInsert = buildIngestList(items, new Set(accepted.keys()), existing || []).slice(0, 40)
-        for (const dish of toInsert) {
-          // Per-row insert so the offensive-name trigger only skips that row.
-          const { error } = await service.from('dishes').insert({
-            restaurant_id, created_by: user.id, ...dish,
-          })
-          if (!error) ingested.push(dish.name)
-        }
+        plannedDishes = buildIngestList(items, new Set(accepted.keys()), existing || []).slice(0, 40)
       }
     }
+    const plannedNames = new Set(plannedDishes.map((d) => d.name))
 
-    // ---- Photo proof (logged-in only) + audit row ----
-    let photoPath: string | null = null
-    if (user) {
-      const scanFile = `${restaurant_id}/${crypto.randomUUID()}.jpg`
-      const bytes = Uint8Array.from(atob(image_base64), (c) => c.charCodeAt(0))
-      const { error: upErr } = await service.storage.from('menu-scans')
-        .upload(scanFile, bytes, { contentType: media_type })
-      if (!upErr) photoPath = scanFile
-    }
-    // Audit logging must never turn a successful scan into a 500 — by this
-    // point the user-visible work (and any ingest) already happened.
-    const { error: auditError } = await service.from('menu_scans').insert({
-      restaurant_id, user_id: user?.id ?? null, photo_path: photoPath,
-      extracted: { dishes: items }, matched_count: accepted.size, ingested_count: ingested.length,
+    // ---- Persist side-effects in the background (off the critical path) ----
+    runBackground(async () => {
+      let ingestedCount = 0
+      if (user && plannedDishes.length > 0) {
+        for (const dish of plannedDishes) {
+          // Per-row insert so the offensive-name trigger only skips that row.
+          const { error } = await service.from('dishes').insert({ restaurant_id, created_by: user.id, ...dish })
+          if (!error) ingestedCount++
+        }
+      }
+      let photoPath: string | null = null
+      if (user) {
+        try {
+          const scanFile = `${restaurant_id}/${crypto.randomUUID()}.jpg`
+          const bytes = Uint8Array.from(atob(image_base64), (c) => c.charCodeAt(0))
+          const { error: upErr } = await service.storage.from('menu-scans')
+            .upload(scanFile, bytes, { contentType: media_type })
+          if (!upErr) photoPath = scanFile
+        } catch (e) { console.error('[menu-xray] photo upload failed:', e) }
+      }
+      const { error: auditError } = await service.from('menu_scans').insert({
+        restaurant_id, user_id: user?.id ?? null, photo_path: photoPath,
+        extracted: { dishes: items }, matched_count: accepted.size, ingested_count: ingestedCount,
+      })
+      if (auditError) console.error('[menu-xray] audit insert failed:', auditError.message)
     })
-    if (auditError) console.error('[menu-xray] audit insert failed:', auditError.message)
 
-    // ---- Response payload ----
+    // ---- Response payload (sent immediately) ----
     const sectionOrder: string[] = []
     const sectionMap = new Map<string, Array<Record<string, unknown>>>()
     for (const item of items) {
@@ -160,7 +189,7 @@ Deno.serve(async (req) => {
       sectionMap.get(section)!.push({
         name: item.name, price: item.price ?? null, category: item.category,
         match: m ? { dishId: m.dish_id, dishName: m.dish_name, avgRating: m.avg_rating, totalVotes: m.total_votes, similarity: m.sim } : null,
-        ingested: ingested.includes(item.name),
+        ingested: plannedNames.has(item.name),
       })
     }
     let best: Record<string, unknown> | null = null
@@ -176,7 +205,7 @@ Deno.serve(async (req) => {
       restaurant: { id: restaurant.id, name: restaurant.name },
       sections: sectionOrder.map((name) => ({ name, items: sectionMap.get(name) })),
       best,
-      summary: { matched: accepted.size, ingested: ingested.length, total: items.length },
+      summary: { matched: accepted.size, ingested: plannedDishes.length, total: items.length },
     })
   } catch (error) {
     console.error('[menu-xray]', error)
