@@ -143,11 +143,11 @@ export function Restaurants() {
           <h2
             className="font-bold"
             style={{
-              fontFamily: "'Amatic SC', cursive",
+              fontFamily: 'var(--font-display)',
               color: 'var(--color-primary)',
-              fontSize: '32px',
+              fontSize: '22px',
               fontWeight: 700,
-              letterSpacing: '0.02em',
+              letterSpacing: '0',
             }}
           >
             Restaurants

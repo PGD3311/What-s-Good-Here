@@ -26,9 +26,9 @@ export function XRayDemoCard() {
         <p
           className="text-center mb-0.5"
           style={{
-            fontFamily: "'Amatic SC', cursive",
+            fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: '21px',
+            fontSize: '16px',
             letterSpacing: '1.5px',
             color: 'var(--color-accent-gold)',
           }}

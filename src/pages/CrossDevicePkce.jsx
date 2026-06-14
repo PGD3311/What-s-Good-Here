@@ -34,8 +34,8 @@ export default function CrossDevicePkce() {
     <div style={{ padding: 24, maxWidth: 480, margin: '0 auto', minHeight: '100vh' }}>
       <h1
         style={{
-          fontFamily: "'Amatic SC', cursive",
-          fontSize: 36,
+          fontFamily: 'var(--font-display)',
+          fontSize: 24,
           color: 'var(--color-text-primary)',
           marginBottom: 12,
         }}

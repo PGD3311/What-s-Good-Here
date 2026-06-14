@@ -28,8 +28,8 @@ export function CuratorChecklist({ hasDish, hasBio, isPublished }) {
     >
       <p
         style={{
-          fontFamily: "'Amatic SC', cursive",
-          fontSize: '26px',
+          fontFamily: 'var(--font-display)',
+          fontSize: '18px',
           fontWeight: 700,
           color: 'var(--color-text-primary)',
           marginBottom: '8px',

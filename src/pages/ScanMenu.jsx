@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { RestaurantConfirmChip, ScanSweep, XRayResults, DecideOverlay, XRayDemoCard } from '../components/scan'
 import { useMenuScan } from '../hooks/useMenuScan'
 import { downscaleImage } from '../utils/imageDownscale'
@@ -8,16 +8,35 @@ import { logger } from '../utils/logger'
 
 const MIN_SWEEP_MS = 1500
 
+// The scan result lives in mutation state that's destroyed when the page
+// unmounts — so tapping a dish and hitting back would otherwise force a costly
+// re-scan. Cache results per restaurant in module scope and restore on POP
+// (back/forward) only, never on a fresh PUSH visit (tapping the camera is a new
+// scan). Keyed by restaurant so backing across multiple scanned restaurants
+// restores the right one; restaurant is always derived FROM the restored result
+// so the shown X-Ray and the active context can never diverge.
+const scanCache = new Map() // restaurantId -> { restaurant, result }
+let lastScanRestaurantId = null
+
 export function ScanMenu() {
   const { state } = useLocation()
   const navigate = useNavigate()
+  const navType = useNavigationType()
   const fileInputRef = useRef(null)
-  const [restaurant, setRestaurant] = useState(state?.restaurant || null)
+  // On back/forward, prefer the restaurant this history entry was pinned to
+  // (restaurant-page entry); fall back to the most recent scan (homepage entry,
+  // which carries no restaurant identity in history).
+  const restoreKey = navType === 'POP' ? (state?.restaurant?.id ?? lastScanRestaurantId) : null
+  const restored = restoreKey ? scanCache.get(restoreKey) : null
+  const [restaurant, setRestaurant] = useState(restored?.restaurant ?? state?.restaurant ?? null)
+  const [restoredResult, setRestoredResult] = useState(restored?.result ?? null)
   const [photoUrl, setPhotoUrl] = useState(null)
   const [sweeping, setSweeping] = useState(false)
   const [decideOpen, setDecideOpen] = useState(false)
   const [localError, setLocalError] = useState(null)
-  const { scan, result, scanning, error, reset } = useMenuScan()
+  const { scan, result: liveResult, scanning, error, reset } = useMenuScan()
+  // A fresh scan (liveResult) always wins over a restored one.
+  const result = liveResult || restoredResult
 
   useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl) }, [photoUrl])
 
@@ -25,6 +44,7 @@ export function ScanMenu() {
     const file = e.target.files?.[0]
     if (!file || !restaurant) return
     setLocalError(null)
+    setRestoredResult(null) // a new scan supersedes any restored result
     setPhotoUrl(URL.createObjectURL(file))
     setSweeping(true)
     capture('scan_started', { restaurant_id: restaurant.id })
@@ -32,6 +52,11 @@ export function ScanMenu() {
     try {
       const { base64, mediaType } = await downscaleImage(file)
       const [payload] = await Promise.all([scan({ restaurantId: restaurant.id, base64, mediaType }), minSweep])
+      // Cache a real X-Ray result so back-navigation from a dish restores it.
+      if (payload && !payload.not_a_menu && !payload.unreadable) {
+        scanCache.set(restaurant.id, { restaurant, result: payload })
+        lastScanRestaurantId = restaurant.id
+      }
       capture('scan_completed', {
         restaurant_id: restaurant.id,
         matched: payload?.summary?.matched ?? 0,
@@ -49,7 +74,11 @@ export function ScanMenu() {
     }
   }
 
-  const retake = () => { reset(); setLocalError(null); setPhotoUrl(null) }
+  const retake = () => {
+    reset(); setRestoredResult(null)
+    if (restaurant) scanCache.delete(restaurant.id)
+    setLocalError(null); setPhotoUrl(null)
+  }
 
   if (sweeping || scanning) return <ScanSweep photoUrl={photoUrl} />
 
@@ -66,7 +95,7 @@ export function ScanMenu() {
           <div className="fixed bottom-6 left-4 right-4 z-30">
             <button onClick={() => { setDecideOpen(true); capture('decide_opened', { restaurant_id: restaurant.id }) }}
               className="w-full py-4 rounded-2xl font-bold text-base"
-              style={{ background: 'var(--color-rating)', color: '#fff', boxShadow: '0 8px 26px rgba(22,163,74,0.45)' }}>
+              style={{ background: 'var(--color-primary)', color: '#fff', boxShadow: '0 8px 26px rgba(228,68,10,0.42)' }}>
               🎯 Just tell me what to get
             </button>
           </div>
@@ -90,7 +119,7 @@ export function ScanMenu() {
       <div className="w-full max-w-sm flex flex-col items-center gap-5" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 60px)' }}>
         {/* Title */}
         <div className="text-center">
-          <h1 style={{ fontFamily: "'Amatic SC', cursive", fontWeight: 700, fontSize: '46px', lineHeight: 0.95, color: 'var(--color-text-primary)' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '32px', lineHeight: 1.1, color: 'var(--color-text-primary)' }}>
             Menu X-Ray
           </h1>
           <p className="text-[15px] mt-1.5 px-2" style={{ color: 'var(--color-text-secondary)' }}>

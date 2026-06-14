@@ -171,13 +171,13 @@ export function CheckInSheet({ open, restaurant, mode = 'live', onClose }) {
         {/* Header */}
         <div style={{ padding: '0 24px 12px', flex: '0 0 auto' }}>
           <h2 style={{
-            fontFamily: "'Amatic SC', cursive",
+            fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: '38px',
+            fontSize: '26px',
             lineHeight: 1,
             color: 'var(--color-text-primary)',
             margin: 0,
-            letterSpacing: '0.01em',
+            letterSpacing: '0',
           }}>{heading}</h2>
           <div aria-hidden="true" style={{
             width: 44, height: 2, background: 'var(--color-primary)',

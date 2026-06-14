@@ -112,10 +112,10 @@ export function AddPhotoNudge({ isOpen, onClose, onUploaded }) {
           <h2
             id="add-photo-nudge-title"
             style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '40px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '28px',
               color: 'var(--color-text-primary)',
-              lineHeight: 1,
+              lineHeight: 1.1,
               marginBottom: 8,
             }}
           >
