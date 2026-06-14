@@ -66,7 +66,7 @@ export const HomeListMode = memo(function HomeListMode({
     >
       {/* Fixed header: brand + search + chips */}
       <div style={{ flexShrink: 0, background: 'var(--color-bg)', zIndex: 10, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        {/* Brand header — slim left-aligned Amatic SC wordmark. Replaced the
+        {/* Brand header — slim left-aligned Shantell Sans wordmark. Replaced the
             large centered app-icon + tagline (which pushed all rankings below
             the fold and wasted the space on either side) so the list sits
             higher and the header reads as an app, not a splash screen. Map page
@@ -74,14 +74,14 @@ export const HomeListMode = memo(function HomeListMode({
             screen-reader label, so this is aria-hidden decorative text. */}
         <div className="px-5 pt-3 pb-1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span aria-hidden="true" style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontWeight: 700,
-            fontSize: '36px',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 600,
+            fontSize: '27px',
             lineHeight: 1,
-            letterSpacing: '0.5px',
-            color: 'var(--color-primary)',
+            letterSpacing: '0',
+            color: 'var(--color-text-primary)',
           }}>
-            What's <span style={{ color: 'var(--color-accent-gold)' }}>Good</span> Here
+            What's <span style={{ color: 'var(--color-primary)', fontStyle: 'italic' }}>Good</span> Here
           </span>
           {/* Settings + notifications — reuse the shared TopBar controls, tinted
               dark for the stone header (they default to near-white for the
@@ -175,11 +175,11 @@ export const HomeListMode = memo(function HomeListMode({
           /* Search results — flat list */
           <div className="px-4 pt-2 pb-4">
             <h2 style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '28px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '21px',
               fontWeight: 700,
               color: 'var(--color-text-primary)',
-              letterSpacing: '0.02em',
+              letterSpacing: '0',
               marginBottom: '8px',
             }}>
               Results
@@ -238,24 +238,35 @@ export const HomeListMode = memo(function HomeListMode({
 })
 
 // Chalkboard styles — module-level constants (no re-creation per render)
-var BOARD_OUTER = { flexShrink: 0, width: '175px' }
-var BOARD_SURFACE = { position: 'relative', background: '#363B3F', borderRadius: '4px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }
-var BOARD_FRAME = { position: 'absolute', inset: '3px', border: '2.5px solid #1A1D1F', borderRadius: '2px', pointerEvents: 'none', zIndex: 2 }
-var BOARD_DUST = { position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 30% 40%, rgba(255,255,255,0.03) 0%, transparent 60%)', pointerEvents: 'none' }
-var BOARD_CONTENT = { position: 'relative', zIndex: 1, padding: '8px 10px 9px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }
-var CHALK_BRIGHT = { fontFamily: "'Amatic SC', cursive", color: 'rgba(255,255,255,0.88)', fontWeight: 700 }
-var CHALK_MED = { fontFamily: "'Amatic SC', cursive", color: 'rgba(255,255,255,0.55)', fontWeight: 700 }
-var CHALK_FAINT = { fontFamily: "'Amatic SC', cursive", color: 'rgba(255,255,255,0.45)', fontWeight: 700 }
-var CHALK_BIG = { fontFamily: "'Amatic SC', cursive", color: 'rgba(255,255,255,0.88)' }
-var CHALK_CTA = { fontFamily: "'Amatic SC', cursive", color: 'var(--color-primary)' }
-var CHALK_LINE = { height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0', width: '36px' }
-var LEG_STYLE = { width: '2.5px', height: '10px', background: '#6B7280', borderRadius: '0 0 1.5px 1.5px' }
-var LEG_LEFT = Object.assign({}, LEG_STYLE, { transform: 'rotate(6deg)', transformOrigin: 'top center' })
-var LEG_RIGHT = Object.assign({}, LEG_STYLE, { transform: 'rotate(-6deg)', transformOrigin: 'top center' })
-
-var BOARD_ICON_STYLE = { display: 'inline-block', verticalAlign: 'middle', width: '20px', height: '20px', objectFit: 'contain', marginRight: '3px' }
+var BOARD_OUTER = { flexShrink: 0, width: '176px' }
+// Warm slate board with chalk dust + a wood bottom edge (the 0 4px 0 shadow) so
+// it reads as a real A-frame sign, not a flat card.
+var BOARD_SURFACE = {
+  position: 'relative',
+  borderRadius: '7px',
+  overflow: 'hidden',
+  height: '172px',
+  background: '#3E362C',
+  backgroundImage:
+    'radial-gradient(ellipse at 28% 22%, rgba(255,255,255,0.05), transparent 55%),' +
+    'radial-gradient(ellipse at 75% 80%, rgba(0,0,0,0.18), transparent 60%)',
+  boxShadow: '0 4px 0 #2A241C, 0 8px 14px rgba(0,0,0,0.3)',
+}
+var BOARD_FRAME = { position: 'absolute', inset: '5px', border: '1.5px solid rgba(255,255,255,0.16)', borderRadius: '4px', pointerEvents: 'none', zIndex: 2 }
+var BOARD_CONTENT = { position: 'relative', zIndex: 1, height: '100%', padding: '15px 13px 14px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between' }
+var BOARD_TOP = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px' }
+// One illustrated food icon per board — the brand's visual identity, not emoji.
+var BOARD_ICON_STYLE = { width: '38px', height: '38px', objectFit: 'contain', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.35))' }
+var ICE_CREAM_MELTING_STYLE = { display: 'block', margin: '0 auto', width: '34px', height: '34px', objectFit: 'contain' }
+// Title keeps the Fraunces display voice; eyebrow/proof/CTA are Outfit so the
+// board has real hierarchy (label → headline → action) instead of one flat wall.
+var CHALK_TITLE = { fontFamily: 'var(--font-display)', color: '#fff' }
+var CHALK_EYEBROW = { fontFamily: 'Outfit, sans-serif', fontSize: '9.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.13em', color: 'rgba(255,255,255,0.5)', margin: 0 }
+var CHALK_PROOF = { fontFamily: 'Outfit, sans-serif', fontSize: '12.5px', fontWeight: 600, color: 'rgba(255,255,255,0.82)', margin: 0 }
+var CHALK_CTA = { fontFamily: 'Outfit, sans-serif', fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-accent-orange)', margin: 0 }
 
 function ChalkboardCard({ tag, title, titleSize, sub, stat, cta, onClick, icon, bottomIcon }) {
+  var proof = stat || sub
   return (
     <button
       onClick={onClick}
@@ -264,26 +275,20 @@ function ChalkboardCard({ tag, title, titleSize, sub, stat, cta, onClick, icon, 
     >
       <div style={BOARD_SURFACE}>
         <div style={BOARD_FRAME} />
-        <div style={BOARD_DUST} />
         <div style={BOARD_CONTENT}>
-          <p style={Object.assign({}, CHALK_FAINT, { fontSize: '14px', margin: 0 })}>
+          <div style={BOARD_TOP}>
             {icon && <img src={icon} alt="" style={BOARD_ICON_STYLE} />}
-            <span>{tag}</span>
-          </p>
-          <p style={Object.assign({}, CHALK_BIG, { fontSize: titleSize || '36px', fontWeight: 700, lineHeight: 0.95, margin: '2px 0 0' })}>{title}</p>
-          {sub && <p style={Object.assign({}, CHALK_MED, { fontSize: '15px', margin: 0 })}>{sub}</p>}
-          <div style={CHALK_LINE} />
-          {stat && <p style={Object.assign({}, CHALK_BRIGHT, { fontSize: '16px', margin: 0 })}>{stat}</p>}
-          {stat && <div style={CHALK_LINE} />}
-          <p style={Object.assign({}, CHALK_CTA, { fontSize: '18px', fontWeight: 700, margin: 0 })}>{cta}</p>
+            <p style={CHALK_EYEBROW}>{tag}</p>
+            <p style={Object.assign({}, CHALK_TITLE, { fontSize: titleSize || '20px', fontWeight: 600, lineHeight: 1.12, margin: 0 })}>{title}</p>
+            {proof && <p style={CHALK_PROOF}>{proof}</p>}
+          </div>
+          <p style={CHALK_CTA}>{cta}</p>
           {bottomIcon && <img src={bottomIcon} alt="" style={ICE_CREAM_MELTING_STYLE} />}
         </div>
       </div>
     </button>
   )
 }
-
-var ICE_CREAM_MELTING_STYLE = { display: 'block', margin: '4px auto -2px', width: '40px', height: '40px', objectFit: 'contain' }
 
 function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIceCream, onExpandCategory }) {
   var navigate = useNavigate()
@@ -354,7 +359,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           icon="/categories/icons/speech-bubble.png"
           tag={'most talked about'}
           title={mostVotedDish.dish_name || mostVotedDish.name}
-          titleSize="32px"
+          titleSize="20px"
           sub={mostVotedDish.restaurant_name}
           stat={(mostVotedDish.total_votes || 0) + ' votes'}
           cta={'see why \u2192'}
@@ -368,7 +373,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           icon="/categories/icons/money-bag.png"
           tag={'best value'}
           title={bestValueMeal.dish_name || bestValueMeal.name}
-          titleSize="32px"
+          titleSize="20px"
           sub={bestValueMeal.restaurant_name}
           stat={'$' + Number(bestValueMeal.price).toFixed(0) + ' \u00B7 rated ' + Number(bestValueMeal.avg_rating || 0).toFixed(1)}
           cta={'best meal under $15 \u2192'}
@@ -382,7 +387,7 @@ function ChalkboardSection({ topRestaurant, mostVotedDish, bestValueMeal, bestIc
           icon="/categories/icons/ice-cream-clean.png"
           tag={'island scoops'}
           title={bestIceCream.dish_name || bestIceCream.name}
-          titleSize="32px"
+          titleSize="20px"
           sub={bestIceCream.restaurant_name}
           stat={(bestIceCream.total_votes || 0) + ' votes \u00B7 rated ' + Number(bestIceCream.avg_rating || 0).toFixed(1)}
           cta={'best ice cream \u2192'}

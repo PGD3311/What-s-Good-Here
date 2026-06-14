@@ -336,11 +336,11 @@ export function RestaurantDetail() {
             <h2
               className="font-bold truncate"
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 color: 'var(--color-text-primary)',
-                fontSize: '32px',
+                fontSize: '24px',
                 fontWeight: 700,
-                letterSpacing: '0.02em',
+                letterSpacing: '0',
               }}
             >
               {restaurant.name}
@@ -429,10 +429,10 @@ export function RestaurantDetail() {
           <h3
             className="font-semibold mb-2 px-4"
             style={{
-              fontFamily: "'Amatic SC', cursive",
-              fontSize: '22px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '18px',
               fontWeight: 700,
-              letterSpacing: '0.02em',
+              letterSpacing: '0',
               color: 'var(--color-text-primary)',
             }}
           >
@@ -767,7 +767,7 @@ export function RestaurantDetail() {
           />
           <h3
             className="font-semibold mb-3"
-            style={{ fontFamily: "'Amatic SC', cursive", fontSize: '24px', fontWeight: 700, letterSpacing: '0.02em', color: 'var(--color-text-primary)' }}
+            style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, letterSpacing: '0', color: 'var(--color-text-primary)' }}
           >
             Happening Here
           </h3>

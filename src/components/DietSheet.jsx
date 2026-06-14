@@ -5,7 +5,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
  * DietSheet — bottom-sheet multi-select for dietary preferences.
  *
  * Editorial-leaning preferences screen, not a filter dropdown:
- *   - Amatic SC header "Dietary preferences" with thin coral hairline
+ *   - Shantell Sans header "Dietary preferences" with thin coral hairline
  *   - 2-column tile grid; selected = coral border + faint coral wash
  *   - Inline "All selected restrictions must apply" helper (italic, AND-semantics cue)
  *   - Disclaimer block at the bottom: info-icon prefix + tertiary text
@@ -101,13 +101,13 @@ export function DietSheet({
           <div>
             <h2
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 fontWeight: 700,
-                fontSize: '38px',
-                lineHeight: 1,
+                fontSize: '26px',
+                lineHeight: 1.1,
                 color: 'var(--color-text-primary)',
                 margin: 0,
-                letterSpacing: '0.01em',
+                letterSpacing: '0',
               }}
             >
               Dietary Preferences

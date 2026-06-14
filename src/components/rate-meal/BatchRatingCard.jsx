@@ -83,9 +83,9 @@ export function BatchRatingCard({
             <h1
               className="mt-1"
               style={{
-                fontFamily: "'Amatic SC', cursive",
-                fontSize: '38px',
-                lineHeight: 1,
+                fontFamily: 'var(--font-display)',
+                fontSize: '26px',
+                lineHeight: 1.1,
                 color: 'var(--color-text-primary)',
               }}
             >

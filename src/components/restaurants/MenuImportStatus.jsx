@@ -1,9 +1,9 @@
 import { useMenuImportStatus } from '../../hooks/useMenuImportStatus'
 
 const headingStyle = {
-  fontFamily: "'Amatic SC', cursive",
+  fontFamily: 'var(--font-display)',
   fontWeight: 700,
-  fontSize: '24px',
+  fontSize: '18px',
   color: 'var(--color-text-primary)',
   marginBottom: '8px',
 }

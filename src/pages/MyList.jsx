@@ -113,7 +113,7 @@ export function MyList() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-bg)' }}>
         <div style={{ fontSize: 64 }}>⚠️</div>
-        <h1 style={{ fontFamily: "'Amatic SC', cursive", fontSize: 32, marginTop: 12, color: 'var(--color-text-primary)' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 12, color: 'var(--color-text-primary)' }}>
           Couldn't load your list
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', marginTop: 8, textAlign: 'center' }}>

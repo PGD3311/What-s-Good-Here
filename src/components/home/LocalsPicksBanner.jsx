@@ -132,18 +132,18 @@ var BANNER_GRAIN = {
 }
 var BANNER_BODY = { flex: 1, position: 'relative', zIndex: 2, minWidth: 0 }
 var EYEBROW = {
-  fontFamily: "'Amatic SC', cursive",
-  fontSize: '15px',
+  fontFamily: 'var(--font-display)',
+  fontSize: '13px',
   fontWeight: 700,
   color: 'var(--color-accent-gold)',
   lineHeight: 1,
   letterSpacing: '0.02em',
 }
 var TITLE = {
-  fontFamily: "'Amatic SC', cursive",
+  fontFamily: 'var(--font-display)',
   fontWeight: 700,
-  fontSize: '34px',
-  lineHeight: 0.95,
+  fontSize: '23px',
+  lineHeight: 1.08,
   color: 'var(--color-text-primary)',
   margin: '-2px 0 2px',
 }

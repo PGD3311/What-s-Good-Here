@@ -119,7 +119,7 @@ export function ScanMenu() {
       <div className="w-full max-w-sm flex flex-col items-center gap-5" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 60px)' }}>
         {/* Title */}
         <div className="text-center">
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '46px', lineHeight: 0.95, color: 'var(--color-text-primary)' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '32px', lineHeight: 1.1, color: 'var(--color-text-primary)' }}>
             Menu X-Ray
           </h1>
           <p className="text-[15px] mt-1.5 px-2" style={{ color: 'var(--color-text-secondary)' }}>

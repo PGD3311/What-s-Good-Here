@@ -49,7 +49,7 @@ export function Playlist() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-bg)' }}>
         <div style={{ fontSize: 64 }}>⚠️</div>
-        <h1 style={{ fontFamily: "'Amatic SC', cursive", fontSize: 32, marginTop: 12, color: 'var(--color-text-primary)' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 12, color: 'var(--color-text-primary)' }}>
           Something went wrong
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', marginTop: 8, textAlign: 'center' }}>
@@ -66,7 +66,7 @@ export function Playlist() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-bg)' }}>
         <div style={{ fontSize: 64 }}>🔒</div>
-        <h1 style={{ fontFamily: "'Amatic SC', cursive", fontSize: 32, marginTop: 12, color: 'var(--color-text-primary)' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 12, color: 'var(--color-text-primary)' }}>
           Playlist not found
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', marginTop: 8, textAlign: 'center' }}>
@@ -124,8 +124,8 @@ export function Playlist() {
         </div>
         <h1
           style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontSize: 42,
+            fontFamily: 'var(--font-display)',
+            fontSize: 28,
             lineHeight: 1,
             marginTop: 16,
             color: 'var(--color-text-primary)',

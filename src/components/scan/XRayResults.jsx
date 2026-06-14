@@ -15,7 +15,7 @@ export function XRayResults({ result, photoUrl }) {
     <div className="px-4 pb-28">
       <div className="flex items-start justify-between gap-3 pt-4 pb-2">
         <div className="min-w-0">
-          <h1 className="text-3xl leading-none" style={{ fontFamily: "'Amatic SC', cursive", fontWeight: 700 }}>
+          <h1 className="text-2xl leading-none" style={{ fontFamily: 'var(--font-display)', fontWeight: 700 }}>
             {restaurant.name}
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
@@ -45,11 +45,11 @@ export function XRayResults({ result, photoUrl }) {
             <h2
               className="text-center"
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 fontWeight: 700,
-                fontSize: '22px',
+                fontSize: '18px',
                 color: 'var(--color-accent-gold)',
-                letterSpacing: '0.5px',
+                letterSpacing: '0',
                 margin: si === 0 ? '0 0 4px' : '18px 0 4px',
               }}
             >

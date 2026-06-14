@@ -120,11 +120,11 @@ export function RestaurantReviews() {
             <h1
               className="font-bold truncate"
               style={{
-                fontFamily: "'Amatic SC', cursive",
+                fontFamily: 'var(--font-display)',
                 color: 'var(--color-text-primary)',
-                fontSize: '28px',
+                fontSize: '22px',
                 fontWeight: 700,
-                letterSpacing: '0.02em',
+                letterSpacing: '0',
               }}
             >
               Reviews

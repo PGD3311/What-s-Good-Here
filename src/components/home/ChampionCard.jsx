@@ -4,7 +4,7 @@ import { CategoryIcon } from './CategoryIcons'
 
 /**
  * ChampionCard — the #1 ranked dish on the island.
- * Gold border, big icon, Amatic SC headline, prominent score.
+ * Gold border, big icon, Shantell Sans headline, prominent score.
  */
 export function ChampionCard({ dish }) {
   var navigate = useNavigate()
@@ -41,11 +41,11 @@ export function ChampionCard({ dish }) {
       {/* "#1 ON THE ISLAND" banner */}
       <div className="flex items-center gap-2" style={{ marginBottom: '14px' }}>
         <span style={{
-          fontFamily: "'Amatic SC', cursive",
-          fontSize: '20px',
+          fontFamily: 'var(--font-display)',
+          fontSize: '15px',
           fontWeight: 700,
           color: 'var(--color-primary)',
-          letterSpacing: '0.06em',
+          letterSpacing: '0.04em',
           lineHeight: 1,
         }}>
           #1 Nearby
@@ -62,14 +62,14 @@ export function ChampionCard({ dish }) {
 
         {/* Text block */}
         <div className="flex-1 min-w-0">
-          {/* Dish name — Amatic SC, big */}
+          {/* Dish name — Shantell Sans, big */}
           <h2 style={{
-            fontFamily: "'Amatic SC', cursive",
-            fontSize: '30px',
+            fontFamily: 'var(--font-display)',
+            fontSize: '22px',
             fontWeight: 700,
             color: 'var(--color-text-primary)',
-            letterSpacing: '0.02em',
-            lineHeight: 1.05,
+            letterSpacing: '0',
+            lineHeight: 1.1,
             margin: 0,
           }}>
             {dish.dish_name || dish.name}
