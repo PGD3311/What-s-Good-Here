@@ -140,7 +140,20 @@ export function Login() {
       await authApi.signInWithPassword(email, password)
       navigate(resolveNext())
     } catch (error) {
-      setMessage({ type: 'error', text: error.message })
+      // Supabase returns one opaque "Invalid login credentials" for both wrong
+      // password AND no-such-account (deliberate — prevents email enumeration).
+      // First-timers who tap "Sign in" instead of "Create Account" land here and
+      // read it as "the app is broken." Nudge them to the Sign up link below
+      // without revealing whether the email exists.
+      const code = error.originalError?.code
+      const isBadCreds = code === 'invalid_credentials'
+        || /invalid login credentials/i.test(error.message || '')
+      setMessage({
+        type: 'error',
+        text: isBadCreds
+          ? 'Email or password incorrect. New here? Tap "Sign up" below to create an account.'
+          : error.message,
+      })
     } finally {
       setLoading(false)
     }
