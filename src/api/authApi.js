@@ -250,9 +250,15 @@ export const authApi = {
           }
           throw err
         }
+        // Google id_tokens include an at_hash claim bound to the access token.
+        // Supabase validates that binding when access_token is supplied and
+        // currently only warns when it's missing — but the warning says
+        // access_token becomes mandatory in a future version. nativeAuth
+        // unwraps the plugin's AccessToken object to a plain string for us.
         const { error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: tokens.idToken,
+          ...(tokens.accessToken ? { access_token: tokens.accessToken } : {}),
         })
         if (error) {
           capture('login_failed', { method: 'google', error: error.message })

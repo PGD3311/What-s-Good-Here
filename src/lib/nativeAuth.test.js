@@ -25,7 +25,8 @@ describe('signInWithGoogleNative', () => {
   it('returns { idToken, accessToken } on success', async () => {
     loginMock.mockResolvedValueOnce({
       provider: 'google',
-      result: { idToken: 'google-id', accessToken: 'google-access', profile: {} },
+      // Plugin returns accessToken as an AccessToken object, not a string.
+      result: { idToken: 'google-id', accessToken: { token: 'google-access' }, profile: {} },
     })
     const r = await signInWithGoogleNative()
     expect(r).toEqual({ idToken: 'google-id', accessToken: 'google-access' })
