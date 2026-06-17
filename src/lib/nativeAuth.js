@@ -78,7 +78,12 @@ export async function signInWithGoogleNative() {
     throw mapPluginError(err, 'google')
   }
   const idToken = res?.result?.idToken
-  const accessToken = res?.result?.accessToken
+  // The plugin returns accessToken as an AccessToken object ({ token, ... }),
+  // not a string. Unwrap to the raw token string here so callers (and Supabase)
+  // get a plain string. Google id_tokens carry an at_hash claim bound to this
+  // access token; Supabase needs it passed to signInWithIdToken (warns now,
+  // mandatory in a future version).
+  const accessToken = res?.result?.accessToken?.token || null
   if (!idToken) {
     throw Object.assign(new Error('Missing idToken from Google'), {
       code: 'AUTH_CONFIG',
