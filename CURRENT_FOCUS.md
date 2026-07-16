@@ -2,11 +2,13 @@
 
 *Dan (or any Claude session starting work) updates this file at session start. Every other Claude session reads it first to avoid collisions.*
 
-**Last updated:** 2026-06-10
+**Last updated:** 2026-07-16
 
 ---
 
 ## Active handoff
+
+**#184 cross-device redirect fix (Dan, 2026-07-16, branch `fix/cross-device-next-redirect`).** Fixing the mint-link signup redirect bug: cross-device PKCE branch drops `safeNext`. **Claimed surfaces:** `src/pages/AuthCallback.jsx`, `src/pages/CrossDevicePkce.jsx` (+ new tests for both). Does NOT touch `authApi.js` (redirect param already exists) or the #156 verifyOtp surface.
 
 **Menu X-Ray session (Dan, 2026-06-10, branch `feat/menu-xray`) — BUILT, PR #323 OPEN.** Migration run in SQL Editor ✅, `menu-xray` function deployed via dashboard (Verify-JWT off) ✅, live smoke passed (Lookout 27/27 matched) ✅. Remaining: Dan's logged-in field test at a real table, then merge; homepage camera icon is a follow-up PR after a few days of field use (T43). Original scope note: scan a physical menu → Claude vision extracts → pg_trgm match → rating chips → quiet menu ingest. Spec: `docs/superpowers/specs/2026-06-10-menu-xray-design.md` · Plan: `docs/superpowers/plans/2026-06-10-menu-xray.md`. Validation spike PASSED 7/7 on real menu photos. **Claimed surfaces:** `supabase/functions/menu-xray/` (new), `src/components/scan/` (new), `src/pages/ScanMenu.jsx` (new), `src/utils/verdict.js`, `src/api/menuScanApi.js`, `src/hooks/useMenuScan.js`, `src/App.jsx` (/scan route), `src/pages/RestaurantDetail.jsx` (header button), `supabase/schema.sql` (appending menu_scans table + 4 RPCs). Reads menu-refresh code but NEVER edits it.
 

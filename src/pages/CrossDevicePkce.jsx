@@ -6,6 +6,10 @@ import { logger } from '../utils/logger'
 export default function CrossDevicePkce() {
   const { state } = useLocation()
   const type = state?.type ?? 'magiclink'
+  // Destination the user was originally headed to (sanitized same-origin path
+  // from AuthCallback). Threaded through the fresh magic link so a first-time
+  // signup from a shared link still lands on the shared target. See #184.
+  const next = state?.next ?? null
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState(null)
@@ -19,7 +23,10 @@ export default function CrossDevicePkce() {
       if (type === 'recovery') {
         await authApi.resetPassword(email)
       } else {
-        await authApi.signInWithMagicLink(email)
+        const returnPath = next
+          ? `/auth/callback?type=${encodeURIComponent(type)}&next=${encodeURIComponent(next)}`
+          : null
+        await authApi.signInWithMagicLink(email, returnPath)
       }
       setSent(true)
     } catch (err) {
