@@ -119,7 +119,7 @@ export const DishListItem = memo(function DishListItem({
         <span
           className="flex-shrink-0"
           style={{
-            width: '32px',
+            width: '26px',
             textAlign: 'center',
             fontFamily: 'var(--font-display)',
             fontSize: isPodium ? '32px' : '22px',
@@ -241,10 +241,10 @@ export const DishListItem = memo(function DishListItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap"
-                style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text-secondary)', fontSize: '11px', background: 'transparent' }}
+                className="inline-flex items-center gap-1 rounded-full font-medium whitespace-nowrap"
+                style={{ padding: '3px 8px', border: '1px solid var(--color-divider)', color: 'var(--color-text-secondary)', fontSize: '10px', background: 'transparent' }}
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 3 3 10.5l8.5 2 2 8.5z" /></svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 3 3 10.5l8.5 2 2 8.5z" /></svg>
                 Directions
               </a>
             )}

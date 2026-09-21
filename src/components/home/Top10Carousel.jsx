@@ -100,14 +100,6 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
   }
 
   var activeTab = CAROUSEL_TABS[activeIndex] || CAROUSEL_TABS[0]
-  var activeLimit = getLimit(activeTab.id)
-  // Parent fetches the active tab's data for the count badge. React Query
-  // dedupes — the same query key from CarouselTabContent hits the cache.
-  var activeCategoryFilter = activeTab.id === 'nearby' ? null : activeTab.id
-  var activeDishesQuery = useDishes(location, radius, activeCategoryFilter, null, dietaryTags)
-  var activeTotal = (activeDishesQuery.dishes || []).length
-  var visibleCount = Math.min(activeTotal, activeLimit)
-
   return (
     <div className="pt-1">
       {/* Divider */}
@@ -162,18 +154,26 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
                 marginTop: '1px',
                 fontSize: '9px',
                 fontWeight: isActive ? 700 : 500,
-                color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                 lineHeight: 1.2,
               }}>
                 {tab.label}
               </span>
+              {/* Selected marker — a short bar under the active tab */}
+              <span aria-hidden="true" style={{
+                marginTop: '4px',
+                width: '22px',
+                height: '2px',
+                borderRadius: '1px',
+                background: isActive ? 'var(--color-primary)' : 'transparent',
+              }} />
             </button>
           )
         })}
       </div>
 
       {/* Section header — updates with active tab */}
-      <div className="px-5 flex items-baseline justify-between mb-1">
+      <div className="px-5 flex items-baseline justify-between" style={{ marginBottom: '12px' }}>
         <h2 style={{
           fontFamily: 'var(--font-display)',
           fontSize: '23px',
@@ -184,15 +184,6 @@ export var Top10Carousel = forwardRef(function Top10Carousel({ location, radius,
         }}>
           {activeTab.id === 'nearby' ? 'Top Rated Nearby' : 'Top ' + activeTab.label}
         </h2>
-        <span style={{
-          fontSize: '11px',
-          color: 'var(--color-text-tertiary)',
-          fontWeight: 600,
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-        }}>
-          {visibleCount}{activeTotal > activeLimit ? '+' : ''} {visibleCount === 1 ? 'dish' : 'dishes'}
-        </span>
       </div>
 
       {/* Snap-scroll carousel */}
