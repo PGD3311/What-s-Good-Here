@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { parseModeration, readDishContext, failClosed, type ModerationResult, type DishContext } from './parse.ts'
 
 /**
  * Photo Moderation Edge Function
@@ -11,7 +12,14 @@ import { corsHeaders } from '../_shared/cors.ts'
  * other users).
  *
  * Sonnet vision evaluates the image and returns:
- *   { is_food_photo: bool, is_unsafe: bool, reason: string }
+ *   { is_food_photo, is_unsafe, reason, dish_match, seen }
+ *
+ * dish_match ('likely' | 'unclear' | 'contradicts') answers "is this the dish
+ * they say it is?" when the caller sends dish_name/category/restaurant_name.
+ * The client only acts on 'contradicts', and only by ASKING the user
+ * ("This looks like sushi, not Whole Belly Clams — add it anyway, or pick the
+ * right dish?"). It never rejects: a fancy plating of the named dish is still
+ * that dish, and the person holding the plate knows better than the model.
  *
  * Caller is responsible for deleting the storage object if rejected.
  *
@@ -40,17 +48,26 @@ reason: brief, user-facing explanation (under 80 chars). Examples: "Please uploa
 
 If you can't tell what the image is (corrupted, blank, ambiguous), set is_food_photo=false with reason "Couldn't read this photo. Please try a clearer image."`
 
-interface ModerationResult {
-  is_food_photo: boolean
-  is_unsafe: boolean
-  reason: string
+// Appended only when the caller tells us which dish the photo is being
+// attached to. Deliberately conservative: the ONLY thing we want to catch is
+// a photo of an obviously different kind of food. Never guess the dish.
+function dishCheckPrompt(ctx: DishContext): string {
+  const where = ctx.restaurantName ? ` at ${ctx.restaurantName}` : ''
+  const cat = ctx.category ? ` (menu category: ${ctx.category})` : ''
+  return `
+
+DISH CHECK. The user is attaching this photo to the dish "${ctx.dishName}"${cat}${where}. Add two more fields to the JSON:
+  "dish_match": "likely" | "unclear" | "contradicts",
+  "seen": "2-6 plain words naming the food actually visible, e.g. 'sushi rolls', 'a frozen cocktail', 'fried clams in a basket'"
+
+dish_match rules:
+- "contradicts" ONLY when the visible food is clearly a different KIND of food from the named dish — e.g. the dish is fried clams and the photo shows sushi; the dish is a burger and the photo shows pancakes; the dish is a cocktail and the photo shows a plate of pasta.
+- "likely" when the food plausibly is the named dish.
+- "unclear" for everything else: unfamiliar or house-name dishes you can't judge ("Nancy's Roll", "Katama Roll"), unusual or upscale plating, partial views, table shots with several items, drinks in generic glassware, menus, interiors. When in doubt, "unclear". Restaurants plate dishes in ways that don't match the textbook version — that is NOT a contradiction.
+- Never let the dish check change is_food_photo or is_unsafe.`
 }
 
-function failClosed(reason: string): ModerationResult {
-  return { is_food_photo: false, is_unsafe: true, reason }
-}
-
-async function moderate(photoUrl: string): Promise<ModerationResult> {
+async function moderate(photoUrl: string, dish: DishContext | null): Promise<ModerationResult> {
   if (!ANTHROPIC_API_KEY) {
     console.error('photo-moderate: ANTHROPIC_API_KEY not configured')
     return failClosed("Couldn't verify photo. Please try again.")
@@ -66,8 +83,8 @@ async function moderate(photoUrl: string): Promise<ModerationResult> {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 256,
+        model: 'claude-sonnet-5',
+        max_tokens: 300,
         messages: [{
           role: 'user',
           content: [
@@ -75,7 +92,7 @@ async function moderate(photoUrl: string): Promise<ModerationResult> {
             { type: 'text', text: 'Moderate this photo per the system instructions.' },
           ],
         }],
-        system: MODERATION_PROMPT,
+        system: dish ? MODERATION_PROMPT + dishCheckPrompt(dish) : MODERATION_PROMPT,
       }),
     })
   } catch (err) {
@@ -98,25 +115,14 @@ async function moderate(photoUrl: string): Promise<ModerationResult> {
     return failClosed("Couldn't verify photo. Please try again.")
   }
 
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.error('photo-moderate: no JSON in Sonnet output:', raw.slice(0, 500))
+  const result = parseModeration(raw)
+  if (!result) {
+    console.error('photo-moderate: unparseable Sonnet output:', raw.slice(0, 500))
     return failClosed("Couldn't verify photo. Please try again.")
   }
-
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(jsonMatch[0])
-  } catch (err) {
-    console.error('photo-moderate: JSON parse failed', err, raw.slice(0, 500))
-    return failClosed("Couldn't verify photo. Please try again.")
-  }
-
-  return {
-    is_food_photo: parsed.is_food_photo === true,
-    is_unsafe: parsed.is_unsafe === true,
-    reason: typeof parsed.reason === 'string' ? parsed.reason.slice(0, 200) : '',
-  }
+  // No dish context → no dish verdict, whatever the model said.
+  if (!dish) result.dish_match = 'unclear'
+  return result
 }
 
 serve(async (req) => {
@@ -251,7 +257,7 @@ serve(async (req) => {
     })
   }
 
-  const result = await moderate(photoUrl)
+  const result = await moderate(photoUrl, readDishContext(body))
 
   return new Response(JSON.stringify(result), {
     headers: { ...cors, 'Content-Type': 'application/json' },

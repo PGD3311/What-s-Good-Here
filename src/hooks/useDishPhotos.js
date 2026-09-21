@@ -24,14 +24,20 @@ export function useDishPhotos() {
     }
   }, [])
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['unratedDishes'] })
+
   const uploadMutation = useMutation({
-    mutationFn: ({ dishId, file, analysisResults }) =>
-      dishPhotosApi.uploadPhoto({ dishId, file, analysisResults }),
-    onSuccess: () => {
-      // Invalidate unrated dishes so the count updates
-      queryClient.invalidateQueries({ queryKey: ['unratedDishes'] })
+    mutationFn: ({ dishId, file, analysisResults, context }) =>
+      dishPhotosApi.uploadPhoto({ dishId, file, analysisResults, ...context }),
+    onSuccess: (result) => {
+      // A held (pending) photo has no row yet — nothing to refresh.
+      if (!result?.pending) invalidate()
     },
   })
+  // Resolutions for a held photo (see dishPhotosApi.uploadPhoto → pending).
+  const confirmMutation = useMutation({ mutationFn: (pending) => dishPhotosApi.confirmPendingPhoto(pending), onSuccess: invalidate })
+  const reassignMutation = useMutation({ mutationFn: ({ pending, toDishId }) => dishPhotosApi.reassignPendingPhoto(pending, toDishId), onSuccess: invalidate })
+  const discardMutation = useMutation({ mutationFn: (pending) => dishPhotosApi.discardPendingPhoto(pending) })
 
   const deleteMutation = useMutation({
     mutationFn: (photoId) => dishPhotosApi.deletePhoto(photoId),
@@ -40,7 +46,14 @@ export function useDishPhotos() {
     },
   })
 
-  const uploadPhoto = useCallback(async (dishId, file) => {
+  /**
+   * @param {string} dishId
+   * @param {File} file
+   * @param {Object} [context] - { dishName, category, restaurantName, allowMismatch }
+   *   With dishName, the upload runs the dish check; a clear contradiction
+   *   returns `{ pending: true, mismatch: { seen }, ... }` instead of a row.
+   */
+  const uploadPhoto = useCallback(async (dishId, file, context = {}) => {
     setAnalyzing(true)
     setUploadProgress(0)
     setError(null)
@@ -81,7 +94,14 @@ export function useDishPhotos() {
         dishId,
         file,
         analysisResults: analysis,
+        context,
       })
+
+      if (result?.pending) {
+        capture('photo_dish_mismatch', { dish_id: dishId, seen: result.mismatch?.seen || '' })
+        setUploadProgress(100)
+        return { ...result, analysisResults: analysis }
+      }
 
       // Track accepted upload with full metrics
       capture('photo_upload_accepted', {
@@ -128,12 +148,48 @@ export function useDishPhotos() {
     }
   }, [deleteMutation])
 
+  const confirmPendingPhoto = useCallback(async (pending) => {
+    try {
+      const row = await confirmMutation.mutateAsync(pending)
+      capture('photo_dish_mismatch_resolved', { dish_id: pending.dishId, choice: 'confirm' })
+      return { ...row, analysisResults: pending.analysisResults }
+    } catch (err) {
+      setError(err.message || 'Failed to add photo')
+      throw err
+    }
+  }, [confirmMutation])
+
+  const reassignPendingPhoto = useCallback(async (pending, toDishId) => {
+    try {
+      const row = await reassignMutation.mutateAsync({ pending, toDishId })
+      capture('photo_dish_mismatch_resolved', { dish_id: pending.dishId, choice: 'reassign', to_dish_id: toDishId })
+      return { ...row, analysisResults: pending.analysisResults }
+    } catch (err) {
+      setError(err.message || 'Failed to move photo')
+      throw err
+    }
+  }, [reassignMutation])
+
+  const discardPendingPhoto = useCallback(async (pending) => {
+    try {
+      await discardMutation.mutateAsync(pending)
+      capture('photo_dish_mismatch_resolved', { dish_id: pending.dishId, choice: 'discard' })
+    } catch (err) {
+      // Orphaned file, not user-visible — log, don't block the UI.
+      logger.error('discardPendingPhoto failed', err)
+    }
+  }, [discardMutation])
+
   const clearError = useCallback(() => {
     setError(null)
   }, [])
 
   return {
     uploadPhoto,
+    confirmPendingPhoto,
+    reassignPendingPhoto,
+    discardPendingPhoto,
+    resolvingPending: confirmMutation.isPending || reassignMutation.isPending || discardMutation.isPending,
     getUserPhotoForDish,
     deletePhoto,
     uploading: uploadMutation.isPending,
