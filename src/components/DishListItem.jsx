@@ -102,35 +102,31 @@ export const DishListItem = memo(function DishListItem({
     <div
       data-dish-id={dishId}
       onClick={handleClick}
-      className="w-full text-left active:scale-[0.98] rounded-2xl overflow-hidden"
+      className="w-full text-left active:scale-[0.98]"
       style={{
-        background: highlighted ? 'var(--color-accent-gold-muted)' : 'var(--color-card)',
-        marginBottom: isLast ? 0 : '8px',
+        background: highlighted ? 'var(--color-accent-gold-muted)' : 'transparent',
+        borderBottom: isLast ? 'none' : '1px solid var(--color-divider)',
         cursor: 'pointer',
         transition: 'background 1s ease-out',
       }}
     >
-      {/* Rank and text center vertically; the picture slot stretches to the
-          card's full height and IS its right edge (flush, shared corners). */}
-      <div className="flex items-stretch" style={{ minHeight: '128px' }}>
+      {/* Editorial list, not cards: rank in the display face, hairline rules,
+          and the picture slot square-cornered and flush to the row's right
+          edge, stretching the row's full height. */}
+      <div className="flex items-stretch" style={{ minHeight: '118px' }}>
       {/* Rank number */}
       {rank != null && (
         <span
-          className="flex-shrink-0 font-bold self-center"
+          className="flex-shrink-0 self-center"
           style={{
-            paddingLeft: '6px',
-            width: isPodium ? '38px' : '34px',
+            width: '44px',
             textAlign: 'center',
-            fontSize: isPodium ? '22px' : '15px',
-            fontWeight: 800,
-            letterSpacing: '-0.02em',
-            color: rank === 1
-              ? 'var(--color-medal-gold)'
-              : rank === 2
-                ? 'var(--color-medal-silver)'
-                : rank === 3
-                  ? 'var(--color-medal-bronze)'
-                  : 'var(--color-text-tertiary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: isPodium ? '34px' : '22px',
+            fontWeight: isPodium ? 600 : 500,
+            lineHeight: 1,
+            fontVariantNumeric: 'tabular-nums',
+            color: isPodium ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
           }}
         >
           {rank}
@@ -138,7 +134,7 @@ export const DishListItem = memo(function DishListItem({
       )}
 
       {/* Name + restaurant + distance */}
-      <div className="flex-1 min-w-0 self-center" style={{ padding: '14px 10px 14px 4px' }}>
+      <div className="flex-1 min-w-0 self-center" style={{ padding: '16px 8px 16px 0' }}>
         {/* Dish name is the keyboard-accessible primary navigation control.
             It's a real <button> so screen readers announce it as an
             activatable element. Mouse-anywhere navigation still works via
@@ -220,21 +216,17 @@ export const DishListItem = memo(function DishListItem({
         </div>
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
-          <div className="flex items-center gap-3" style={{ marginTop: '10px' }}>
+          <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
             {(toastSlug || sanitizeUrl(orderUrl)) && (
               <a
                 href={buildToastOrderUrl(toastSlug, orderUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
-                style={{
-                  background: 'var(--color-primary)',
-                  color: 'white',
-                  fontSize: '10px',
-                }}
+                className="font-bold uppercase"
+                style={{ color: 'var(--color-primary)', fontSize: '11px', letterSpacing: '0.08em' }}
               >
-                Order Now
+                Order
               </a>
             )}
             {restaurantLat && restaurantLng && (
@@ -243,8 +235,8 @@ export const DishListItem = memo(function DishListItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="text-xs font-semibold"
-                style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}
+                className="font-bold uppercase"
+                style={{ color: 'var(--color-text-secondary)', fontSize: '11px', letterSpacing: '0.08em' }}
               >
                 Directions
               </a>
@@ -256,9 +248,9 @@ export const DishListItem = memo(function DishListItem({
       {/* Picture slot: best real photo if we have one, category icon until then. */}
       <div
         data-testid={framePhoto ? 'dish-frame-photo' : 'dish-icon-slot'}
-        className="flex-shrink-0 relative flex items-center justify-center self-stretch"
+        className="flex-shrink-0 relative flex items-center justify-center self-stretch overflow-hidden"
         style={{
-          width: '40%',
+          width: '38%',
           maxWidth: '160px',
           background: framePhoto ? 'var(--color-surface)' : 'transparent',
         }}
@@ -271,7 +263,7 @@ export const DishListItem = memo(function DishListItem({
             alt=""
             aria-hidden="true"
             loading="lazy"
-            style={{ width: '84px', height: '84px', objectFit: 'contain' }}
+            style={{ width: '80px', height: '80px', objectFit: 'contain' }}
           />
         ) : (
           <span style={{ fontSize: '32px' }}>{getCategoryEmoji(category)}</span>
