@@ -223,7 +223,6 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
               key={dish.dish_id}
               dish={dish}
               rank={index + 1}
-              showPhoto
               hideRestaurantName
               isLast={index === sortedDishes.top.length - 1}
             />
@@ -287,7 +286,6 @@ export function RestaurantDishes({ dishes, loading, error, searchQuery = '', fri
                   key={dish.dish_id}
                   dish={dish}
                   rank={TOP_DISHES_COUNT + index + 1}
-                  showPhoto
                   hideRestaurantName
                   isLast={index === sortedDishes.rest.length - 1}
                 />

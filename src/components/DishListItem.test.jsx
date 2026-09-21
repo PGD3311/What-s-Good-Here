@@ -105,3 +105,32 @@ describe('DishListItem hideRestaurantName', () => {
     expect(screen.getByText(/0\.3 mi/)).toBeInTheDocument()
   })
 })
+
+describe('DishListItem — ranked rows with a user photo get "the frame"', () => {
+  const USER_PHOTO = 'https://example.supabase.co/storage/v1/object/public/dish-photos/u/d.jpg'
+
+  it('renders the user photo in a frame on the right when featured_photo_url is set', () => {
+    renderItem({ ...BASE, featured_photo_url: USER_PHOTO }, { rank: 1 })
+    const frame = screen.getByTestId('dish-frame-photo')
+    expect(frame).toBeInTheDocument()
+    expect(frame.querySelector('img')).toHaveAttribute('src', USER_PHOTO)
+    // rating still shown
+    expect(screen.getByText('8.4')).toBeInTheDocument()
+  })
+
+  it('never uses dishes.photo_url for the frame (that column holds stock seed images)', () => {
+    renderItem({ ...BASE, photo_url: 'https://images.unsplash.com/photo-123' }, { rank: 1 })
+    expect(screen.queryByTestId('dish-frame-photo')).not.toBeInTheDocument()
+    expect(document.querySelector('img[src*="unsplash"]')).toBeNull()
+  })
+
+  it('renders the plain icon row when there is no user photo', () => {
+    renderItem(BASE, { rank: 4 })
+    expect(screen.queryByTestId('dish-frame-photo')).not.toBeInTheDocument()
+  })
+
+  it('applies the frame on restaurant-page rows too (same component, same photo field)', () => {
+    renderItem({ ...BASE, featured_photo_url: USER_PHOTO }, { rank: 1, hideRestaurantName: true })
+    expect(screen.getByTestId('dish-frame-photo')).toBeInTheDocument()
+  })
+})
