@@ -117,12 +117,15 @@ export const DishListItem = memo(function DishListItem({
       {/* Rank number */}
       {rank != null && (
         <span
-          className="flex-shrink-0"
+          className="flex-shrink-0 self-start"
           style={{
             width: '26px',
             textAlign: 'center',
+            // Sits beside the dish NAME, not the rating — two big numerals
+            // side by side ("1 9.9") read as one number.
+            marginTop: isPodium ? '-3px' : '1px',
             fontFamily: 'var(--font-display)',
-            fontSize: isPodium ? '32px' : '22px',
+            fontSize: isPodium ? '30px' : '20px',
             fontWeight: 600,
             lineHeight: 1,
             fontVariantNumeric: 'tabular-nums',
