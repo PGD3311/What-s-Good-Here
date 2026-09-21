@@ -53,14 +53,22 @@ export function DishEvidence({
       : null
   )
   const snippetIsOwnReview = !!(user && smartSnippet && smartSnippet.user_id === user.id)
-  const friendIds = new Set(friendsVotes.map(v => v.user_id))
   const snippetId = !snippetIsOwnReview && smartSnippet && smartSnippet.id ? smartSnippet.id : null
+  // Dedupe only what is already rendered elsewhere on the page: the user's own
+  // review (shown above) and the quote card. Friends are NOT excluded — the
+  // "Friends who rated" strip shows scores only, so dropping their reviews here
+  // made a friend's written review vanish from the page entirely.
   const filteredReviews = reviews.filter(r => {
     if (user && r.user_id === user.id) return false
-    if (friendIds.has(r.user_id)) return false
     if (snippetId && r.id === snippetId) return false
     return true
   })
+  // The empty state must reflect the whole page, not just the deduped list
+  // above: a review already shown as the quote card or the user's own review
+  // is still a written review. Otherwise the page contradicts itself
+  // ("Absolutely delicious" followed by "No written reviews yet").
+  const hasAnyWrittenReview =
+    reviews.some(r => r.review_text) || !!ownReview || !!(smartSnippet && smartSnippet.review_text)
 
   return (
     <>
@@ -380,7 +388,7 @@ export function DishEvidence({
           </div>
         )}
 
-        {!reviewsLoading && filteredReviews.length === 0 && !ownReview && dish.total_votes > 0 && (
+        {shouldLoadEvidence && !authLoading && !reviewsLoading && !hasAnyWrittenReview && dish.total_votes > 0 && (
           <div
             className="mb-4 p-4 rounded-xl text-center"
             style={{ background: 'var(--color-surface)', border: '1.5px solid var(--color-divider)' }}
