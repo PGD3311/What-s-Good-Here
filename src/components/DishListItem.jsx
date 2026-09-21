@@ -102,26 +102,24 @@ export const DishListItem = memo(function DishListItem({
     <div
       data-dish-id={dishId}
       onClick={handleClick}
-      className={'w-full text-left active:scale-[0.98]' + (isPodium ? ' rounded-xl' : '')}
+      className="w-full text-left active:scale-[0.98] rounded-2xl overflow-hidden"
       style={{
-        background: highlighted
-          ? 'var(--color-accent-gold-muted)'
-          : isPodium
-            ? 'var(--color-surface)'
-            : 'transparent',
-        padding: isPodium ? '10px 10px' : '8px 10px',
+        background: highlighted ? 'var(--color-accent-gold-muted)' : 'var(--color-card)',
+        marginBottom: isLast ? 0 : '8px',
         cursor: 'pointer',
         transition: 'background 1s ease-out',
-        borderBottom: !isPodium && !isLast ? '1px solid var(--color-divider)' : 'none',
       }}
     >
-      <div className="flex items-center">
+      {/* Rank and text center vertically; the picture slot stretches to the
+          card's full height and IS its right edge (flush, shared corners). */}
+      <div className="flex items-stretch" style={{ minHeight: '128px' }}>
       {/* Rank number */}
       {rank != null && (
         <span
-          className="flex-shrink-0 font-bold"
+          className="flex-shrink-0 font-bold self-center"
           style={{
-            width: isPodium ? '32px' : '28px',
+            paddingLeft: '6px',
+            width: isPodium ? '38px' : '34px',
             textAlign: 'center',
             fontSize: isPodium ? '22px' : '15px',
             fontWeight: 800,
@@ -140,7 +138,7 @@ export const DishListItem = memo(function DishListItem({
       )}
 
       {/* Name + restaurant + distance */}
-      <div className="flex-1 min-w-0" style={{ marginLeft: '6px' }}>
+      <div className="flex-1 min-w-0 self-center" style={{ padding: '14px 10px 14px 4px' }}>
         {/* Dish name is the keyboard-accessible primary navigation control.
             It's a real <button> so screen readers announce it as an
             activatable element. Mouse-anywhere navigation still works via
@@ -160,10 +158,10 @@ export const DishListItem = memo(function DishListItem({
             border: 'none',
             padding: 0,
             cursor: 'pointer',
-            fontSize: isPodium ? '15px' : '14px',
-            fontWeight: isPodium ? 800 : 700,
+            fontSize: isPodium ? '17px' : '16px',
+            fontWeight: 800,
             color: 'var(--color-text-primary)',
-            lineHeight: 1.3,
+            lineHeight: 1.2,
             letterSpacing: '-0.01em',
             fontFamily: 'inherit',
           }}
@@ -176,11 +174,11 @@ export const DishListItem = memo(function DishListItem({
         {(!hideRestaurantName
           || (sortBy === 'best_value' && price != null)
           || (showDistance && distanceMiles != null)) && (
-          <div className="flex items-center gap-1.5" style={{ marginTop: '2px' }}>
+          <div className="flex items-center gap-1.5" style={{ marginTop: '3px' }}>
             <p
               className="truncate"
               style={{
-                fontSize: isPodium ? '12px' : '11px',
+                fontSize: '13px',
                 color: 'var(--color-text-tertiary)',
               }}
             >
@@ -217,12 +215,12 @@ export const DishListItem = memo(function DishListItem({
             tight — name, restaurant, rating, and the Order/Directions
             action buttons below. Users tap into the dish to see ingredients. */}
         {/* Rating + votes, inline under the restaurant on every row. */}
-        <div className="flex items-baseline gap-1.5" style={{ marginTop: '6px' }}>
+        <div className="flex items-baseline gap-1.5" style={{ marginTop: '8px' }}>
           {renderRating()}
         </div>
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
-          <div className="flex items-center gap-2" style={{ marginTop: '4px' }}>
+          <div className="flex items-center gap-3" style={{ marginTop: '10px' }}>
             {(toastSlug || sanitizeUrl(orderUrl)) && (
               <a
                 href={buildToastOrderUrl(toastSlug, orderUrl)}
@@ -245,12 +243,8 @@ export const DishListItem = memo(function DishListItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                style={{
-                  border: '1px solid var(--color-divider)',
-                  color: 'var(--color-text-secondary)',
-                  fontSize: '10px',
-                }}
+                className="text-xs font-semibold"
+                style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}
               >
                 Directions
               </a>
@@ -262,27 +256,25 @@ export const DishListItem = memo(function DishListItem({
       {/* Picture slot: best real photo if we have one, category icon until then. */}
       <div
         data-testid={framePhoto ? 'dish-frame-photo' : 'dish-icon-slot'}
-        className="flex-shrink-0 flex items-center justify-center overflow-hidden"
+        className="flex-shrink-0 relative flex items-center justify-center self-stretch"
         style={{
-          width: '116px',
-          height: '92px',
-          marginLeft: '10px',
-          borderRadius: '14px',
+          width: '40%',
+          maxWidth: '160px',
           background: framePhoto ? 'var(--color-surface)' : 'transparent',
         }}
       >
         {framePhoto ? (
-          <img src={framePhoto} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
+          <img src={framePhoto} alt={dishName} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
         ) : resolvedIcon ? (
           <img
             src={resolvedIcon}
             alt=""
             aria-hidden="true"
             loading="lazy"
-            style={{ width: isPodium ? '76px' : '68px', height: isPodium ? '76px' : '68px', objectFit: 'contain' }}
+            style={{ width: '84px', height: '84px', objectFit: 'contain' }}
           />
         ) : (
-          <span style={{ fontSize: isPodium ? '30px' : '26px' }}>{getCategoryEmoji(category)}</span>
+          <span style={{ fontSize: '32px' }}>{getCategoryEmoji(category)}</span>
         )}
       </div>
       </div>
