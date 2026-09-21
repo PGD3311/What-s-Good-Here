@@ -14,7 +14,6 @@ import { buildDirectionsUrl, buildToastOrderUrl } from '../utils/restaurantLinks
  *   dish        - dish data object
  *   rank        - optional rank number (1, 2, 3...)
  *   variant     - 'ranked' | 'voted' | 'compact' (default: 'ranked')
- *   showPhoto   - show photo thumbnail (default: false)
  *   showDistance - show distance badge (default: false)
  *   sortBy      - sort mode for value badge display
  *   tab         - for voted variant: 'worth-it' | 'avoid'
@@ -30,7 +29,6 @@ export const DishListItem = memo(function DishListItem({
   dish,
   rank,
   variant = 'ranked',
-  showPhoto = false,
   showDistance = false,
   sortBy,
   tab,
@@ -88,6 +86,11 @@ export const DishListItem = memo(function DishListItem({
   // --- RANKED VARIANT (home, browse, restaurant detail) ---
   // Scoreboard layout: rank · dish name / restaurant · rating / votes
   var isPodium = rank != null && rank <= 3
+  // "The frame": a ranked row whose dish has a real user photo shows it in a
+  // contained frame on the right, and the rating moves inline under the name.
+  // Source is featured_photo_url (best dish_photos row from get_ranked_dishes)
+  // ONLY — dishes.photo_url still carries stock seed images and is never used.
+  var framePhoto = dish.featured_photo_url || null
 
   return (
     // Passive container — NOT an ARIA control. Keeps `onClick` for the
@@ -135,8 +138,8 @@ export const DishListItem = memo(function DishListItem({
         </span>
       )}
 
-      {/* Category icon (when no photo thumbnail) */}
-      {!showPhoto && (
+      {/* Category icon (when the dish has no user photo) */}
+      {!framePhoto && (
         <div
           className="flex-shrink-0 flex items-center justify-center"
           style={{ width: isPodium ? '72px' : '64px', height: isPodium ? '72px' : '64px', marginLeft: '4px' }}
@@ -155,26 +158,8 @@ export const DishListItem = memo(function DishListItem({
         </div>
       )}
 
-      {/* Photo thumbnail (restaurant detail only) */}
-      {showPhoto && photoUrl && (
-        <div
-          className="flex-shrink-0 rounded-lg overflow-hidden"
-          style={{ width: '56px', height: '56px', marginLeft: '6px', background: 'var(--color-surface)' }}
-        >
-          <img src={photoUrl} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
-        </div>
-      )}
-      {showPhoto && !photoUrl && (
-        <div
-          className="flex-shrink-0 rounded-lg overflow-hidden relative"
-          style={{ width: '56px', height: '56px', marginLeft: '6px' }}
-        >
-          <RestaurantAvatar name={restaurantName} town={restaurantTown} dishCategory={category} size={56} fill />
-        </div>
-      )}
-
       {/* Name + restaurant + distance */}
-      <div className="flex-1 min-w-0" style={{ marginLeft: showPhoto ? '6px' : (isPodium ? '8px' : '6px') }}>
+      <div className="flex-1 min-w-0" style={{ marginLeft: framePhoto ? '6px' : (isPodium ? '8px' : '6px') }}>
         {/* Dish name is the keyboard-accessible primary navigation control.
             It's a real <button> so screen readers announce it as an
             activatable element. Mouse-anywhere navigation still works via
@@ -250,6 +235,13 @@ export const DishListItem = memo(function DishListItem({
             DishDescription in src/pages/Dish.jsx). Keep the list-item card
             tight — name, restaurant, rating, and the Order/Directions
             action buttons below. Users tap into the dish to see ingredients. */}
+        {/* Framed rows carry the rating inline under the name; the right
+            column is the photo instead. */}
+        {framePhoto && (
+          <div className="flex items-baseline gap-1.5" style={{ marginTop: '6px' }}>
+            {renderRating()}
+          </div>
+        )}
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
           <div className="flex items-center gap-2" style={{ marginTop: '4px' }}>
@@ -289,48 +281,74 @@ export const DishListItem = memo(function DishListItem({
         )}
       </div>
 
-      {/* Rating + votes */}
-      <div className="flex-shrink-0 text-right" style={{ marginLeft: '8px' }}>
-        {isRanked ? (
-          <>
-            <span
-              className="font-bold"
-              style={{
-                fontSize: isPodium ? '20px' : '16px',
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-                color: getRatingColor(avgRating),
-              }}
-            >
-              {avgRating}
-            </span>
-            {!hideVotes && (
-              <div style={{
-                fontSize: '11px',
-                color: 'var(--color-text-tertiary)',
-                fontWeight: 500,
-                marginTop: '1px',
-              }}>
-                {totalVotes} vote{totalVotes === 1 ? '' : 's'}
-              </div>
-            )}
-          </>
-        ) : (
-          <span
-            style={{
-              fontSize: '12px',
-              color: 'var(--color-text-tertiary)',
-              fontWeight: 500,
-            }}
-          >
-            {totalVotes ? totalVotes + ' vote' + (totalVotes === 1 ? '' : 's') : 'New'}
-          </span>
-        )}
-      </div>
+      {/* Right column: the frame (user photo) or rating + votes */}
+      {framePhoto ? (
+        <div
+          data-testid="dish-frame-photo"
+          className="flex-shrink-0 overflow-hidden"
+          style={{
+            width: '116px',
+            height: '92px',
+            marginLeft: '10px',
+            borderRadius: '14px',
+            background: 'var(--color-surface)',
+          }}
+        >
+          <img src={framePhoto} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
+        </div>
+      ) : (
+        <div className="flex-shrink-0 text-right" style={{ marginLeft: '8px' }}>
+          {renderRating()}
+        </div>
+      )}
       </div>
 
     </div>
   )
+
+  // --- RATING BLOCK (shared by the right column and the framed inline row) ---
+  function renderRating() {
+    if (!isRanked) {
+      return (
+        <span
+          style={{
+            fontSize: '12px',
+            color: 'var(--color-text-tertiary)',
+            fontWeight: 500,
+          }}
+        >
+          {totalVotes ? totalVotes + ' vote' + (totalVotes === 1 ? '' : 's') : 'New'}
+        </span>
+      )
+    }
+    return (
+      <>
+        <span
+          className="font-bold"
+          style={{
+            fontSize: framePhoto ? '22px' : (isPodium ? '20px' : '16px'),
+            fontWeight: 800,
+            letterSpacing: '-0.02em',
+            lineHeight: 1,
+            color: getRatingColor(avgRating),
+          }}
+        >
+          {avgRating}
+        </span>
+        {!hideVotes && (
+          <span style={{
+            display: framePhoto ? 'inline' : 'block',
+            fontSize: '11px',
+            color: 'var(--color-text-tertiary)',
+            fontWeight: 500,
+            marginTop: framePhoto ? 0 : '1px',
+          }}>
+            {totalVotes} vote{totalVotes === 1 ? '' : 's'}
+          </span>
+        )}
+      </>
+    )
+  }
 
   // --- VOTED CARD RENDERER ---
   function renderVotedCard() {

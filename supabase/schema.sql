@@ -1269,7 +1269,7 @@ BEGIN
     FROM dish_photos dp
     INNER JOIN dishes d2 ON dp.dish_id = d2.id
     INNER JOIN filtered_restaurants fr2 ON d2.restaurant_id = fr2.id
-    WHERE dp.status IN ('featured', 'community')
+    WHERE dp.status IN ('featured', 'community', 'hidden')
       AND d2.parent_dish_id IS NULL
       AND NOT EXISTS (
         SELECT 1 FROM user_blocks ub
@@ -1278,7 +1278,7 @@ BEGIN
       )
     ORDER BY dp.dish_id,
       CASE dp.source_type WHEN 'restaurant' THEN 0 ELSE 1 END,
-      CASE dp.status WHEN 'featured' THEN 0 ELSE 1 END,
+      CASE dp.status WHEN 'featured' THEN 0 WHEN 'community' THEN 1 ELSE 2 END,
       dp.quality_score DESC NULLS LAST,
       dp.created_at DESC
   )
@@ -1395,6 +1395,7 @@ RETURNS TABLE (
   menu_group TEXT,
   price DECIMAL,
   photo_url TEXT,
+  featured_photo_url TEXT,
   total_votes BIGINT,
   avg_rating DECIMAL,
   has_variants BOOLEAN,
@@ -1449,6 +1450,7 @@ BEGIN
   SELECT
     d.id AS dish_id, d.name AS dish_name, r.id AS restaurant_id, r.name AS restaurant_name,
     d.category, d.menu_section, d.menu_group, d.price, d.photo_url,
+    bp.photo_url AS featured_photo_url,
     COALESCE(vs.total_child_votes, dvs.direct_votes, 0)::BIGINT AS total_votes,
     COALESCE(vs.combined_avg_rating, dvs.direct_avg) AS avg_rating,
     (vs.child_count IS NOT NULL AND vs.child_count > 0) AS has_variants,
@@ -1462,10 +1464,30 @@ BEGIN
   LEFT JOIN variant_stats vs ON vs.parent_dish_id = d.id
   LEFT JOIN best_variants bv ON bv.parent_dish_id = d.id
   LEFT JOIN dish_vote_stats dvs ON dvs.dish_id = d.id
+  -- Best real (user-uploaded) photo per dish, same policy as get_ranked_dishes'
+  -- best_photos: restaurant-sourced first, then featured > community > hidden,
+  -- then quality, then newest. Moderation-rejected never. Blocked authors never.
+  LEFT JOIN LATERAL (
+    SELECT dp.photo_url
+    FROM dish_photos dp
+    WHERE dp.dish_id = d.id
+      AND dp.status IN ('featured', 'community', 'hidden')
+      AND NOT EXISTS (
+        SELECT 1 FROM user_blocks ub
+        WHERE (ub.blocker_id = (select auth.uid()) AND ub.blocked_id = dp.user_id)
+           OR (ub.blocker_id = dp.user_id AND ub.blocked_id = (select auth.uid()))
+      )
+    ORDER BY
+      CASE dp.source_type WHEN 'restaurant' THEN 0 ELSE 1 END,
+      CASE dp.status WHEN 'featured' THEN 0 WHEN 'community' THEN 1 ELSE 2 END,
+      dp.quality_score DESC NULLS LAST,
+      dp.created_at DESC
+    LIMIT 1
+  ) bp ON true
   WHERE d.restaurant_id = p_restaurant_id
     AND r.is_open = true
     AND d.parent_dish_id IS NULL
-  GROUP BY d.id, d.name, r.id, r.name, d.category, d.menu_section, d.menu_group, d.price, d.photo_url, d.tags,
+  GROUP BY d.id, d.name, r.id, r.name, d.category, d.menu_section, d.menu_group, d.price, d.photo_url, bp.photo_url, d.tags,
            vs.total_child_votes, vs.combined_avg_rating, vs.child_count,
            dvs.direct_votes, dvs.direct_avg,
            bv.best_id, bv.best_name, bv.best_rating,
