@@ -110,23 +110,29 @@ export const DishListItem = memo(function DishListItem({
         transition: 'background 1s ease-out',
       }}
     >
-      {/* Editorial list, not cards: rank in the display face, hairline rules,
-          and the picture slot square-cornered and flush to the row's right
-          edge, stretching the row's full height. */}
-      <div className="flex items-stretch" style={{ minHeight: '118px' }}>
+      {/* Balanced list: rank in the display face (medal colors on the podium),
+          hairline rules, and a contained 4:3 photo — same size on every row —
+          with its own corners and a margin, never flush to the edge. */}
+      <div className="flex items-center" style={{ padding: '14px 0' }}>
       {/* Rank number */}
       {rank != null && (
         <span
-          className="flex-shrink-0 self-center"
+          className="flex-shrink-0"
           style={{
-            width: '44px',
+            width: '40px',
             textAlign: 'center',
             fontFamily: 'var(--font-display)',
-            fontSize: isPodium ? '34px' : '22px',
-            fontWeight: isPodium ? 600 : 500,
+            fontSize: isPodium ? '32px' : '22px',
+            fontWeight: 600,
             lineHeight: 1,
             fontVariantNumeric: 'tabular-nums',
-            color: isPodium ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+            color: rank === 1
+              ? 'var(--color-medal-gold)'
+              : rank === 2
+                ? 'var(--color-medal-silver)'
+                : rank === 3
+                  ? 'var(--color-medal-bronze)'
+                  : 'var(--color-text-tertiary)',
           }}
         >
           {rank}
@@ -134,7 +140,7 @@ export const DishListItem = memo(function DishListItem({
       )}
 
       {/* Name + restaurant + distance */}
-      <div className="flex-1 min-w-0 self-center" style={{ padding: '16px 8px 16px 0' }}>
+      <div className="flex-1 min-w-0" style={{ padding: '0 10px 0 4px' }}>
         {/* Dish name is the keyboard-accessible primary navigation control.
             It's a real <button> so screen readers announce it as an
             activatable element. Mouse-anywhere navigation still works via
@@ -216,17 +222,17 @@ export const DishListItem = memo(function DishListItem({
         </div>
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
-          <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
+          <div className="flex items-center gap-2" style={{ marginTop: '10px' }}>
             {(toastSlug || sanitizeUrl(orderUrl)) && (
               <a
                 href={buildToastOrderUrl(toastSlug, orderUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="font-bold uppercase"
-                style={{ color: 'var(--color-primary)', fontSize: '11px', letterSpacing: '0.08em' }}
+                className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
+                style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)', fontSize: '12px' }}
               >
-                Order
+                Order Now
               </a>
             )}
             {restaurantLat && restaurantLng && (
@@ -235,9 +241,10 @@ export const DishListItem = memo(function DishListItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="font-bold uppercase"
-                style={{ color: 'var(--color-text-secondary)', fontSize: '11px', letterSpacing: '0.08em' }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
+                style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text-primary)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
               >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 3 3 10.5l8.5 2 2 8.5z" /></svg>
                 Directions
               </a>
             )}
@@ -248,10 +255,12 @@ export const DishListItem = memo(function DishListItem({
       {/* Picture slot: best real photo if we have one, category icon until then. */}
       <div
         data-testid={framePhoto ? 'dish-frame-photo' : 'dish-icon-slot'}
-        className="flex-shrink-0 relative flex items-center justify-center self-stretch overflow-hidden"
+        className="flex-shrink-0 relative flex items-center justify-center overflow-hidden"
         style={{
-          width: '38%',
-          maxWidth: '160px',
+          width: '40%',
+          maxWidth: '150px',
+          aspectRatio: '4 / 3',
+          borderRadius: '12px',
           background: framePhoto ? 'var(--color-surface)' : 'transparent',
         }}
       >
@@ -305,11 +314,11 @@ export const DishListItem = memo(function DishListItem({
         </span>
         {!hideVotes && (
           <span style={{
-            fontSize: '11px',
+            fontSize: '13px',
             color: 'var(--color-text-tertiary)',
             fontWeight: 500,
           }}>
-            {totalVotes} vote{totalVotes === 1 ? '' : 's'}
+            {'\u00b7 '}{totalVotes} vote{totalVotes === 1 ? '' : 's'}
           </span>
         )}
       </>
