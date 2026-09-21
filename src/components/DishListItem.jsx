@@ -257,8 +257,8 @@ export const DishListItem = memo(function DishListItem({
         data-testid={framePhoto ? 'dish-frame-photo' : 'dish-icon-slot'}
         className="flex-shrink-0 relative flex items-center justify-center overflow-hidden"
         style={{
-          width: '36%',
-          maxWidth: '140px',
+          width: '38%',
+          maxWidth: '150px',
           aspectRatio: '4 / 3',
           borderRadius: '12px',
           background: framePhoto ? 'var(--color-surface)' : 'transparent',
