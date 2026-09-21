@@ -86,10 +86,11 @@ export const DishListItem = memo(function DishListItem({
   // --- RANKED VARIANT (home, browse, restaurant detail) ---
   // Scoreboard layout: rank · dish name / restaurant · rating / votes
   var isPodium = rank != null && rank <= 3
-  // "The frame": a ranked row whose dish has a real user photo shows it in a
-  // contained frame on the right, and the rating moves inline under the name.
-  // Source is featured_photo_url (best dish_photos row from get_ranked_dishes)
-  // ONLY — dishes.photo_url still carries stock seed images and is never used.
+  // One row anatomy for every ranked dish: rank · text stack (name, restaurant,
+  // rating, actions) · picture slot on the right. The slot shows the dish's
+  // best real user photo when one exists, otherwise the category icon. Adding
+  // a photo never reshuffles the row. Photo source is featured_photo_url (best
+  // dish_photos row) ONLY — dishes.photo_url held stock seed images; never used.
   var framePhoto = dish.featured_photo_url || null
 
   return (
@@ -138,28 +139,8 @@ export const DishListItem = memo(function DishListItem({
         </span>
       )}
 
-      {/* Category icon (when the dish has no user photo) */}
-      {!framePhoto && (
-        <div
-          className="flex-shrink-0 flex items-center justify-center"
-          style={{ width: isPodium ? '72px' : '64px', height: isPodium ? '72px' : '64px', marginLeft: '4px' }}
-        >
-          {resolvedIcon ? (
-            <img
-              src={resolvedIcon}
-              alt=""
-              aria-hidden="true"
-              className="w-full h-full object-contain"
-              loading="lazy"
-            />
-          ) : (
-            <span style={{ fontSize: isPodium ? '18px' : '14px' }}>{getCategoryEmoji(category)}</span>
-          )}
-        </div>
-      )}
-
       {/* Name + restaurant + distance */}
-      <div className="flex-1 min-w-0" style={{ marginLeft: framePhoto ? '6px' : (isPodium ? '8px' : '6px') }}>
+      <div className="flex-1 min-w-0" style={{ marginLeft: '6px' }}>
         {/* Dish name is the keyboard-accessible primary navigation control.
             It's a real <button> so screen readers announce it as an
             activatable element. Mouse-anywhere navigation still works via
@@ -235,13 +216,10 @@ export const DishListItem = memo(function DishListItem({
             DishDescription in src/pages/Dish.jsx). Keep the list-item card
             tight — name, restaurant, rating, and the Order/Directions
             action buttons below. Users tap into the dish to see ingredients. */}
-        {/* Framed rows carry the rating inline under the name; the right
-            column is the photo instead. */}
-        {framePhoto && (
-          <div className="flex items-baseline gap-1.5" style={{ marginTop: '6px' }}>
-            {renderRating()}
-          </div>
-        )}
+        {/* Rating + votes, inline under the restaurant on every row. */}
+        <div className="flex items-baseline gap-1.5" style={{ marginTop: '6px' }}>
+          {renderRating()}
+        </div>
         {/* Action buttons — Order / Directions */}
         {(toastSlug || sanitizeUrl(orderUrl) || restaurantLat) && (
           <div className="flex items-center gap-2" style={{ marginTop: '4px' }}>
@@ -281,32 +259,38 @@ export const DishListItem = memo(function DishListItem({
         )}
       </div>
 
-      {/* Right column: the frame (user photo) or rating + votes */}
-      {framePhoto ? (
-        <div
-          data-testid="dish-frame-photo"
-          className="flex-shrink-0 overflow-hidden"
-          style={{
-            width: '116px',
-            height: '92px',
-            marginLeft: '10px',
-            borderRadius: '14px',
-            background: 'var(--color-surface)',
-          }}
-        >
+      {/* Picture slot: best real photo if we have one, category icon until then. */}
+      <div
+        data-testid={framePhoto ? 'dish-frame-photo' : 'dish-icon-slot'}
+        className="flex-shrink-0 flex items-center justify-center overflow-hidden"
+        style={{
+          width: '116px',
+          height: '92px',
+          marginLeft: '10px',
+          borderRadius: '14px',
+          background: framePhoto ? 'var(--color-surface)' : 'transparent',
+        }}
+      >
+        {framePhoto ? (
           <img src={framePhoto} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
-        </div>
-      ) : (
-        <div className="flex-shrink-0 text-right" style={{ marginLeft: '8px' }}>
-          {renderRating()}
-        </div>
-      )}
+        ) : resolvedIcon ? (
+          <img
+            src={resolvedIcon}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            style={{ width: isPodium ? '76px' : '68px', height: isPodium ? '76px' : '68px', objectFit: 'contain' }}
+          />
+        ) : (
+          <span style={{ fontSize: isPodium ? '30px' : '26px' }}>{getCategoryEmoji(category)}</span>
+        )}
+      </div>
       </div>
 
     </div>
   )
 
-  // --- RATING BLOCK (shared by the right column and the framed inline row) ---
+  // --- RATING BLOCK (inline under the restaurant on every ranked row) ---
   function renderRating() {
     if (!isRanked) {
       return (
@@ -326,7 +310,7 @@ export const DishListItem = memo(function DishListItem({
         <span
           className="font-bold"
           style={{
-            fontSize: framePhoto ? '22px' : (isPodium ? '20px' : '16px'),
+            fontSize: '22px',
             fontWeight: 800,
             letterSpacing: '-0.02em',
             lineHeight: 1,
@@ -337,11 +321,9 @@ export const DishListItem = memo(function DishListItem({
         </span>
         {!hideVotes && (
           <span style={{
-            display: framePhoto ? 'inline' : 'block',
             fontSize: '11px',
             color: 'var(--color-text-tertiary)',
             fontWeight: 500,
-            marginTop: framePhoto ? 0 : '1px',
           }}>
             {totalVotes} vote{totalVotes === 1 ? '' : 's'}
           </span>
