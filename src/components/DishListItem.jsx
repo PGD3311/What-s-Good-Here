@@ -285,7 +285,7 @@ export const DishListItem = memo(function DishListItem({
       {framePhoto ? (
         <div
           data-testid="dish-frame-photo"
-          className="flex-shrink-0 relative overflow-hidden"
+          className="flex-shrink-0 overflow-hidden"
           style={{
             width: '116px',
             height: '92px',
@@ -295,23 +295,6 @@ export const DishListItem = memo(function DishListItem({
           }}
         >
           <img src={framePhoto} alt={dishName} loading="lazy" className="w-full h-full object-cover" />
-          {resolvedIcon && (
-            <span
-              aria-hidden="true"
-              className="absolute flex items-center justify-center"
-              style={{
-                left: '7px',
-                bottom: '7px',
-                width: '26px',
-                height: '26px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.94)',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-              }}
-            >
-              <img src={resolvedIcon} alt="" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
-            </span>
-          )}
         </div>
       ) : (
         <div className="flex-shrink-0 text-right" style={{ marginLeft: '8px' }}>
