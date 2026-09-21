@@ -53,11 +53,13 @@ export function DishEvidence({
       : null
   )
   const snippetIsOwnReview = !!(user && smartSnippet && smartSnippet.user_id === user.id)
-  const friendIds = new Set(friendsVotes.map(v => v.user_id))
   const snippetId = !snippetIsOwnReview && smartSnippet && smartSnippet.id ? smartSnippet.id : null
+  // Dedupe only what is already rendered elsewhere on the page: the user's own
+  // review (shown above) and the quote card. Friends are NOT excluded — the
+  // "Friends who rated" strip shows scores only, so dropping their reviews here
+  // made a friend's written review vanish from the page entirely.
   const filteredReviews = reviews.filter(r => {
     if (user && r.user_id === user.id) return false
-    if (friendIds.has(r.user_id)) return false
     if (snippetId && r.id === snippetId) return false
     return true
   })

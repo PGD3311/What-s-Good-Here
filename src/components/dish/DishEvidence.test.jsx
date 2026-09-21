@@ -77,4 +77,14 @@ describe('DishEvidence — "no written reviews" empty state', () => {
     })
     expect(screen.queryByText(/No written reviews yet/)).not.toBeInTheDocument()
   })
+
+  it("shows a friend's written review in the list when it is not the quote card", () => {
+    const OTHER = { ...FRIEND_REVIEW, id: 'v-2', user_id: 'u-other', review_text: 'Best on the island', profiles: { id: 'u-other', display_name: 'Someone Else' } }
+    renderEvidence({
+      reviews: [OTHER, FRIEND_REVIEW],
+      smartSnippet: OTHER,
+      friendsVotes: [{ user_id: 'u-oliver', rating_10: 10, display_name: 'Oliver Savenor' }],
+    })
+    expect(screen.getByText(/Absolutely delicious/)).toBeInTheDocument()
+  })
 })
