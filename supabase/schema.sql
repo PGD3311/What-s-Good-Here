@@ -472,7 +472,8 @@ SELECT
   review_text,
   review_created_at,
   user_id,
-  source
+  source,
+  created_at
 FROM votes;
 
 
@@ -5244,7 +5245,7 @@ CREATE POLICY "dish_photos_select_not_blocked" ON dish_photos
 -- 14e. public_votes view — embed block filter
 CREATE OR REPLACE VIEW public_votes AS
 SELECT
-  id, dish_id, rating_10, review_text, review_created_at, user_id, source
+  id, dish_id, rating_10, review_text, review_created_at, user_id, source, created_at
 FROM votes
 WHERE auth.uid() IS NULL
    OR NOT is_blocked_pair(auth.uid(), user_id);
