@@ -124,9 +124,14 @@ describe('DishListItem — ranked rows with a user photo get "the frame"', () =>
     expect(document.querySelector('img[src*="unsplash"]')).toBeNull()
   })
 
-  it('renders the plain icon row when there is no user photo', () => {
+  it('puts the category icon in the same right-hand slot when there is no user photo', () => {
     renderItem(BASE, { rank: 4 })
     expect(screen.queryByTestId('dish-frame-photo')).not.toBeInTheDocument()
+    const slot = screen.getByTestId('dish-icon-slot')
+    expect(slot).toBeInTheDocument()
+    expect(slot.querySelector('img, span')).toBeTruthy()
+    // rating reads inline on icon rows too — same grammar as photo rows
+    expect(screen.getByText('8.4')).toBeInTheDocument()
   })
 
   it('applies the frame on restaurant-page rows too (same component, same photo field)', () => {
