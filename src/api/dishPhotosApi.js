@@ -298,8 +298,9 @@ export const dishPhotosApi = {
   /**
    * Batched lookup of a specific user's own photos for a set of dishes.
    * Used by the profile grid to show "their" photo (not the shared
-   * dishes.photo_url). Only returns visible photos (featured/community);
-   * moderation-rejected and hidden photos never become a profile tile.
+   * dishes.photo_url). Quality tier decides gallery ranking, not whether
+   * the photo exists on the user's own profile — so 'hidden' (low quality)
+   * is included. Only moderation-rejected photos never become a tile.
    * @param {string} userId
    * @param {string[]} dishIds
    * @returns {Promise<Object>} { [dishId]: photo_url }
@@ -315,7 +316,7 @@ export const dishPhotosApi = {
           .from('dish_photos')
           .select('dish_id, photo_url, status')
           .eq('user_id', userId)
-          .in('status', ['featured', 'community'])
+          .in('status', ['featured', 'community', 'hidden'])
           .in('dish_id', batch)
         if (error) throw createClassifiedError(error)
         // dish_photos is UNIQUE(dish_id, user_id) -> at most one row per dish.
