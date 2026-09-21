@@ -72,8 +72,10 @@ describe('dishPhotosApi.getUserPhotoMap', () => {
     expect(map).toEqual({ d1: 'p_d1', d2: 'p_d2' })
     // one batch -> one builder
     expect(supabase.from).toHaveBeenCalledTimes(1)
-    // status allowlist filter used
-    expect(statusInArgs[0]).toEqual(['featured', 'community'])
+    // status allowlist: every non-rejected tier. 'hidden' (low quality) is
+    // still the user's photo and belongs on their profile; only moderation-
+    // rejected photos are excluded.
+    expect(statusInArgs[0]).toEqual(['featured', 'community', 'hidden'])
     // dish_id filter used with the batch
     expect(dishInArgs[0]).toEqual(['d1', 'd2'])
   })
@@ -93,8 +95,8 @@ describe('dishPhotosApi.getUserPhotoMap', () => {
     expect(dishInArgs[1].length).toBe(50)
     // status allowlist used on every chunk
     expect(statusInArgs).toEqual([
-      ['featured', 'community'],
-      ['featured', 'community'],
+      ['featured', 'community', 'hidden'],
+      ['featured', 'community', 'hidden'],
     ])
     // merged map has entries from both batches
     expect(Object.keys(map).length).toBe(200)
