@@ -110,7 +110,11 @@ export function RateYourMeal() {
 
           if (rating.photoFile) {
             setUploadStatus('Uploading photo for ' + resolvedDish.name)
-            await uploadPhoto(resolvedDish.dishId, rating.photoFile)
+            // Batch flow can't show the mismatch prompt mid-submit; run the
+            // check for the record but never hold the photo here.
+            await uploadPhoto(resolvedDish.dishId, rating.photoFile, {
+              dishName: resolvedDish.name, category: resolvedDish.category, allowMismatch: true,
+            })
           }
 
           votes.push({

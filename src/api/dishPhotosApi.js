@@ -13,6 +13,64 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
  * Dish Photos API - Centralized data fetching and mutation for dish photos
  */
 
+// Storage layout is `{user_id}/{dish_id}.jpg` — one file per user per dish,
+// mirroring the dish_photos UNIQUE(dish_id, user_id) constraint.
+function photoStoragePath(userId, dishId) {
+  return `${userId}/${dishId}.jpg`
+}
+
+const VISIBLE_STATUSES = ['featured', 'community', 'hidden']
+
+function buildPhotoRecord({ dishId, userId, publicUrl, analysisResults }) {
+  const record = { dish_id: dishId, user_id: userId, photo_url: publicUrl }
+  if (analysisResults) {
+    record.width = analysisResults.width
+    record.height = analysisResults.height
+    record.mime_type = analysisResults.mimeType
+    record.file_size_bytes = analysisResults.fileSize
+    record.avg_brightness = analysisResults.avgBrightness
+    record.bright_pixel_pct = analysisResults.brightPixelPct
+    record.dark_pixel_pct = analysisResults.darkPixelPct
+    record.quality_score = analysisResults.qualityScore
+    // Client-supplied tier: only the visible tiers are storable. 'rejected'
+    // never reaches upload (the hook stops it), and anything else is noise.
+    record.status = VISIBLE_STATUSES.includes(analysisResults.status) ? analysisResults.status : 'community'
+    record.reject_reason = analysisResults.rejectReason
+  }
+  return record
+}
+
+// The dish_photos row is what makes a photo visible to other users. Insert
+// (or replace this user's row for the dish) and return it.
+async function insertPhotoRecord(record) {
+  const { data, error } = await supabase
+    .from('dish_photos')
+    .upsert(record, { onConflict: 'dish_id,user_id' })
+    .select()
+    .single()
+  if (error) throw createClassifiedError(error)
+  return data
+}
+
+// A "pending" handle is what uploadPhoto returns when the dish check says the
+// photo contradicts the named dish: the file is in storage, no row exists yet,
+// and the user decides what happens next (confirm / reassign / discard).
+//
+// SECURITY: the handle is client-held, so nothing in it is trusted for
+// storage. The only file a pending handle may refer to is this user's own
+// slot for that dish — `{uid}/{dishId}.jpg` — and the URL written to the row
+// is re-derived from that path, never taken from the handle.
+function trustedPendingPath(pending, userId) {
+  if (!pending || !pending.pending || typeof pending.dishId !== 'string' || !pending.dishId) {
+    throw new Error('Invalid pending photo')
+  }
+  const expected = photoStoragePath(userId, pending.dishId)
+  if (pending.fileName !== expected) {
+    throw new Error('Access denied - you can only manage your own photos')
+  }
+  return expected
+}
+
 export const dishPhotosApi = {
   /**
    * Upload a photo for a dish with quality metadata
@@ -20,9 +78,17 @@ export const dishPhotosApi = {
    * @param {string} params.dishId - Dish ID
    * @param {File} params.file - Photo file to upload
    * @param {Object} params.analysisResults - Quality analysis results from imageAnalysis
-   * @returns {Promise<Object>} Photo record
+   * @param {string} [params.dishName] - Dish name, enables the upload-time dish check
+   * @param {string} [params.category]
+   * @param {string} [params.restaurantName]
+   * @param {boolean} [params.allowMismatch] - Insert even if the dish check says
+   *   'contradicts' (batch flows that can't show a prompt). Default false.
+   * @returns {Promise<Object>} Photo record, OR a pending handle
+   *   `{ pending: true, mismatch: { seen }, dishId, fileName, publicUrl, analysisResults }`
+   *   when the photo clearly shows a different kind of food than the dish. The
+   *   caller must then confirmPendingPhoto / reassignPendingPhoto / discardPendingPhoto.
    */
-  async uploadPhoto({ dishId, file, analysisResults }) {
+  async uploadPhoto({ dishId, file, analysisResults, dishName = null, category = null, restaurantName = null, allowMismatch = false }) {
     try {
       // SECURITY: Explicit file validation before upload
       if (!file || !(file instanceof File)) {
@@ -73,7 +139,7 @@ export const dishPhotosApi = {
         throw new Error("Couldn't process this image. Please try a different photo.")
       }
 
-      const fileName = `${user.id}/${dishId}.jpg`
+      const fileName = photoStoragePath(user.id, dishId)
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -96,9 +162,17 @@ export const dishPhotosApi = {
       // The file is in storage but not yet exposed via the dish_photos row.
       // If Sonnet vision rejects it, delete from storage and surface a clear
       // error to the user. Fail closed: any moderation outage rejects the upload.
+      // With a dish name, the same call also answers "is this the dish they
+      // say it is?" — see dish_match handling below. It never rejects.
+      const modBody = { photo_url: publicUrl }
+      if (dishName) {
+        modBody.dish_name = dishName
+        modBody.category = category || ''
+        modBody.restaurant_name = restaurantName || ''
+      }
       const { data: modResult, error: modError } = await supabase.functions.invoke(
         'photo-moderate',
-        { body: { photo_url: publicUrl } }
+        { body: modBody }
       )
       const isUnsafe = modError || !modResult || modResult.is_unsafe === true || modResult.is_food_photo === false
       if (isUnsafe) {
@@ -118,42 +192,100 @@ export const dishPhotosApi = {
         throw new Error(userMessage)
       }
 
-      // Build record with quality fields if analysis was provided
-      const photoRecord = {
-        dish_id: dishId,
-        user_id: user.id,
-        photo_url: publicUrl,
+      // Dish check: the model says this is clearly a different kind of food
+      // than the named dish. Hold the photo (file stays, no row yet) and let
+      // the user decide — it may be a fancy version of exactly that dish.
+      if (dishName && !allowMismatch && modResult.dish_match === 'contradicts') {
+        logger.info('photo dish check: contradiction, holding for user decision', { dishId, seen: modResult.seen })
+        return {
+          pending: true,
+          mismatch: { seen: typeof modResult.seen === 'string' ? modResult.seen : '' },
+          dishId,
+          fileName,
+          publicUrl,
+          analysisResults,
+        }
       }
 
-      if (analysisResults) {
-        photoRecord.width = analysisResults.width
-        photoRecord.height = analysisResults.height
-        photoRecord.mime_type = analysisResults.mimeType
-        photoRecord.file_size_bytes = analysisResults.fileSize
-        photoRecord.avg_brightness = analysisResults.avgBrightness
-        photoRecord.bright_pixel_pct = analysisResults.brightPixelPct
-        photoRecord.dark_pixel_pct = analysisResults.darkPixelPct
-        photoRecord.quality_score = analysisResults.qualityScore
-        photoRecord.status = analysisResults.status
-        photoRecord.reject_reason = analysisResults.rejectReason
-      }
-
-      // Insert or update photo record
-      const { data, error } = await supabase
-        .from('dish_photos')
-        .upsert(photoRecord, {
-          onConflict: 'dish_id,user_id',
-        })
-        .select()
-        .single()
-
-      if (error) {
-        throw createClassifiedError(error)
-      }
-
-      return data
+      return await insertPhotoRecord(buildPhotoRecord({ dishId, userId: user.id, publicUrl, analysisResults }))
     } catch (error) {
       logger.error('Error uploading photo:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
+   * User confirmed a held photo really is the dish they picked.
+   * @param {Object} pending - handle returned by uploadPhoto
+   * @returns {Promise<Object>} Photo record
+   */
+  async confirmPendingPhoto(pending) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('You must be logged in to upload photos')
+      const fileName = trustedPendingPath(pending, user.id)
+      const { data: { publicUrl } } = supabase.storage.from('dish-photos').getPublicUrl(fileName)
+      return await insertPhotoRecord(buildPhotoRecord({
+        dishId: pending.dishId, userId: user.id, publicUrl, analysisResults: pending.analysisResults,
+      }))
+    } catch (error) {
+      logger.error('Error confirming pending photo:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
+   * User says the held photo is a different dish. Move the file to that
+   * dish's path (no re-upload, no second moderation) and insert its row.
+   * @param {Object} pending - handle returned by uploadPhoto
+   * @param {string} toDishId - dish to attach the photo to instead
+   * @returns {Promise<Object>} Photo record on the new dish
+   */
+  async reassignPendingPhoto(pending, toDishId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('You must be logged in to upload photos')
+      const fromName = trustedPendingPath(pending, user.id)
+      if (!toDishId || typeof toDishId !== 'string' || toDishId === pending.dishId) throw new Error('Pick a different dish')
+
+      const newName = photoStoragePath(user.id, toDishId)
+      const bucket = supabase.storage.from('dish-photos')
+      // Try the move first. Only if the destination already exists (the
+      // user's earlier photo of that dish) do we clear it and retry — same
+      // replace semantics as uploadPhoto's upsert, but we never delete the
+      // old file unless we're about to succeed at putting the new one there.
+      let { error: moveError } = await bucket.move(fromName, newName)
+      if (moveError && /exist|duplicate|409/i.test(moveError.message || String(moveError.statusCode || ''))) {
+        const { error: rmError } = await bucket.remove([newName])
+        if (rmError) throw createClassifiedError(rmError)
+        ;({ error: moveError } = await bucket.move(fromName, newName))
+      }
+      if (moveError) throw createClassifiedError(moveError)
+
+      const { data: { publicUrl } } = supabase.storage.from('dish-photos').getPublicUrl(newName)
+      return await insertPhotoRecord(buildPhotoRecord({
+        dishId: toDishId, userId: user.id, publicUrl, analysisResults: pending.analysisResults,
+      }))
+    } catch (error) {
+      logger.error('Error reassigning pending photo:', error)
+      throw error.type ? error : createClassifiedError(error)
+    }
+  },
+
+  /**
+   * User doesn't want the held photo at all. Remove the file.
+   * @param {Object} pending - handle returned by uploadPhoto
+   */
+  async discardPendingPhoto(pending) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('You must be logged in to upload photos')
+      const fileName = trustedPendingPath(pending, user.id)
+      const { error } = await supabase.storage.from('dish-photos').remove([fileName])
+      if (error) throw createClassifiedError(error)
+      return { success: true }
+    } catch (error) {
+      logger.error('Error discarding pending photo:', error)
       throw error.type ? error : createClassifiedError(error)
     }
   },

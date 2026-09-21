@@ -395,6 +395,10 @@ export function ReviewFlow({
           {replaceOpen && !removingPhoto && (
             <PhotoUploadButton
               dishId={dishId}
+              dishName={dishName}
+              category={category}
+              restaurantId={restaurantId}
+              restaurantName={restaurantName}
               onPhotoUploaded={(photo) => {
                 setPhotoAdded(true)
                 setReplaceOpen(false)
@@ -433,6 +437,10 @@ export function ReviewFlow({
       ) : (
         <PhotoUploadButton
           dishId={dishId}
+          dishName={dishName}
+          category={category}
+          restaurantId={restaurantId}
+          restaurantName={restaurantName}
           onPhotoUploaded={(photo) => {
             setPhotoAdded(true)
             onPhotoUploaded?.(photo)

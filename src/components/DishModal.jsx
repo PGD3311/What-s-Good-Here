@@ -415,6 +415,10 @@ export function DishModal({ dish, onClose, onVote, onLoginRequired }) {
             {/* Photo upload button */}
             <PhotoUploadButton
               dishId={dish.dish_id}
+              dishName={dish.dish_name}
+              category={dish.category}
+              restaurantId={dish.restaurant_id}
+              restaurantName={dish.restaurant_name}
               onPhotoUploaded={handlePhotoUploaded}
               onLoginRequired={onLoginRequired}
             />

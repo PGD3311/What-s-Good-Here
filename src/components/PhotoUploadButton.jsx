@@ -1,18 +1,35 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useDishPhotos } from '../hooks/useDishPhotos'
 import { useAuth } from '../context/AuthContext'
 import { CameraIcon } from './CameraIcon'
+import { PhotoMismatchSheet } from './PhotoMismatchSheet'
 
+/**
+ * dishName / category / restaurantId / restaurantName turn on the upload-time
+ * dish check. When the photo clearly shows a different kind of food, the
+ * PhotoMismatchSheet asks the user what to do — it never rejects.
+ * onPhotoReassigned(row, dish) fires when they move it to another dish.
+ */
 export function PhotoUploadButton({
   dishId,
+  dishName,
+  category,
+  restaurantId,
+  restaurantName,
   onPhotoUploaded,
+  onPhotoReassigned,
   onLoginRequired,
   compact = false,
   label,
 }) {
   const fileInputRef = useRef(null)
   const { user } = useAuth()
-  const { uploadPhoto, uploading, analyzing, uploadProgress, error, clearError } = useDishPhotos()
+  const {
+    uploadPhoto, confirmPendingPhoto, reassignPendingPhoto, discardPendingPhoto, resolvingPending,
+    uploading, analyzing, uploadProgress, error, clearError,
+  } = useDishPhotos()
+  const [pending, setPending] = useState(null)
 
   const handleClick = () => {
     if (!user) {
@@ -29,7 +46,7 @@ export function PhotoUploadButton({
     clearError()
 
     try {
-      const result = await uploadPhoto(dishId, file)
+      const result = await uploadPhoto(dishId, file, { dishName, category, restaurantName })
 
       // If rejected by quality checks, error is set in the hook
       if (result?.rejected) {
@@ -37,20 +54,66 @@ export function PhotoUploadButton({
         return
       }
 
+      // Dish check says this looks like something else — ask, don't decide.
+      if (result?.pending) {
+        setPending(result)
+        return
+      }
+
       onPhotoUploaded?.(result)
     } catch {
       // Error is already set in the hook
+    } finally {
+      // Clear the input so the same file can be selected again (also after a
+      // "don't add" on the mismatch sheet).
+      e.target.value = ''
     }
-
-    // Clear the input so the same file can be selected again
-    e.target.value = ''
   }
 
   const isProcessing = analyzing || uploading
 
+  const handleConfirm = async () => {
+    try {
+      const row = await confirmPendingPhoto(pending)
+      setPending(null)
+      onPhotoUploaded?.(row)
+    } catch {
+      // error state set in hook
+    }
+  }
+  const handleReassign = async (dish) => {
+    try {
+      const row = await reassignPendingPhoto(pending, dish.dish_id)
+      setPending(null)
+      toast.success(`Added to ${dish.dish_name}`)
+      onPhotoReassigned?.(row, dish)
+    } catch {
+      // error state set in hook
+    }
+  }
+  const handleDiscard = async () => {
+    const p = pending
+    setPending(null)
+    await discardPendingPhoto(p)
+  }
+
+  const mismatchSheet = pending ? (
+    <PhotoMismatchSheet
+      pending={pending}
+      dishName={dishName}
+      restaurantId={restaurantId}
+      restaurantName={restaurantName}
+      busy={resolvingPending}
+      onConfirm={handleConfirm}
+      onReassign={handleReassign}
+      onDiscard={handleDiscard}
+    />
+  ) : null
+
   if (compact) {
     return (
       <>
+        {mismatchSheet}
         <input
           ref={fileInputRef}
           type="file"
@@ -83,6 +146,7 @@ export function PhotoUploadButton({
 
   return (
     <div className="photo-upload-container">
+      {mismatchSheet}
       <input
         ref={fileInputRef}
         type="file"
