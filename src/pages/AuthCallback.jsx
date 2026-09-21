@@ -48,7 +48,7 @@ export function AuthCallback() {
         if (error) {
           const msg = String(error.message || '').toLowerCase()
           if (msg.includes('code verifier') || msg.includes('verifier not found')) {
-            navigate('/auth/cross-device', { replace: true, state: { type } })
+            navigate('/auth/cross-device', { replace: true, state: { type, next: safeNext } })
             return
           }
           navigate('/login', { replace: true, state: { authError: 'link_expired' } })
@@ -61,7 +61,7 @@ export function AuthCallback() {
         logger.warn('AuthCallback exchangeCodeForSession failed', error)
         const msg = String(error?.message || '').toLowerCase()
         if (msg.includes('code verifier') || msg.includes('verifier not found')) {
-          navigate('/auth/cross-device', { replace: true, state: { type } })
+          navigate('/auth/cross-device', { replace: true, state: { type, next: safeNext } })
           return
         }
         navigate('/login', { replace: true, state: { authError: 'link_expired' } })
