@@ -119,7 +119,7 @@ export const DishListItem = memo(function DishListItem({
         <span
           className="flex-shrink-0"
           style={{
-            width: '40px',
+            width: '32px',
             textAlign: 'center',
             fontFamily: 'var(--font-display)',
             fontSize: isPodium ? '32px' : '22px',
@@ -140,7 +140,7 @@ export const DishListItem = memo(function DishListItem({
       )}
 
       {/* Name + restaurant + distance */}
-      <div className="flex-1 min-w-0" style={{ padding: '0 10px 0 4px' }}>
+      <div className="flex-1 min-w-0" style={{ padding: '0 10px 0 2px' }}>
         {/* Dish name is the keyboard-accessible primary navigation control.
             It's a real <button> so screen readers announce it as an
             activatable element. Mouse-anywhere navigation still works via
@@ -229,8 +229,8 @@ export const DishListItem = memo(function DishListItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
-                style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)', fontSize: '12px' }}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+                style={{ background: 'var(--color-primary)', color: 'var(--color-text-on-primary)', fontSize: '11px' }}
               >
                 Order Now
               </a>
@@ -241,10 +241,10 @@ export const DishListItem = memo(function DishListItem({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => { e.stopPropagation(); openExternalLink(e, e.currentTarget.href) }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap"
-                style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text-primary)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap"
+                style={{ border: '1px solid var(--color-divider)', color: 'var(--color-text-secondary)', fontSize: '11px', background: 'transparent' }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 3 3 10.5l8.5 2 2 8.5z" /></svg>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 3 3 10.5l8.5 2 2 8.5z" /></svg>
                 Directions
               </a>
             )}
@@ -257,8 +257,8 @@ export const DishListItem = memo(function DishListItem({
         data-testid={framePhoto ? 'dish-frame-photo' : 'dish-icon-slot'}
         className="flex-shrink-0 relative flex items-center justify-center overflow-hidden"
         style={{
-          width: '40%',
-          maxWidth: '150px',
+          width: '36%',
+          maxWidth: '140px',
           aspectRatio: '4 / 3',
           borderRadius: '12px',
           background: framePhoto ? 'var(--color-surface)' : 'transparent',
