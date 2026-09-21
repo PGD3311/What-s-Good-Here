@@ -172,4 +172,33 @@ describe('followsApi', () => {
       expect(supabase.from).toHaveBeenCalledWith('follows')
     })
   })
+
+  describe('getUserProfile', () => {
+    it("reads the viewed user's ratings through public_votes (votes RLS hides other users' rows)", async () => {
+      const calls = []
+      supabase.from.mockImplementation((table) => {
+        calls.push(table)
+        if (table === 'profiles') {
+          return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { id: 'u-a', display_name: 'alaina' }, error: null }) }) }) }
+        }
+        if (table === 'follows') {
+          return { select: () => ({ eq: () => Promise.resolve({ count: 2, error: null }) }) }
+        }
+        if (table === 'public_votes') {
+          const rows = [{ rating_10: 10, created_at: '2026-05-31T16:12:48Z', dishes: { id: 'd-1', name: 'Breakfast Burrito', category: 'breakfast', avg_rating: 9.4, restaurants: { id: 'r-1', name: "Aalia's" } } }]
+          return { select: () => ({ eq: () => ({ order: () => ({ limit: () => Promise.resolve({ data: rows, error: null }) }) }) }) }
+        }
+        if (table === 'votes') throw new Error('must not read the votes table for another user')
+        return {}
+      })
+      supabase.rpc.mockResolvedValue({ data: [], error: null })
+
+      const profile = await followsApi.getUserProfile('u-a')
+
+      expect(calls).toContain('public_votes')
+      expect(calls).not.toContain('votes')
+      expect(profile.stats.total_votes).toBe(1)
+      expect(profile.recent_votes[0]).toMatchObject({ rating: 10, voted_at: '2026-05-31T16:12:48Z', dish: { id: 'd-1', name: 'Breakfast Burrito', restaurant_name: "Aalia's" } })
+    })
+  })
 })

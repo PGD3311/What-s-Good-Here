@@ -510,9 +510,12 @@ export const followsApi = {
         .from('follows')
         .select('*', { count: 'exact', head: true })
         .eq('follower_id', userId),
-      // 4. Get votes with dish info (includes data for stats calculation)
+      // 4. Get votes with dish info (includes data for stats calculation).
+      // MUST read public_votes, not votes: RLS on votes returns only the
+      // viewer's own rows, which made every public profile look empty.
+      // The view also honors user_blocks.
       supabase
-        .from('votes')
+        .from('public_votes')
         .select(`
           rating_10,
           created_at,
