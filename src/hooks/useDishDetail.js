@@ -299,8 +299,10 @@ export function useDishDetail(dishId, user) {
   }, [user, friendsVotes])
 
   // Handlers
-  const handlePhotoUploaded = async (photo) => {
-    setPhotoUploaded(photo)
+  // Re-pull every photo surface (hero, gallery, featured) after the user's
+  // own photo changes — upload or remove — so the page never shows a photo
+  // that no longer exists.
+  const refreshPhotos = async () => {
     try {
       const [featured, community, all] = await Promise.all([
         dishPhotosApi.getFeaturedPhoto(dishId),
@@ -311,8 +313,13 @@ export function useDishDetail(dishId, user) {
       setCommunityPhotos(community)
       setAllPhotos(all)
     } catch (error) {
-      logger.error('Failed to refresh photos after upload:', error)
+      logger.error('Failed to refresh photos:', error)
     }
+  }
+
+  const handlePhotoUploaded = async (photo) => {
+    setPhotoUploaded(photo)
+    await refreshPhotos()
   }
 
   const handleVote = async () => {
@@ -374,6 +381,7 @@ export function useDishDetail(dishId, user) {
 
     // Handlers
     handlePhotoUploaded,
+    refreshPhotos,
     handleVote,
     clearPhotoUploaded,
     refetchDish,

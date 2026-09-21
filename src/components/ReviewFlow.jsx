@@ -22,6 +22,7 @@ import { AddPhotoNudge } from './AddPhotoNudge'
 import { useProfile } from '../hooks/useProfile'
 import { setBackButtonInterceptor, clearBackButtonInterceptor } from '../utils/backButtonInterceptor'
 import { validateUserContent } from '../lib/reviewBlocklist'
+import { toast } from 'sonner'
 
 // Single-screen rating flow.
 // - Slider defaults to null; submit stays disabled until the user touches it.
@@ -40,6 +41,7 @@ export function ReviewFlow({
   onVote,
   onLoginRequired,
   onPhotoUploaded,
+  onPhotoRemoved,
 }) {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -62,7 +64,25 @@ export function ReviewFlow({
 
   const [photoExpanded, setPhotoExpanded] = useState(false)
   const [photoAdded, setPhotoAdded] = useState(false)
-  const [existingPhotoAction, setExistingPhotoAction] = useState('keep') // keep | replace | remove
+  // Existing-photo actions act immediately and are independent of the rating:
+  // a user can have a photo on a dish they've never rated, so tying Remove /
+  // Replace to Submit made them unreachable. Replace is just an upload (the
+  // API upserts on dish+user, overwriting file and row) — nothing to delete.
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [removeConfirm, setRemoveConfirm] = useState(false)
+  const [removingPhoto, setRemovingPhoto] = useState(false)
+
+  // "Remove?" is armed for a few seconds only, and disarms whenever the
+  // underlying photo changes, so a stray first tap can't stay destructive.
+  useEffect(() => {
+    if (!removeConfirm) return
+    const t = setTimeout(() => setRemoveConfirm(false), 4000)
+    return () => clearTimeout(t)
+  }, [removeConfirm])
+  useEffect(() => {
+    setRemoveConfirm(false)
+    setReplaceOpen(false)
+  }, [existingPhoto?.id])
 
   const [announcement, setAnnouncement] = useState('')
   const reviewTextareaRef = useRef(null)
@@ -76,8 +96,7 @@ export function ReviewFlow({
   const hasDraft =
     (sliderValue !== null && sliderValue !== priorRating) ||
     (reviewText.trim() && reviewText.trim() !== (priorReviewText || '')) ||
-    photoAdded ||
-    existingPhotoAction !== 'keep'
+    photoAdded
 
   // Load prior vote (if any) to prefill.
   useEffect(() => {
@@ -213,20 +232,6 @@ export function ReviewFlow({
       return
     }
 
-    // Photo lifecycle: if the user had a prior photo and chose Remove, or
-    // chose Replace and successfully uploaded a new one, delete the old row.
-    // Vote already saved; photo failure is logged but doesn't roll back the rating.
-    if (existingPhoto?.id && (
-      existingPhotoAction === 'remove' ||
-      (existingPhotoAction === 'replace' && photoAdded)
-    )) {
-      try {
-        await dishPhotosApi.deletePhoto(existingPhoto.id)
-      } catch (err) {
-        logger.error('Failed to delete old photo after vote update:', err)
-      }
-    }
-
     // Analytics: votesApi.submitVote emits rating_submitted for every vote.
     // Dashboards that need dish/restaurant context can join against dish_id
     // in PostHog.
@@ -234,7 +239,6 @@ export function ReviewFlow({
     setPriorRating(sliderValue)
     if (reviewTextToSubmit) setPriorReviewText(reviewTextToSubmit)
     setPhotoAdded(false)
-    setExistingPhotoAction('keep')
     setReviewError(null)
     resetPurity()
     if (jitterBoxRef.current) jitterBoxRef.current.reset()
@@ -253,6 +257,26 @@ export function ReviewFlow({
     }
 
     onVote?.()
+  }
+
+  const handleRemovePhoto = async () => {
+    if (!existingPhoto?.id || removingPhoto) return
+    if (!removeConfirm) {
+      setRemoveConfirm(true)
+      return
+    }
+    setRemovingPhoto(true)
+    try {
+      await dishPhotosApi.deletePhoto(existingPhoto.id)
+      setRemoveConfirm(false)
+      toast.success('Photo removed')
+      onPhotoRemoved?.()
+    } catch (err) {
+      logger.error('Failed to remove photo:', err)
+      toast.error("Couldn't remove the photo. Please try again.")
+    } finally {
+      setRemovingPhoto(false)
+    }
   }
 
   const canSubmit = sliderValue !== null && !submitting && reviewText.length <= MAX_REVIEW_LENGTH
@@ -327,7 +351,7 @@ export function ReviewFlow({
         )}
       </div>
 
-      {/* Photo — collapsed by default; if user had a prior photo, show thumbnail + keep/replace/remove. */}
+      {/* Photo — collapsed by default; if user had a prior photo, show thumbnail + replace/remove. */}
       {existingPhoto && !photoAdded ? (
         <div
           className="p-3 rounded-xl space-y-2"
@@ -340,44 +364,40 @@ export function ReviewFlow({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setExistingPhotoAction('keep')}
+                  onClick={() => { setReplaceOpen(true); setRemoveConfirm(false) }}
+                  disabled={removingPhoto}
                   className="text-xs px-2 py-1 rounded-md"
                   style={{
-                    background: existingPhotoAction === 'keep' ? 'var(--color-primary)' : 'transparent',
-                    color: existingPhotoAction === 'keep' ? 'var(--color-text-on-primary)' : 'var(--color-text-secondary)',
+                    background: replaceOpen ? 'var(--color-primary)' : 'transparent',
+                    color: replaceOpen ? 'var(--color-text-on-primary)' : 'var(--color-text-secondary)',
                     border: '1px solid var(--color-divider)',
                   }}
-                >
-                  Keep
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setExistingPhotoAction('replace'); setPhotoExpanded(true) }}
-                  className="text-xs px-2 py-1 rounded-md"
-                  style={{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-divider)' }}
                 >
                   Replace
                 </button>
                 <button
                   type="button"
-                  onClick={() => setExistingPhotoAction('remove')}
+                  onClick={handleRemovePhoto}
+                  disabled={removingPhoto}
                   className="text-xs px-2 py-1 rounded-md"
                   style={{
-                    background: existingPhotoAction === 'remove' ? 'var(--color-danger)' : 'transparent',
-                    color: existingPhotoAction === 'remove' ? 'var(--color-text-on-primary)' : 'var(--color-danger)',
+                    background: removeConfirm ? 'var(--color-danger)' : 'transparent',
+                    color: removeConfirm ? 'var(--color-text-on-primary)' : 'var(--color-danger)',
                     border: '1px solid var(--color-divider)',
+                    opacity: removingPhoto ? 0.6 : 1,
                   }}
                 >
-                  Remove
+                  {removingPhoto ? 'Removing…' : removeConfirm ? 'Remove?' : 'Remove'}
                 </button>
               </div>
             </div>
           </div>
-          {existingPhotoAction === 'replace' && photoExpanded && (
+          {replaceOpen && !removingPhoto && (
             <PhotoUploadButton
               dishId={dishId}
               onPhotoUploaded={(photo) => {
                 setPhotoAdded(true)
+                setReplaceOpen(false)
                 onPhotoUploaded?.(photo)
               }}
               onLoginRequired={onLoginRequired}

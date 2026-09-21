@@ -35,7 +35,7 @@ export function Dish() {
     friendsVotes, smartSnippet,
     reviews, reviewsLoading,
     shouldLoadEvidence, evidenceSentinelRef,
-    handlePhotoUploaded, handleVote, clearPhotoUploaded,
+    handlePhotoUploaded, refreshPhotos, handleVote, clearPhotoUploaded,
     refetchDish,
   } = useDishDetail(dishId, user)
 
@@ -382,6 +382,7 @@ export function Dish() {
                 onVote={handleVoteSubmitted}
                 onLoginRequired={handleLoginRequired}
                 onPhotoUploaded={handlePhotoUploaded}
+                onPhotoRemoved={() => { setExistingPhoto(null); refreshPhotos() }}
               />
             </div>
             {myListReady && (
