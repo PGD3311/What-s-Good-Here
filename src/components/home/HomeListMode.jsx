@@ -185,7 +185,7 @@ export const HomeListMode = memo(function HomeListMode({
               Results
             </h2>
             {activeDishes && activeDishes.length > 0 ? (
-              <div className="flex flex-col" style={{ gap: '2px' }}>
+              <div className="flex flex-col">
                 {activeDishes.map(function (dish, i) {
                   return (
                     <DishListItem
