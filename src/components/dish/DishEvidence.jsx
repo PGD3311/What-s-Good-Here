@@ -61,6 +61,12 @@ export function DishEvidence({
     if (snippetId && r.id === snippetId) return false
     return true
   })
+  // The empty state must reflect the whole page, not just the deduped list
+  // above: a review already shown as the quote card or the user's own review
+  // is still a written review. Otherwise the page contradicts itself
+  // ("Absolutely delicious" followed by "No written reviews yet").
+  const hasAnyWrittenReview =
+    reviews.some(r => r.review_text) || !!ownReview || !!(smartSnippet && smartSnippet.review_text)
 
   return (
     <>
@@ -380,7 +386,7 @@ export function DishEvidence({
           </div>
         )}
 
-        {!reviewsLoading && filteredReviews.length === 0 && !ownReview && dish.total_votes > 0 && (
+        {shouldLoadEvidence && !authLoading && !reviewsLoading && !hasAnyWrittenReview && dish.total_votes > 0 && (
           <div
             className="mb-4 p-4 rounded-xl text-center"
             style={{ background: 'var(--color-surface)', border: '1.5px solid var(--color-divider)' }}
