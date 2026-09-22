@@ -5,7 +5,7 @@ import { getRatingColor } from '../../utils/ranking'
 import { getMenuSectionImage } from '../../constants/categories'
 
 // Split-pane restaurant menu: section nav on left, dishes on right
-export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuSectionOrder = [] }) {
+export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuSectionOrder = [], onAddByPhoto }) {
   const [activeSection, setActiveSection] = useState(null)
   const navigate = useNavigate()
 
@@ -155,6 +155,26 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
               Check back soon
             </p>
           )}
+          {!searchQuery && onAddByPhoto && (
+            <button
+              type="button"
+              onClick={onAddByPhoto}
+              className="mt-4 inline-flex items-center gap-2 py-2 px-4 rounded-lg transition-all active:scale-[0.98]"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--color-divider)',
+                color: 'var(--color-text-tertiary)',
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+              aria-label="Add menu by photo"
+            >
+              <span aria-hidden="true">📷</span>
+              Add / improve the menu
+            </button>
+          )}
         </div>
       </div>
     )
@@ -233,7 +253,7 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
       </nav>
 
       {/* Right: Dish List */}
-      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', display: 'flex', flexDirection: 'column' }}>
         {/* Section title */}
         <div
           className="sticky top-0 z-10 px-4 py-3"
@@ -257,7 +277,7 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
         </div>
 
         {/* Dish rows */}
-        <div className="px-3 pb-4">
+        <div className="px-3 pb-2">
           {activeDishes.map((dish, i) => {
             const isRanked = (dish.total_votes || 0) >= MIN_VOTES_FOR_RANKING
             const votes = dish.total_votes || 0
@@ -395,6 +415,37 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
             )
           })}
         </div>
+
+        {/* Always-available "add / improve by photo" affordance */}
+        {onAddByPhoto && (
+          <div
+            className="px-3 pb-4 mt-auto"
+            style={{ paddingTop: '10px', borderTop: '1px solid var(--color-divider)' }}
+          >
+            <button
+              type="button"
+              onClick={onAddByPhoto}
+              className="w-full py-2 rounded-lg transition-all active:scale-[0.98]"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--color-divider)',
+                color: 'var(--color-text-tertiary)',
+                fontFamily: 'Outfit, sans-serif',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+              }}
+              aria-label="Add or improve the menu by photo"
+            >
+              <span aria-hidden="true">📷</span>
+              Add / improve the menu
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
