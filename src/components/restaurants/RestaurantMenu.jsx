@@ -5,7 +5,7 @@ import { getRatingColor } from '../../utils/ranking'
 import { getMenuSectionImage } from '../../constants/categories'
 
 // Split-pane restaurant menu: section nav on left, dishes on right
-export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuSectionOrder = [], onAddByPhoto }) {
+export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuSectionOrder = [], onScanMenu }) {
   const [activeSection, setActiveSection] = useState(null)
   const navigate = useNavigate()
 
@@ -155,24 +155,24 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
               Check back soon
             </p>
           )}
-          {!searchQuery && onAddByPhoto && (
+          {!searchQuery && onScanMenu && (
             <button
               type="button"
-              onClick={onAddByPhoto}
-              className="mt-4 inline-flex items-center gap-2 py-2 px-4 rounded-lg transition-all active:scale-[0.98]"
+              onClick={onScanMenu}
+              className="mt-4 inline-flex items-center gap-2 py-2.5 px-4 rounded-xl transition-all active:scale-[0.98]"
               style={{
-                background: 'transparent',
-                border: '1px solid var(--color-divider)',
-                color: 'var(--color-text-tertiary)',
+                background: 'var(--color-primary)',
+                color: 'var(--color-text-on-primary)',
+                border: 'none',
                 fontFamily: 'Outfit, sans-serif',
-                fontSize: '13px',
-                fontWeight: 500,
+                fontSize: '14px',
+                fontWeight: 700,
                 cursor: 'pointer',
               }}
-              aria-label="Add menu by photo"
+              aria-label="Scan the menu to add it"
             >
               <span aria-hidden="true">📷</span>
-              Add / improve the menu
+              Scan the menu
             </button>
           )}
         </div>
@@ -416,36 +416,6 @@ export function RestaurantMenu({ dishes, loading, error, searchQuery = '', menuS
           })}
         </div>
 
-        {/* Always-available "add / improve by photo" affordance */}
-        {onAddByPhoto && (
-          <div
-            className="px-3 pb-4 mt-auto"
-            style={{ paddingTop: '10px', borderTop: '1px solid var(--color-divider)' }}
-          >
-            <button
-              type="button"
-              onClick={onAddByPhoto}
-              className="w-full py-2 rounded-lg transition-all active:scale-[0.98]"
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--color-divider)',
-                color: 'var(--color-text-tertiary)',
-                fontFamily: 'Outfit, sans-serif',
-                fontSize: '12px',
-                fontWeight: 500,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '5px',
-              }}
-              aria-label="Add or improve the menu by photo"
-            >
-              <span aria-hidden="true">📷</span>
-              Add / improve the menu
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )
