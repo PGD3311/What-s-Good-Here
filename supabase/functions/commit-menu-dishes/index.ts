@@ -12,7 +12,7 @@ import { corsHeaders } from '../_shared/cors.ts'
  * dish field other than a numeric price correction; all names / categories /
  * sections / descriptions / dietary tags come from the server-stored extraction.
  *
- * Auth:        JWT required (anon client + getUser, same as extract-menu-from-photo).
+ * Auth:        JWT required (anon client + getUser, same as menu-xray).
  * Rate limit:  6/hour via check_and_record_rate_limit.
  * Write:       Service-role client; updates dishes table only after all verifications pass.
  *
@@ -103,7 +103,7 @@ interface ExistingDish {
 }
 
 // ---------------------------------------------------------------------------
-// UUID validation regex — same as extract-menu-from-photo
+// UUID validation regex
 // ---------------------------------------------------------------------------
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -117,7 +117,7 @@ const EXTRACTION_TTL_MS = 24 * 60 * 60 * 1000
 // Main handler
 // ---------------------------------------------------------------------------
 serve(async (req) => {
-  // CORS / preflight — MIRROR of extract-menu-from-photo pattern
+  // CORS / preflight
   const cors = corsHeaders(req)
 
   if (req.method === 'OPTIONS') {
@@ -132,8 +132,7 @@ serve(async (req) => {
   }
 
   // ---------------------------------------------------------------------------
-  // Auth gate — MIRROR of extract-menu-from-photo JWT auth pattern
-  // Source: supabase/functions/extract-menu-from-photo/index.ts lines 473–491
+  // Auth gate — JWT required
   // Require an authenticated caller. The anon client + getUser() verifies the
   // JWT without requiring service-role; it also provides the caller's user.id
   // which we later compare against the extraction row's user_id.
@@ -218,8 +217,7 @@ serve(async (req) => {
   }
 
   // ---------------------------------------------------------------------------
-  // Rate limit — MIRROR of extract-menu-from-photo check_and_record_rate_limit call
-  // Source: supabase/functions/extract-menu-from-photo/index.ts lines 647–657
+  // Rate limit — check_and_record_rate_limit
   // Action 'commit_menu_dishes', limit 6/hour (spec §2b + §1 rate-limit table)
   // ---------------------------------------------------------------------------
   const { data: rateCheck, error: rateErr } = await authClient.rpc('check_and_record_rate_limit', {

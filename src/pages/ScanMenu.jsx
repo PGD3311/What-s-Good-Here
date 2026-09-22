@@ -60,7 +60,7 @@ export function ScanMenu() {
       capture('scan_completed', {
         restaurant_id: restaurant.id,
         matched: payload?.summary?.matched ?? 0,
-        ingested: payload?.summary?.ingested ?? 0,
+        addable: payload?.summary?.addable ?? 0,
         not_a_menu: !!payload?.not_a_menu,
       })
     } catch (err) {
@@ -123,7 +123,7 @@ export function ScanMenu() {
             Menu X-Ray
           </h1>
           <p className="text-[15px] mt-1.5 px-2" style={{ color: 'var(--color-text-secondary)' }}>
-            Point your phone at any menu — see what the island <em>actually</em> orders.
+            Point your phone at any menu — see what's good, and add what's missing.
           </p>
         </div>
 
@@ -135,7 +135,7 @@ export function ScanMenu() {
           {[
             ['1', 'Tell us where you are'],
             ['2', 'Snap the menu'],
-            ['3', 'The good stuff lights up'],
+            ['3', 'See what\'s good, add what\'s missing'],
           ].map(([n, label]) => (
             <div key={n} className="flex-1 flex flex-col items-center text-center gap-1.5">
               <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"

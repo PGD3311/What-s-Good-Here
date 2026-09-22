@@ -1,1 +1,0 @@
-export { MenuPhotoUploadModal } from './MenuPhotoUploadModal'

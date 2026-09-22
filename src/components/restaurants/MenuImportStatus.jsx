@@ -29,9 +29,9 @@ const snapBtnStyle = {
  * Props:
  *   restaurantId    {string}
  *   dishCount       {number}
- *   onAddByPhoto    {() => void}  Opens the MenuPhotoUploadModal
+ *   onScanMenu      {() => void}  Routes to the camera (/scan) for this restaurant
  */
-export function MenuImportStatus({ restaurantId, dishCount, onAddByPhoto }) {
+export function MenuImportStatus({ restaurantId, dishCount, onScanMenu }) {
   const { status, isImporting, hasFailed, loading } = useMenuImportStatus(restaurantId)
 
   // Hide when: still loading, or there are dishes and no failure (real menu exists).
@@ -78,15 +78,15 @@ export function MenuImportStatus({ restaurantId, dishCount, onAddByPhoto }) {
           </p>
         </>
       )}
-      {!isImporting && onAddByPhoto && (
+      {!isImporting && onScanMenu && (
         <button
           type="button"
           style={snapBtnStyle}
-          onClick={onAddByPhoto}
-          aria-label="Add menu by photo"
+          onClick={onScanMenu}
+          aria-label="Scan the menu to add it"
         >
           <span aria-hidden="true">📷</span>
-          Add the menu
+          Scan the menu
         </button>
       )}
     </div>

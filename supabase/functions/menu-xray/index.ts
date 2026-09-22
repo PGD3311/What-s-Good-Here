@@ -1,8 +1,12 @@
 // supabase/functions/menu-xray/index.ts
-// Menu X-Ray: photo -> Claude vision extraction -> pg_trgm match -> quiet ingest.
+// Menu X-Ray: photo -> Claude vision extraction -> pg_trgm match -> STAGED add.
 // Self-contained folder (no ../_shared imports) so dashboard deploy works.
 // Guests: full overlay, metadata-only logging, fail-closed IP rate limit.
-// Logged-in: + photo proof in private bucket, + quiet ingest (capped, gated).
+// Logged-in: + photo proof in private bucket, + the unmatched dishes are
+// STAGED (menu_photo_extractions row, owner-bound, single-use) and returned as
+// `addable` with an `extraction_id`. Nothing is written to `dishes` here — the
+// client's one "Add these N" tap calls commit-menu-dishes with that id.
+// (2026-09-22 one-camera design: replaces the quiet background ingest.)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   MENU_EXTRACTION_PROMPT, validateImagePayload,
@@ -134,34 +138,38 @@ Deno.serve(async (req) => {
     if (matchError) return json(req, 500, { error: 'Matching failed' })
     const accepted = decideMatches(items, (matchRows || []) as MatchRow[])
 
-    // ---- Plan the quiet ingest (logged-in only, throttled) ----
-    // Planning is two fast indexed reads; the SLOW part — the per-row inserts,
-    // photo upload, audit row — runs in the background after the response, so
-    // the user sees the X-Ray view as soon as match completes, not after the
-    // writes. The planned list (not the actual insert result) drives the
-    // response's "new to the map" count — in practice they're identical, and a
-    // dish dropped by the offensive-name trigger is a vanishingly rare diff.
-    let plannedDishes: ReturnType<typeof buildIngestList> = []
-    if (user) {
-      const { data: ingestRl } = await authClient.rpc('check_menu_ingest_rate_limit')
-      if (ingestRl?.allowed) {
-        const { data: existing } = await service
-          .from('dishes').select('id, name, category, price').eq('restaurant_id', restaurant_id)
-        plannedDishes = buildIngestList(items, new Set(accepted.keys()), existing || []).slice(0, 40)
-      }
-    }
+    // ---- What's NOT in the app yet (everyone sees the list) ----
+    // Same plan as the old quiet ingest, but nothing is written here. For a
+    // logged-in user the list is STAGED in menu_photo_extractions — the same
+    // owner-bound, single-use row commit-menu-dishes was built to trust — and
+    // the response carries its id so one tap can add them. Guests see the list
+    // with no id (sign in, re-scan, add). The INSERT is on the critical path on
+    // purpose: the client needs the id in this response.
+    const { data: existing } = await service
+      .from('dishes').select('id, name, category, price').eq('restaurant_id', restaurant_id)
+    const plannedDishes = buildIngestList(items, new Set(accepted.keys()), existing || []).slice(0, 40)
+    // Flag only the first menu line per staged dish: buildIngestList dedupes
+    // by name, so a menu that lists "Lobster Roll" twice stages it once —
+    // and the client's "Add these N" must count staged rows, not lines.
     const plannedNames = new Set(plannedDishes.map((d) => d.name))
+    const flaggedNames = new Set<string>()
+    let extractionId: string | null = null
+    if (user && plannedDishes.length > 0) {
+      const sectionOrderForStage: string[] = []
+      for (const d of plannedDishes) {
+        if (d.menu_section && !sectionOrderForStage.includes(d.menu_section)) sectionOrderForStage.push(d.menu_section)
+      }
+      const { data: staged, error: stageError } = await service
+        .from('menu_photo_extractions')
+        .insert({ user_id: user.id, restaurant_id, dishes: plannedDishes, menu_section_order: sectionOrderForStage })
+        .select('id')
+        .single()
+      if (stageError) console.error('[menu-xray] staging insert failed:', stageError.message)
+      else extractionId = staged.id
+    }
 
     // ---- Persist side-effects in the background (off the critical path) ----
     runBackground(async () => {
-      let ingestedCount = 0
-      if (user && plannedDishes.length > 0) {
-        for (const dish of plannedDishes) {
-          // Per-row insert so the offensive-name trigger only skips that row.
-          const { error } = await service.from('dishes').insert({ restaurant_id, created_by: user.id, ...dish })
-          if (!error) ingestedCount++
-        }
-      }
       let photoPath: string | null = null
       if (user) {
         try {
@@ -174,7 +182,9 @@ Deno.serve(async (req) => {
       }
       const { error: auditError } = await service.from('menu_scans').insert({
         restaurant_id, user_id: user?.id ?? null, photo_path: photoPath,
-        extracted: { dishes: items }, matched_count: accepted.size, ingested_count: ingestedCount,
+        // ingested_count is 0 at scan time now — dishes are added only when the
+        // user taps "Add these" (commit-menu-dishes). See one-camera design §6.
+        extracted: { dishes: items }, matched_count: accepted.size, ingested_count: 0,
       })
       if (auditError) console.error('[menu-xray] audit insert failed:', auditError.message)
     })
@@ -189,7 +199,9 @@ Deno.serve(async (req) => {
       sectionMap.get(section)!.push({
         name: item.name, price: item.price ?? null, category: item.category,
         match: m ? { dishId: m.dish_id, dishName: m.dish_name, avgRating: m.avg_rating, totalVotes: m.total_votes, similarity: m.sim } : null,
-        ingested: plannedNames.has(item.name),
+        // Not in the app yet, and cleared the ingest gate — the client can offer
+        // to add it (index into the staged list is its position among addables).
+        addable: plannedNames.has(item.name) && !flaggedNames.has(item.name) && !!flaggedNames.add(item.name),
       })
     }
     let best: Record<string, unknown> | null = null
@@ -205,7 +217,9 @@ Deno.serve(async (req) => {
       restaurant: { id: restaurant.id, name: restaurant.name },
       sections: sectionOrder.map((name) => ({ name, items: sectionMap.get(name) })),
       best,
-      summary: { matched: accepted.size, ingested: plannedDishes.length, total: items.length },
+      // extraction_id: null for guests, or when nothing is addable.
+      extraction_id: extractionId,
+      summary: { matched: accepted.size, addable: plannedDishes.length, total: items.length },
     })
   } catch (error) {
     console.error('[menu-xray]', error)
