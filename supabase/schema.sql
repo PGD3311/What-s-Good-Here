@@ -2953,6 +2953,10 @@ SELECT cron.schedule('recalculate-value-percentiles', '0 */2 * * *', $$SELECT re
 -- pg_cron: clean up expired rate limit entries hourly (enabled in production)
 SELECT cron.schedule('cleanup-old-rate-limits', '15 * * * *', $$DELETE FROM rate_limits WHERE created_at < NOW() - INTERVAL '1 hour'$$);
 
+-- pg_cron: purge cron run history older than 3 days (enabled in production).
+-- menu-refresh fires every minute; unpurged history hit 409 MB and starved the DB (2026-10).
+SELECT cron.schedule('purge-cron-run-details', '30 4 * * *', $$DELETE FROM cron.job_run_details WHERE end_time < now() - interval '3 days'$$);
+
 
 -- =============================================
 -- 13x. Merge a new jitter sample into the user's running profile
